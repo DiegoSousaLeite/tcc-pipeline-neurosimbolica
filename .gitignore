@@ -1,1 +1,15 @@
+# Pastas de Ferramentas e Dados (MUITO PESADOS)
+codeql/
+codeql-bundle.tar.gz
+repos/
+
+# Cache do Python
+__pycache__/
+*.pyc
+src/__pycache__/
+
+# Arquivos de Configuração Sensíveis (NUNCA COMITAR)
 .env
+
+# Resultados e Saídas
+resultados_tcc.csv
