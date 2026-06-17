@@ -18,4 +18,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MODELO_LLM = os.getenv("LLM_MODEL_VERSION") or "gemini-1.5-flash"
 URL_API_GEMINI = f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO_LLM}:generateContent?key={GEMINI_API_KEY}"
 
+# Variáveis experimentais (estáticas na Parte 1 / MVP; serão iteradas na Parte 2).
+# Registradas em cada linha do CSV para permitir o cruzamento futuro entre
+# modelos (GPT vs Gemini) e estratégias de prompt (baseline vs especialista).
+PROMPT_TYPE = os.getenv("PROMPT_TYPE") or "especialista"
+
 os.makedirs(REPOS_DIR, exist_ok=True)
