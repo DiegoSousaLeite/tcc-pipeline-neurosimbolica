@@ -18,6 +18,9 @@ scripts/__pycache__/
 
 # Artefatos gerados (recriáveis, não commitar)
 resultados_tcc*.csv
+# Exceção: os CSVs da Parte 1 NÃO são recriáveis — dependiam de execução paga com
+# CodeQL em ambiente que não existe mais — e a monografia cita os números deles.
+!legacy/resultados_parte1/*.csv
 *.sarif
 pilot_*.csv
 db_codeql/
