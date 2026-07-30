@@ -1,0 +1,85 @@
+schema: spec-driven
+
+context: |
+  # TCC — Pipeline Neuro-Simbólica de Triagem de Alertas SAST em Go
+
+  ## Domínio
+  Trabalho de Conclusão de Curso (UnB). Pipeline experimental que combina um
+  motor simbólico (Semgrep) com um LLM (Gemini) para triar alertas de análise
+  estática em código Go: reduzir falsos positivos sem descartar verdadeiros
+  positivos. O produto final é acadêmico — os números do experimento alimentam
+  a monografia LaTeX em `TCC1___Diego_Sousa_e_João_Artur_Leles/`.
+  Prioridades, nesta ordem: reprodutibilidade > clareza para o leitor da banca >
+  elegância de engenharia.
+
+  ## Stack
+  - Python >= 3.10, sem framework. Dependências mínimas: `requests`,
+    `python-dotenv`, `semgrep` (CLI). Sem pandas/numpy — métricas são calculadas
+    à mão em `src/metricas.py`.
+  - Semgrep OSS, ruleset `p/default` (NÃO `p/golang`: o ruleset enxuto perdia
+    ~97 dos 261 alertas por falta de regras). Taint é intraprocedural — não há
+    trilha source→sink no engine OSS.
+  - Gemini via API REST (`GEMINI_API_KEY`), modelo padrão
+    `gemini-2.5-flash-lite`. O tier grátis é de 20 req/dia por modelo, então
+    rodadas completas exigem billing; respeite `GEMINI_MIN_INTERVALO`.
+  - Ambiente de desenvolvimento: Windows 11 + PowerShell. Nada pode depender de
+    build step em Go nem de ferramenta exclusiva de Linux.
+  - CodeQL é legado. O código daquele fluxo vive só no histórico do Git
+    (`git show HEAD:main.py`, `git show HEAD:src/fase1_codeql.py`); em
+    `legacy/resultados_parte1/` ficam apenas os CSVs que ele produziu, citados
+    pela monografia. Não reintroduzir CodeQL no caminho principal.
+
+  ## Arquitetura (5 fases + fase 0)
+  `run_pipeline.py` orquestra, por caso:
+  1. `src/fase1_semgrep.py` — Semgrep sobre o arquivo-alvo isolado → alerta localizado
+  2. `src/fase2_middleware.py` — JSON do Semgrep → contexto hidratado (`src/hidratacao.py`)
+  3/4. `src/fases3_4_llm.py` — montagem do prompt + chamada Gemini → veredito
+  5. `src/fase5_auditoria.py` — grava CSV + matrizes de cobertura e acerto
+  `src/metricas.py` deriva Precisão/Recall/F1/MCC/TRA/TFN do CSV.
+  `src/fonte.py` resolve o arquivo-alvo na ordem cache → clone local
+  (`git show <commit>:<arquivo>`) → rede (raw.githubusercontent no commit exato).
+  `scripts/` contém a fase 0 (preparação de dados: OSV harvest, fix commits,
+  reconstrução de pares TP, preenchimento de cache).
+  Detalhes em `docs/PIPELINE.md` e `docs/SCRIPTS.md` — mantenha-os atualizados
+  quando a arquitetura ou a interface dos scripts mudar.
+
+  ## Dados e invariantes do experimento
+  - FPs: `data/dataset_go_limpo.json`, derivado do SastBench (Feiglin & Dar,
+    2026, arXiv:2601.02941), filtrado só para Go.
+  - TPs: pares vulnerável/corrigido em `tp_pairs.json` (raiz). **Artefato a
+    preservar** — só `scripts/tp_reconstruct.py` o regenera e ele exige o
+    histórico git completo, que não está mais no disco.
+  - O gabarito é por **arquivo**, não por linha. Não introduza comparação por
+    número de linha ao avaliar acerto.
+  - Amostragem padrão: todas as `locations`, filtrando só `.go` (791 casos).
+    O índice no ID do caso vem da posição **original** na lista, antes de
+    qualquer filtro — nunca renumere casos, isso quebraria os CSVs já gerados.
+  - O cache (`cache/<owner>__<repo>/<commit>/<caminho>.go`) tem chave imutável e
+    nunca invalida; a pipeline deve continuar rodando offline a partir dele.
+  - O LLM é **filtro puro** do Semgrep: nada de veredito TP direto sem alerta
+    correspondente. Preserve esse desenho ao mexer nas fases 3/4.
+
+  ## Convenções
+  - Código, comentários, docstrings, mensagens de commit e artefatos OpenSpec em
+    **português do Brasil**. Nomes de fase seguem o padrão `faseN_*`.
+  - Mudanças que afetam números publicados devem dizer explicitamente quais
+    resultados precisam ser re-executados e quais CSVs ficam obsoletos.
+  - Nunca remover TODOs ou notas de autor dos arquivos `.tex` sem perguntar.
+
+  ## Escopo do TCC
+  Parte 1 é a PoC (pipeline funcionando de ponta a ponta). Baseline, Chain-of-
+  Thought, comparação com GPT e a bateria completa de métricas são Parte 2 —
+  ao propor mudanças, deixe claro em qual parte o trabalho se encaixa.
+
+rules:
+  proposal:
+    - Diga qual pergunta de pesquisa do TCC a mudança atende, ou registre explicitamente que é infraestrutura.
+    - Inclua uma seção "Não-objetivos" para conter o escopo.
+    - Se a mudança invalidar resultados já gerados, declare isso na proposta.
+  design:
+    - Aponte quais fases (0-5) e quais arquivos de `src/`, `scripts/` e `docs/` são tocados.
+    - Registre o impacto em custo/cota de LLM e em tempo de execução quando houver chamada ao Gemini.
+    - Justifique qualquer nova dependência — o projeto é deliberadamente enxuto.
+  tasks:
+    - Tarefas de no máximo ~2 horas, verificáveis por um comando concreto (execução, script ou inspeção de arquivo).
+    - Inclua uma tarefa de atualização de `docs/` e `README.md` sempre que a interface de uso mudar.

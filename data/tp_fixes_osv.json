@@ -1,0 +1,1102 @@
+[
+  {
+    "repo_name": "gardener/gardener-extension-provider-aws",
+    "repo_dir": "gardener-extension-provider-aws",
+    "repo_url": "https://github.com/gardener/gardener-extension-provider-aws",
+    "cwe_id": "CWE-94",
+    "cve_ids": [
+      "CVE-2025-59823"
+    ],
+    "fix_commit": "06113421518ce466e9bc0d3ae4a262719fde3ba6",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "bishopfox/sliver",
+    "repo_dir": "sliver",
+    "repo_url": "https://github.com/bishopfox/sliver",
+    "cwe_id": "CWE-22",
+    "cve_ids": [
+      "CVE-2026-25760"
+    ],
+    "fix_commit": "bd7361825c26a4bee2583fda6d782f8647d8f147",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "olivetin/olivetin",
+    "repo_dir": "olivetin",
+    "repo_url": "https://github.com/olivetin/olivetin",
+    "cwe_id": "CWE-284",
+    "cve_ids": [
+      "CVE-2026-32102"
+    ],
+    "fix_commit": "2eb5f0ba79d4bbef3c802bf8b4666a7e18dcfd90",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "cometbft/cometbft",
+    "repo_dir": "cometbft",
+    "repo_url": "https://github.com/cometbft/cometbft",
+    "cwe_id": "CWE-703",
+    "cve_ids": [
+      "CVE-2025-24371"
+    ],
+    "fix_commit": "d03254d3599b973f979314e6383b89fa1802e679",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "moby/moby",
+    "repo_dir": "moby",
+    "repo_url": "https://github.com/moby/moby",
+    "cwe_id": "CWE-420",
+    "cve_ids": [
+      "CVE-2023-28840"
+    ],
+    "fix_commit": "5d6db842238e3c4f5f9fb9ad70ea46b35227d084",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/vault",
+    "repo_dir": "vault",
+    "repo_url": "https://github.com/hashicorp/vault",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2021-38553"
+    ],
+    "fix_commit": "82a99f14eb6133f99a975e653d4dac21c17505c7",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/consul",
+    "repo_dir": "consul",
+    "repo_url": "https://github.com/hashicorp/consul",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2020-7219"
+    ],
+    "fix_commit": "1200f25eabc75368484a78698e75f1e61b6ed010",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "go-viper/mapstructure",
+    "repo_dir": "mapstructure",
+    "repo_url": "https://github.com/go-viper/mapstructure",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2025-11065"
+    ],
+    "fix_commit": "742921c9ba2854d27baa64272487fc5075d2c39c",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "pterodactyl/wings",
+    "repo_dir": "wings",
+    "repo_url": "https://github.com/pterodactyl/wings",
+    "cwe_id": "CWE-400",
+    "cve_ids": [
+      "CVE-2026-21696"
+    ],
+    "fix_commit": "e023eb6b3ccb962d0a40f6bec7d7762e4f280aaa",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "juju/juju",
+    "repo_dir": "juju",
+    "repo_url": "https://github.com/juju/juju",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2025-53513"
+    ],
+    "fix_commit": "003bf7bb76eb4f2ebc1d8402c397dcd47b4ad26a",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "cilium/cilium",
+    "repo_dir": "cilium",
+    "repo_url": "https://github.com/cilium/cilium",
+    "cwe_id": "CWE-755",
+    "cve_ids": [
+      "CVE-2023-41332"
+    ],
+    "fix_commit": "a67489466c715854c4c472c939d32d35df3fe748",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "cilium/cilium",
+    "repo_dir": "cilium",
+    "repo_url": "https://github.com/cilium/cilium",
+    "cwe_id": "CWE-863",
+    "cve_ids": [
+      "CVE-2025-30162"
+    ],
+    "fix_commit": "dc65ba9bb5f8201e0f51babfb6e7a02de2527460",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "mattermost/mattermost-server",
+    "repo_dir": "mattermost-server",
+    "repo_url": "https://github.com/mattermost/mattermost-server",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2025-20033"
+    ],
+    "fix_commit": "51ac054df0cf662ef3fa4657df4e058a33687135",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "dragonflyoss/dragonfly",
+    "repo_dir": "dragonfly",
+    "repo_url": "https://github.com/dragonflyoss/dragonfly",
+    "cwe_id": "CWE-295",
+    "cve_ids": [
+      "CVE-2025-59353"
+    ],
+    "fix_commit": "8f6f20b604bb540c39db5fb7020926e6db2dd9c8",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "gravitl/netmaker",
+    "repo_dir": "netmaker",
+    "repo_url": "https://github.com/gravitl/netmaker",
+    "cwe_id": "CWE-639",
+    "cve_ids": [
+      "CVE-2023-32078"
+    ],
+    "fix_commit": "72526ebd32fcc590a66a59013a4c5553e31d18d4",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "containerd/containerd",
+    "repo_dir": "containerd",
+    "repo_url": "https://github.com/containerd/containerd",
+    "cwe_id": "CWE-770",
+    "cve_ids": [
+      "CVE-2023-25153"
+    ],
+    "fix_commit": "39bb06f98f17c7a226b10269d325c861585b2389",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/consul",
+    "repo_dir": "consul",
+    "repo_url": "https://github.com/hashicorp/consul",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2021-32574"
+    ],
+    "fix_commit": "1061f92a96ada572aefa6dbb7fd10e3ce0e8b90d",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/nomad",
+    "repo_dir": "nomad",
+    "repo_url": "https://github.com/hashicorp/nomad",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2024-7625"
+    ],
+    "fix_commit": "25ae6810765d76e12a9072f33eb8e6902d981965",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "zitadel/zitadel",
+    "repo_dir": "zitadel",
+    "repo_url": "https://github.com/zitadel/zitadel",
+    "cwe_id": "CWE-287",
+    "cve_ids": [
+      "CVE-2026-29193"
+    ],
+    "fix_commit": "8fbae5796dda189581950dcbf886a7286d28acb3",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "siyuan-note/siyuan",
+    "repo_dir": "siyuan",
+    "repo_url": "https://github.com/siyuan-note/siyuan",
+    "cwe_id": "CWE-22",
+    "cve_ids": [
+      "CVE-2024-55658"
+    ],
+    "fix_commit": "7d34a87da4c2c5f2324a2dee9d8da1f576f415fe",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/vault",
+    "repo_dir": "vault",
+    "repo_url": "https://github.com/hashicorp/vault",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2020-13223"
+    ],
+    "fix_commit": "65ac214e5f62b8b2471319ad19ab296b8598f1b2",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "ulikunitz/xz",
+    "repo_dir": "xz",
+    "repo_url": "https://github.com/ulikunitz/xz",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2021-29482"
+    ],
+    "fix_commit": "492fb8161cff03dd43fd938e40ecede6c6ffd8eb",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "go-gitea/gitea",
+    "repo_dir": "gitea",
+    "repo_url": "https://github.com/go-gitea/gitea",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2025-68939"
+    ],
+    "fix_commit": "7b8e418da1e082786b844562a05864ec1177ce97",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "esm-dev/esm.sh",
+    "repo_dir": "esm.sh",
+    "repo_url": "https://github.com/esm-dev/esm.sh",
+    "cwe_id": "CWE-22",
+    "cve_ids": [
+      "CVE-2026-23644"
+    ],
+    "fix_commit": "1ad31b6352bb0a064ece812f6f360e4850e16051",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "containerd/containerd",
+    "repo_dir": "containerd",
+    "repo_url": "https://github.com/containerd/containerd",
+    "cwe_id": "CWE-190",
+    "cve_ids": [
+      "CVE-2024-40635"
+    ],
+    "fix_commit": "cf158e884cfe4812a6c371b59e4ea9bc4c46e51a",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "crewjam/saml",
+    "repo_dir": "saml",
+    "repo_url": "https://github.com/crewjam/saml",
+    "cwe_id": "CWE-79",
+    "cve_ids": [
+      "CVE-2023-45683"
+    ],
+    "fix_commit": "b07b16cf83c4171d16da4d85608cb827f183cd79",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "stevenweathers/thunderdome-planning-poker",
+    "repo_dir": "thunderdome-planning-poker",
+    "repo_url": "https://github.com/stevenweathers/thunderdome-planning-poker",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2021-41232"
+    ],
+    "fix_commit": "f1524d01e8a0f2d6c3db5461c742456c692dd8c1",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "1panel-dev/1panel",
+    "repo_dir": "1panel",
+    "repo_url": "https://github.com/1panel-dev/1panel",
+    "cwe_id": "CWE-863",
+    "cve_ids": [
+      "CVE-2024-27288"
+    ],
+    "fix_commit": "fe717d993b068bd2a5ca2c3023a897526bdef38f",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "sigstore/rekor",
+    "repo_dir": "rekor",
+    "repo_url": "https://github.com/sigstore/rekor",
+    "cwe_id": "CWE-476",
+    "cve_ids": [
+      "CVE-2026-23831"
+    ],
+    "fix_commit": "fe9717fd6ee4cfecedc30e5fd64c9872bc2ac61c",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "cilium/cilium",
+    "repo_dir": "cilium",
+    "repo_url": "https://github.com/cilium/cilium",
+    "cwe_id": "CWE-74",
+    "cve_ids": [
+      "CVE-2025-48056"
+    ],
+    "fix_commit": "fb3ab54ffe3f1b5059e87a9022fd6559b276b7ce",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "ipfs/kubo",
+    "repo_dir": "kubo",
+    "repo_url": "https://github.com/ipfs/kubo",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2020-26279"
+    ],
+    "fix_commit": "b7ddba7fe47dee5b1760b8ffe897908417e577b2",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "traptitech/traq",
+    "repo_dir": "traq",
+    "repo_url": "https://github.com/traptitech/traq",
+    "cwe_id": "CWE-532",
+    "cve_ids": [
+      "CVE-2025-57813"
+    ],
+    "fix_commit": "ce5da94f5d5a8348f9ecdc82140b6f53b3721698",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/go-getter",
+    "repo_dir": "go-getter",
+    "repo_url": "https://github.com/hashicorp/go-getter",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2022-29810"
+    ],
+    "fix_commit": "b1336defcc3479d5a368d406f95ffdf0cb5f787f",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "btcsuite/btcd",
+    "repo_dir": "btcd",
+    "repo_url": "https://github.com/btcsuite/btcd",
+    "cwe_id": "CWE-670",
+    "cve_ids": [
+      "CVE-2024-38365"
+    ],
+    "fix_commit": "cc26860b40265e1332cca8748c5dbaf3c81cc094",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "zitadel/zitadel",
+    "repo_dir": "zitadel",
+    "repo_url": "https://github.com/zitadel/zitadel",
+    "cwe_id": "CWE-862",
+    "cve_ids": [
+      "CVE-2026-27946"
+    ],
+    "fix_commit": "d2a6af8e075513109c949c6e2f76a256dd4d6864",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "dapr/dapr",
+    "repo_dir": "dapr",
+    "repo_url": "https://github.com/dapr/dapr",
+    "cwe_id": "CWE-200",
+    "cve_ids": [
+      "CVE-2024-35223"
+    ],
+    "fix_commit": "e0591e43d0cdfd30a2f2960dce5d9892dc98bc2c",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "rancher/rancher",
+    "repo_dir": "rancher",
+    "repo_url": "https://github.com/rancher/rancher",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2021-36775"
+    ],
+    "fix_commit": "cd0f57ed70205390ffd713b5fa0086fd4699abff",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "beego/beego",
+    "repo_dir": "beego",
+    "repo_url": "https://github.com/beego/beego",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2021-30080"
+    ],
+    "fix_commit": "d5df5e470d0a8ed291930ae802fd7e6b95226519",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "mholt/caddy",
+    "repo_dir": "caddy",
+    "repo_url": "https://github.com/mholt/caddy",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2022-29718"
+    ],
+    "fix_commit": "a8bb4a665af358f61a7ac0eabac8df2110cb6a36",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "quantumnous/new-api",
+    "repo_dir": "new-api",
+    "repo_url": "https://github.com/quantumnous/new-api",
+    "cwe_id": "CWE-79",
+    "cve_ids": [
+      "CVE-2026-25802"
+    ],
+    "fix_commit": "96f9ff19dfbf3704f444073b2f62e17530aa5cad",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "microsoft/go-crypto-winnative",
+    "repo_dir": "go-crypto-winnative",
+    "repo_url": "https://github.com/microsoft/go-crypto-winnative",
+    "cwe_id": "CWE-401",
+    "cve_ids": [
+      "CVE-2025-25199"
+    ],
+    "fix_commit": "f49c8e1379ea4b147d5bff1b3be5b0ff45792e41",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "golang-jwt/jwt",
+    "repo_dir": "jwt",
+    "repo_url": "https://github.com/golang-jwt/jwt",
+    "cwe_id": "CWE-755",
+    "cve_ids": [
+      "CVE-2024-51744"
+    ],
+    "fix_commit": "7b1c1c00a171c6c79bbdb40e4ce7d197060c1c2c",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "shopify/ejson2env",
+    "repo_dir": "ejson2env",
+    "repo_url": "https://github.com/shopify/ejson2env",
+    "cwe_id": "CWE-78",
+    "cve_ids": [
+      "CVE-2025-48069"
+    ],
+    "fix_commit": "78a5842136b572470aabb89a659898b335bbcf2d",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "gin-gonic/gin",
+    "repo_dir": "gin",
+    "repo_url": "https://github.com/gin-gonic/gin",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2023-29401"
+    ],
+    "fix_commit": "4ea0e648e38a63d6caff14100f5eab5c50912bcd",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "nats-io/nats-server",
+    "repo_dir": "nats-server",
+    "repo_url": "https://github.com/nats-io/nats-server",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2020-26892"
+    ],
+    "fix_commit": "7c7662603115c1f53a9bacfa0115893c8ebe6fd4",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "openfga/helm-charts",
+    "repo_dir": "helm-charts",
+    "repo_url": "https://github.com/openfga/helm-charts",
+    "cwe_id": "CWE-285",
+    "cve_ids": [
+      "CVE-2025-64751"
+    ],
+    "fix_commit": "743b07b3c726955cac7a1f50d2030727497a1d10",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "gogs/gogs",
+    "repo_dir": "gogs",
+    "repo_url": "https://github.com/gogs/gogs",
+    "cwe_id": "CWE-863",
+    "cve_ids": [
+      "CVE-2026-25232"
+    ],
+    "fix_commit": "f5c8030c1fd936f3e0e9f774e3c7c39fd102f56f",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "btcsuite/btcd",
+    "repo_dir": "btcd",
+    "repo_url": "https://github.com/btcsuite/btcd",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2022-44797"
+    ],
+    "fix_commit": "6b5418d5850f5b9977c9b13725d79c5c81d0c1db",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "traefik/traefik",
+    "repo_dir": "traefik",
+    "repo_url": "https://github.com/traefik/traefik",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2018-15598"
+    ],
+    "fix_commit": "feeb7f81a611eb58685ffd28478add6d179b091f",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "quic-go/webtransport-go",
+    "repo_dir": "webtransport-go",
+    "repo_url": "https://github.com/quic-go/webtransport-go",
+    "cwe_id": "CWE-401",
+    "cve_ids": [
+      "CVE-2026-21438"
+    ],
+    "fix_commit": "9d448b125754f4c83064afb2c586221214e55eec",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "tencent/weknora",
+    "repo_dir": "weknora",
+    "repo_url": "https://github.com/tencent/weknora",
+    "cwe_id": "CWE-284",
+    "cve_ids": [
+      "CVE-2026-30859"
+    ],
+    "fix_commit": "7f39d28a339f39e14c459a71fe768b59164e1ef8",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "argoproj/argo-cd",
+    "repo_dir": "argo-cd",
+    "repo_url": "https://github.com/argoproj/argo-cd",
+    "cwe_id": "CWE-200",
+    "cve_ids": [
+      "CVE-2022-24768"
+    ],
+    "fix_commit": "836cde06baef111fa2d7fe157de5c199b16bcd2b",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/go-slug",
+    "repo_dir": "go-slug",
+    "repo_url": "https://github.com/hashicorp/go-slug",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2020-29529"
+    ],
+    "fix_commit": "28cafc59c8da6126a3ae94dfa84181df4073454f",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "usememos/memos",
+    "repo_dir": "memos",
+    "repo_url": "https://github.com/usememos/memos",
+    "cwe_id": "CWE-352",
+    "cve_ids": [
+      "CVE-2023-5036"
+    ],
+    "fix_commit": "0f1e87bd930cf3a0077e62c29489e1ab8f18f6aa",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "chaos-mesh/chaos-mesh",
+    "repo_dir": "chaos-mesh",
+    "repo_url": "https://github.com/chaos-mesh/chaos-mesh",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2025-59361"
+    ],
+    "fix_commit": "7778666ea8719dab3982c5b26115eeec36441889",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "ethereum/go-ethereum",
+    "repo_dir": "go-ethereum",
+    "repo_url": "https://github.com/ethereum/go-ethereum",
+    "cwe_id": "CWE-20",
+    "cve_ids": [
+      "CVE-2026-26314"
+    ],
+    "fix_commit": "95665d5703e1023995a0ff93e4ce9eb77e8a59bd",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "argoproj/argo-cd",
+    "repo_dir": "argo-cd",
+    "repo_url": "https://github.com/argoproj/argo-cd",
+    "cwe_id": "CWE-863",
+    "cve_ids": [
+      "CVE-2024-31990"
+    ],
+    "fix_commit": "b060053b099b4c81c1e635839a309c9c8c1863e9",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "siyuan-note/siyuan",
+    "repo_dir": "siyuan",
+    "repo_url": "https://github.com/siyuan-note/siyuan",
+    "cwe_id": "CWE-22",
+    "cve_ids": [
+      "CVE-2026-30869"
+    ],
+    "fix_commit": "297bd526708fcbd6f2657b06098f6dfdc0076c19",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "cilium/cilium",
+    "repo_dir": "cilium",
+    "repo_url": "https://github.com/cilium/cilium",
+    "cwe_id": "CWE-693",
+    "cve_ids": [
+      "CVE-2023-30851"
+    ],
+    "fix_commit": "9ce6d643e44b3a7894827d339859f0581aad4531",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "sigstore/rekor",
+    "repo_dir": "rekor",
+    "repo_url": "https://github.com/sigstore/rekor",
+    "cwe_id": "CWE-770",
+    "cve_ids": [
+      "CVE-2023-30551"
+    ],
+    "fix_commit": "0c1914e5e955cb9f514e32b222cf61a13e91ab08",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "ipfs/go-bitfield",
+    "repo_dir": "go-bitfield",
+    "repo_url": "https://github.com/ipfs/go-bitfield",
+    "cwe_id": "CWE-754",
+    "cve_ids": [
+      "CVE-2023-23626"
+    ],
+    "fix_commit": "345bb295b923068375b7b171ffc4b0923abd1c11",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "google/osv-scalibr",
+    "repo_dir": "osv-scalibr",
+    "repo_url": "https://github.com/google/osv-scalibr",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2025-5981"
+    ],
+    "fix_commit": "efb5afd2f15bd155d27c8aa8717dd5ce25e0b28c",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "owncast/owncast",
+    "repo_dir": "owncast",
+    "repo_url": "https://github.com/owncast/owncast",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2021-39183"
+    ],
+    "fix_commit": "7860fe78dc56dc5b2b6e11011dc1e842fff57890",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "argoproj/argo-cd",
+    "repo_dir": "argo-cd",
+    "repo_url": "https://github.com/argoproj/argo-cd",
+    "cwe_id": "CWE-79",
+    "cve_ids": [
+      "CVE-2025-47933"
+    ],
+    "fix_commit": "612d345cd926d0b05d1755e3e0717b01ccd20740",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "openfga/openfga",
+    "repo_dir": "openfga",
+    "repo_url": "https://github.com/openfga/openfga",
+    "cwe_id": "CWE-835",
+    "cve_ids": [
+      "CVE-2023-43645"
+    ],
+    "fix_commit": "725296025fd81227c89525808652c6acd4a605f6",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "beego/beego",
+    "repo_dir": "beego",
+    "repo_url": "https://github.com/beego/beego",
+    "cwe_id": "CWE-79",
+    "cve_ids": [
+      "CVE-2025-30223"
+    ],
+    "fix_commit": "5fa33bc11b947d0ddd0f68eb0cb8903741900f00",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "mattermost/mattermost-server",
+    "repo_dir": "mattermost-server",
+    "repo_url": "https://github.com/mattermost/mattermost-server",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2025-27936"
+    ],
+    "fix_commit": "09ccf277a61f68bdbf2453c987af463ed29d6376",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "mattermost/mattermost-server",
+    "repo_dir": "mattermost-server",
+    "repo_url": "https://github.com/mattermost/mattermost-server",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2016-11079"
+    ],
+    "fix_commit": "9d94869cc6a0fb9f051879437c104ccd76094380",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/nomad",
+    "repo_dir": "nomad",
+    "repo_url": "https://github.com/hashicorp/nomad",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2021-43415"
+    ],
+    "fix_commit": "1fae1e1abaf06d55571cfe279788d915345ca5c4",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "mattermost/mattermost-server",
+    "repo_dir": "mattermost-server",
+    "repo_url": "https://github.com/mattermost/mattermost-server",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2024-43780"
+    ],
+    "fix_commit": "43355fe32a953e8b7aa82a9c4cd024311665c098",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "open-policy-agent/opa",
+    "repo_dir": "opa",
+    "repo_url": "https://github.com/open-policy-agent/opa",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2022-33082"
+    ],
+    "fix_commit": "9b5fb9b1d2feca3eb51da6a383ca25175ee58234",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "argoproj/argo-cd",
+    "repo_dir": "argo-cd",
+    "repo_url": "https://github.com/argoproj/argo-cd",
+    "cwe_id": "CWE-330",
+    "cve_ids": [
+      "CVE-2022-31034"
+    ],
+    "fix_commit": "903db5fe464032bd5a10bf32fe17639e76634c2a",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "cli/cli",
+    "repo_dir": "cli",
+    "repo_url": "https://github.com/cli/cli",
+    "cwe_id": "CWE-22",
+    "cve_ids": [
+      "CVE-2024-54132"
+    ],
+    "fix_commit": "1136764c369aaf0cae4ec2ee09dc35d871076932",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "moby/moby",
+    "repo_dir": "moby",
+    "repo_url": "https://github.com/moby/moby",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2024-36621"
+    ],
+    "fix_commit": "37545cc644344dcb576cba67eb7b6f51a463d31e",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "moby/moby",
+    "repo_dir": "moby",
+    "repo_url": "https://github.com/moby/moby",
+    "cwe_id": "CWE-732",
+    "cve_ids": [
+      "CVE-2022-24769"
+    ],
+    "fix_commit": "87a90dc786bda134c9eb02adbae2c6a7342fb7f6",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "gofiber/fiber",
+    "repo_dir": "fiber",
+    "repo_url": "https://github.com/gofiber/fiber",
+    "cwe_id": "CWE-789",
+    "cve_ids": [
+      "CVE-2026-25899"
+    ],
+    "fix_commit": "3c24ebefe5009e88f9f9258b472e8021160179bf",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "rancher/rancher",
+    "repo_dir": "rancher",
+    "repo_url": "https://github.com/rancher/rancher",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2019-11881"
+    ],
+    "fix_commit": "e59adbc7565251919d84d6e353421104be8da06e",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "cosmos/cosmos-sdk",
+    "repo_dir": "cosmos-sdk",
+    "repo_url": "https://github.com/cosmos/cosmos-sdk",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2021-41135"
+    ],
+    "fix_commit": "68ab790a761e80d3674f821794cf18ccbfed45ee",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "plentico/plenti",
+    "repo_dir": "plenti",
+    "repo_url": "https://github.com/plentico/plenti",
+    "cwe_id": "CWE-74",
+    "cve_ids": [
+      "CVE-2024-49380"
+    ],
+    "fix_commit": "081edfd776bb6f50da302e55f9b1d44da29f69f1",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "mattermost/mattermost-server",
+    "repo_dir": "mattermost-server",
+    "repo_url": "https://github.com/mattermost/mattermost-server",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2026-0997"
+    ],
+    "fix_commit": "ba27ba1f8cb1ffe2b1a79dc3d15a3ffa7de12fd7",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "minio/minio",
+    "repo_dir": "minio",
+    "repo_url": "https://github.com/minio/minio",
+    "cwe_id": "CWE-269",
+    "cve_ids": [
+      "CVE-2023-28434"
+    ],
+    "fix_commit": "05444a0f6af8389b9bb85280fc31337c556d4300",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "argoproj/argo-cd",
+    "repo_dir": "argo-cd",
+    "repo_url": "https://github.com/argoproj/argo-cd",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2022-41354"
+    ],
+    "fix_commit": "598f79236ae4160325b37342434baef4ff95d61c",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "cloudflare/circl",
+    "repo_dir": "circl",
+    "repo_url": "https://github.com/cloudflare/circl",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2023-1732"
+    ],
+    "fix_commit": "3bef500f2b925f150815a360b90081021e082939",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "openbao/openbao",
+    "repo_dir": "openbao",
+    "repo_url": "https://github.com/openbao/openbao",
+    "cwe_id": "CWE-156",
+    "cve_ids": [
+      "CVE-2025-55001"
+    ],
+    "fix_commit": "b1a68f558c89d18d38fbb8675bb6fc1d90b71e98",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "containerd/containerd",
+    "repo_dir": "containerd",
+    "repo_url": "https://github.com/containerd/containerd",
+    "cwe_id": "CWE-400",
+    "cve_ids": [
+      "CVE-2022-23471"
+    ],
+    "fix_commit": "2e3140a0e09d288a9086474752b4478aa0964e7c",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/vault",
+    "repo_dir": "vault",
+    "repo_url": "https://github.com/hashicorp/vault",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2024-6468"
+    ],
+    "fix_commit": "2af5655e364f697a15b1dc2db2c3f85f6ef949f2",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "kubevirt/kubevirt",
+    "repo_dir": "kubevirt",
+    "repo_url": "https://github.com/kubevirt/kubevirt",
+    "cwe_id": "CWE-59",
+    "cve_ids": [
+      "CVE-2025-64437"
+    ],
+    "fix_commit": "4f27e414aa0e7c805b04911902b888bc9c3b2f82",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "influxdata/influxdb",
+    "repo_dir": "influxdb",
+    "repo_url": "https://github.com/influxdata/influxdb",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2019-20933"
+    ],
+    "fix_commit": "01c8dd416270f424ab0c40f9291e269ac6921964",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "rancher/rancher",
+    "repo_dir": "rancher",
+    "repo_url": "https://github.com/rancher/rancher",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2024-52281"
+    ],
+    "fix_commit": "4ec728e8aae3e51c86cf599d1618c555fd806ce8",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "googlecloudplatform/secrets-store-csi-driver-provider-gcp",
+    "repo_dir": "secrets-store-csi-driver-provider-gcp",
+    "repo_url": "https://github.com/googlecloudplatform/secrets-store-csi-driver-provider-gcp",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2020-8567"
+    ],
+    "fix_commit": "6296c84d191846e793301fd1dda64629afcb4279",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "fleetdm/fleet",
+    "repo_dir": "fleet",
+    "repo_url": "https://github.com/fleetdm/fleet",
+    "cwe_id": "CWE-201",
+    "cve_ids": [
+      "CVE-2026-27465"
+    ],
+    "fix_commit": "5c2a408a4ddb0866a8393159fe71abec5f450e6d",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "kubernetes/kube-state-metrics",
+    "repo_dir": "kube-state-metrics",
+    "repo_url": "https://github.com/kubernetes/kube-state-metrics",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2019-10223"
+    ],
+    "fix_commit": "4c0e83b3407e489eda34c26f7794ec69856ccd76",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "go-gitea/gitea",
+    "repo_dir": "gitea",
+    "repo_url": "https://github.com/go-gitea/gitea",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2026-20800"
+    ],
+    "fix_commit": "369830bada2fd8826a5135cb2fc66660a9bef708",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "ehang-io/nps",
+    "repo_dir": "nps",
+    "repo_url": "https://github.com/ehang-io/nps",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2019-15119"
+    ],
+    "fix_commit": "7178b3380720e910d283036a8d39879a94105515",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "chainguard-dev/melange",
+    "repo_dir": "melange",
+    "repo_url": "https://github.com/chainguard-dev/melange",
+    "cwe_id": "CWE-22",
+    "cve_ids": [
+      "CVE-2026-25145"
+    ],
+    "fix_commit": "bd132535cd9f57d4bd39d9ead0633598941af030",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "zitadel/zitadel",
+    "repo_dir": "zitadel",
+    "repo_url": "https://github.com/zitadel/zitadel",
+    "cwe_id": "CWE-269",
+    "cve_ids": [
+      "CVE-2024-46999"
+    ],
+    "fix_commit": "f0ce5d537cb4f0408b1fb5da663c4ba8b517b9e0",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "hashicorp/nomad",
+    "repo_dir": "nomad",
+    "repo_url": "https://github.com/hashicorp/nomad",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2024-10975"
+    ],
+    "fix_commit": "24d03a922d7c60bb18a1d083598d6dcfbe380867",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "zitadel/zitadel",
+    "repo_dir": "zitadel",
+    "repo_url": "https://github.com/zitadel/zitadel",
+    "cwe_id": "CWE-640",
+    "cve_ids": [
+      "CVE-2023-49097"
+    ],
+    "fix_commit": "b5d7aee72e5ec0996447e9b7306e1134a8874b16",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "golang/net",
+    "repo_dir": "net",
+    "repo_url": "https://github.com/golang/net",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2023-3978"
+    ],
+    "fix_commit": "8ffa475fbdb33da97e8bf79cc5791ee8751fca5e",
+    "fonte": "osv"
+  },
+  {
+    "repo_name": "dexidp/dex",
+    "repo_dir": "dex",
+    "repo_url": "https://github.com/dexidp/dex",
+    "cwe_id": "CWE-desconhecida",
+    "cve_ids": [
+      "CVE-2020-27847"
+    ],
+    "fix_commit": "0f9e2888ab65c5b18c4881eaeeb7e38d997e1d92",
+    "fonte": "osv"
+  }
+]

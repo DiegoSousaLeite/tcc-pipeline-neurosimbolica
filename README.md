@@ -1,50 +1,94 @@
-# Pipeline de Triagem Neuro-Simbólica para SAST (Golang)
+# TCC — Pipeline Neuro-Simbólica de Triagem de Alertas SAST em Go
 
-Este repositório contém o ambiente experimental projetado para avaliar a eficácia de Modelos de Linguagem de Grande Escala (LLMs) na filtragem de alertas Falsos Positivos gerados por ferramentas de Análise Estática (SAST) em projetos Go.
+Pipeline que combina **Semgrep** (motor simbólico) com um **LLM** (Gemini ou GPT)
+para triar alertas de análise estática em código Go, reduzindo falsos positivos e
+avaliando verdadeiros positivos. O LLM é um filtro puro do Semgrep: nada chega a
+ele sem que a Fase 1 tenha alertado antes.
 
-A arquitetura simula uma esteira DevSecOps nativa, dividida em 5 fases de processamento agnóstico.
+## Instalação
 
-## ⚙️ Pré-requisitos e Dependências
+```
+Python >= 3.10
+pip install semgrep requests python-dotenv
+```
 
-1.  **CodeQL CLI**: O binário `codeql` deve estar acessível no `PATH` do sistema.
-2.  **Git**: Necessário para os comandos de isolamento (`clone` e `checkout`).
-3.  **Python 3.9+**
+Crie um `.env` na raiz com a chave do provedor que for usar:
 
-Instale as dependências Python necessárias:
-\`\`\`bash
-pip install -r requirements.txt
-\`\`\`
-*(Nota: O `requirements.txt` requer apenas a biblioteca `requests`)*
+```
+GEMINI_API_KEY=sua_chave_aqui
+```
 
-## 🚀 Configuração e Execução
+As demais variáveis têm padrão e estão listadas em `docs/SCRIPTS.md`
+(`src/config.py`).
 
-### Passo 1: Variáveis de Ambiente
-Configure a chave da API do modelo de fronteira no seu terminal:
+## Como rodar
 
-**Windows (PowerShell):**
-\`\`\`powershell
-$env:GEMINI_API_KEY="SUA_CHAVE_AQUI"
-\`\`\`
+```bash
+# O que seria executado, sem executar nada:
+python run_pipeline.py --tudo --dry-run
 
-**Linux/macOS:**
-\`\`\`bash
-export GEMINI_API_KEY="SUA_CHAVE_AQUI"
-\`\`\`
+# Subconjunto rápido (prioriza o que já está em cache):
+python run_pipeline.py --amostra 20
 
-### Passo 2: O Dataset
-Certifique-se de que o arquivo resultante do pré-processamento, nomeado `dataset_go_limpo.json`, encontra-se no diretório `data/`.
+# Pipeline completa, braço padrão (gemini-2.5-flash-lite + especialista):
+python run_pipeline.py --tudo
 
-### Passo 3: Executar a Pipeline
-Na raiz do projeto, execute o orquestrador principal:
-\`\`\`bash
-python main.py
-\`\`\`
+# Matriz 2x2 completa: Gemini e GPT x baseline e especialista
+python run_pipeline.py --tudo --matriz
 
-## 🏗️ Arquitetura do Sistema (`src/`)
+# Só cobertura simbólica, sem gastar cota de API:
+python run_pipeline.py --tp-only --sem-llm
+```
 
-O código está isolado nos seguintes módulos:
+Cada execução cria `results/<run_id>/`, com um CSV por braço
+(`<modelo>__<prompt>.csv`) e um `manifesto.json`.
 
--   `fase1_codeql.py`: Automatiza a recuperação do código no momento exato da vulnerabilidade (via `git checkout`) e invoca o motor relacional do CodeQL para gerar o `.sarif` bruto.
--   `fase2_middleware.py`: Atua como ponte neuro-simbólica. Navega na árvore JSON do SARIF, isola as rotas críticas de *Taint Analysis* e hidrata os pontos nodais extraindo o código-fonte adjacente diretamente dos arquivos `.go`.
--   `fases3_4_llm.py`: Monta o construto sistêmico (Prompt Especialista) imbuído de semântica técnica do Golang e gerencia a inferência estrita via requisições REST para a nuvem.
--   `fase5_auditoria.py`: Atua de forma isolada na ponta da esteira laboratorial, confrontando as previsões do modelo contra o *Ground Truth* do SastBench para alimentar a Matriz de Confusão do experimento.
+```bash
+# Métricas de uma rodada (ou de um CSV avulso)
+python src/metricas.py results/<run_id> --mcnemar --estratificar --latex
+
+# Testes e lint
+python -m pytest -q
+python -m ruff check .
+```
+
+A Fase 0 (preparação dos pares TP) **já foi executada** — `tp_pairs.json` e
+`tp_pairs_osv.json` estão versionados. Só é preciso repeti-la para regerar os
+pares do zero; o procedimento está em `docs/PIPELINE.md`.
+
+## Mapa do repositório
+
+```
+run_pipeline.py          # Orquestrador: 5 fases, N braços (modelo x prompt)
+pyproject.toml           # Metadados, config do ruff e do pytest
+src/                     # Módulos da pipeline (config, fonte, fases 1-5, métricas)
+  provedores/            # Camada de rede por provedor de LLM + tabela de preços
+prompts/                 # Templates de prompt: baseline.md e especialista.md
+scripts/                 # Fase 0 (coleta e reconstrução de pares) e utilitários
+data/                    # Dataset, catálogo de CWE e manifestos de fix commits
+tp_pairs.json            # Pares TP ouro   (versionado: exige histórico git p/ regerar)
+tp_pairs_osv.json        # Pares TP prata  (idem)
+cache/                   # Arquivos-alvo por (repo, commit, caminho) — chave imutável
+cache_simbolico/         # Alerta + contexto por caso (recriável; gitignored)
+results/<run_id>/        # 1 CSV por braço + manifesto.json (gitignored)
+tests/                   # pytest: funções puras, trilhas, cache, provedores, métricas
+legacy/resultados_parte1/  # CSVs da PoC com CodeQL (não comparáveis com a Parte 2)
+apresentacao/            # Slides da defesa (gitignored; ver nota no .gitignore)
+docs/                    # Documentação de detalhe (abaixo)
+```
+
+## Documentação
+
+| Arquivo | Responde |
+|---|---|
+| `docs/PIPELINE.md` | Como funciona: arquitetura das 5 fases, trilhas de entrada, as duas matrizes, métricas, catálogo de CWE, caches, provedores |
+| `docs/SCRIPTS.md` | O que cada módulo e script faz: entradas, saídas, flags, variáveis de ambiente |
+| `docs/OPENSPEC.md` | Comandos do OpenSpec e o fluxo de trabalho de mudanças |
+
+O código da Parte 1 (fluxo CodeQL) não é mantido em cópia: vive no histórico do
+Git e se recupera por caminho antigo.
+
+```bash
+git show HEAD:main.py               # orquestrador original (5 fases via CodeQL)
+git show HEAD:src/fase1_codeql.py   # Fase 1: clone + database create + analyze
+```
