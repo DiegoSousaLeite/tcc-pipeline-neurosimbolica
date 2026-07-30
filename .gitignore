@@ -1,15 +1,41 @@
-# Pastas de Ferramentas e Dados (MUITO PESADOS)
+# Ferramentas pesadas
 codeql/
 codeql-bundle.tar.gz
 repos/
 
-# Cache do Python
+# Cache Python
 __pycache__/
 *.pyc
 src/__pycache__/
+scripts/__pycache__/
 
-# Arquivos de Configuração Sensíveis (NUNCA COMITAR)
+# Cache de ferramenta (recriado a cada execução)
+.pytest_cache/
+.ruff_cache/
+
+# Configuração sensível
 .env
 
-# Resultados e Saídas
-resultados_tcc.csv
+# Artefatos gerados (recriáveis, não commitar)
+resultados_tcc*.csv
+*.sarif
+pilot_*.csv
+db_codeql/
+# Cache do resultado simbólico: derivado de cache/ + Semgrep, e depende da
+# versão do ruleset. Ao contrário de cache/, é reconstruível localmente.
+cache_simbolico/
+# Rodadas da Parte 2. Os CSVs são reexecutáveis; o que precisa ser preservado
+# de uma rodada é o manifesto (versionado à parte, quando a rodada for citada).
+results/
+
+# Slides da defesa. O diretório EXISTE localmente e não foi perdido: fica fora do
+# versionamento porque 8 dos 11 MB são vendor/ (reveal.js + KaTeX vendorizados
+# para rodar offline) e exports binários (.pptx, .pdf), que não produzem diff
+# útil. O artefato citável de uma apresentação é o PDF final, entregue por outro
+# canal.
+apresentacao/
+
+# tp_pairs*.json NÃO entra aqui de propósito: com repos/ apagado, regenerá-los
+# exige refazer o fetch raso dos ~70 repos (~1 h). São entrada da pipeline.
+
+TCC1___Diego_Sousa_e_João_Artur_Leles
