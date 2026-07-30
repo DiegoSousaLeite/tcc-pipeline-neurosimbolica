@@ -24,6 +24,7 @@ class ProvedorGemini(ProvedorHTTP):
     nome: str = "gemini"
 
     def __post_init__(self):
+        super().__post_init__()
         if self.api_key is None:
             self.api_key = os.environ.get("GEMINI_API_KEY")
         if self.intervalo_minimo_s is None:

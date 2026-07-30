@@ -58,8 +58,19 @@ def custo_usd(modelo: str, tokens_entrada: int, tokens_saida: int) -> float:
             + tokens_saida / 1_000_000 * preco.saida_por_1m)
 
 
-def tabela_para_manifesto(modelos) -> dict:
-    """Recorte da tabela para os modelos de uma rodada, pronto para o manifesto."""
+def tabela_para_manifesto(modelos, modelos_locais=()) -> dict:
+    """Recorte da tabela para os modelos de uma rodada, pronto para o manifesto.
+
+    `modelos_locais` chega de fora (de `familia_do_modelo`, em `run_pipeline`) e
+    não é inferido aqui por prefixo: a tabela de preços sabe de preços, não de
+    namespaces de provedor.
+
+    A distinção importa porque os dois casos custam zero por motivos opostos.
+    Modelo comercial fora da tabela é anomalia a notar — alguém esqueceu de
+    tabelar o preço. Modelo local é zero por construção, e listá-lo como "sem
+    preço" daria a entender que faltou consultar algo.
+    """
+    locais = set(modelos_locais)
     return {
         "versao_tabela": VERSAO_TABELA,
         "data_consulta": DATA_CONSULTA,
@@ -69,5 +80,7 @@ def tabela_para_manifesto(modelos) -> dict:
                 "saida_por_1m_usd": TABELA[m].saida_por_1m}
             for m in modelos if m in TABELA
         },
-        "modelos_sem_preco": [m for m in modelos if m not in TABELA],
+        "modelos_sem_preco": [m for m in modelos
+                              if m not in TABELA and m not in locais],
+        "modelos_locais_sem_custo": [m for m in modelos if m in locais],
     }

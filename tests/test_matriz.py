@@ -1,4 +1,5 @@
 """Testes do runner da matriz 2x2 e da auditoria (tarefas 7.1 a 7.4)."""
+import argparse
 import csv
 import json
 import os
@@ -453,6 +454,123 @@ def test_nenhum_csv_novo_na_raiz_do_repositorio(tmp_path, catalogo,
     _rodar([caso("c1")], MATRIZ, tmp_path, catalogo)
     novos = set(os.listdir(run_pipeline.BASE)) - antes
     assert not [n for n in novos if n.endswith(".csv")]
+
+
+# --- Rótulo de braço saneado e sondagem do braço local ---------------------
+
+OLLAMA = "ollama:qwen2.5-coder:7b"
+
+
+def _args(modelo, prompt="baseline", matriz=False):
+    return argparse.Namespace(matriz=matriz, modelo=modelo, prompt=[prompt])
+
+
+def test_rotulo_ja_valido_fica_identico():
+    """Renomear os CSVs dos braços comerciais quebraria a retomada de rodada e
+    a leitura do que já foi gravado."""
+    assert Braco(GEMINI, "especialista").rotulo == f"{GEMINI}__especialista"
+    assert Braco(GPT, "baseline").rotulo == f"{GPT}__baseline"
+
+
+def test_rotulo_de_modelo_local_e_saneado():
+    """Dois-pontos é caractere reservado no Windows: sem isto a rodada morre ao
+    abrir o CSV, antes do primeiro caso."""
+    assert Braco(OLLAMA, "baseline").rotulo == "ollama-qwen2.5-coder-7b__baseline"
+    assert ":" not in Braco(OLLAMA, "especialista").rotulo
+
+
+def test_modelo_cru_continua_nos_dados(tmp_path, catalogo, simbolico_dublado):
+    braco = Braco(OLLAMA, "baseline")
+    dir_rodada, _, _ = _rodar([caso("c1")], [braco], tmp_path, catalogo)
+    assert os.listdir(dir_rodada) == ["ollama-qwen2.5-coder-7b__baseline.csv"]
+    assert _ler(dir_rodada, braco)[0]["Modelo_LLM"] == OLLAMA
+
+
+def test_colisao_de_rotulo_e_desambiguada(tmp_path, catalogo, simbolico_dublado):
+    """Sobrescrever silenciosamente o CSV de um braço com o de outro seria falha
+    de integridade dos dados, não inconveniência de nomenclatura."""
+    gemeos = ["ollama:qwen2.5-coder:7b", "ollama:qwen2.5-coder/7b"]
+    bracos = run_pipeline.definir_bracos(_args(gemeos))
+    assert len({b.rotulo for b in bracos}) == 2
+
+    dir_rodada, _, _ = _rodar([caso("c1")], bracos, tmp_path, catalogo)
+    assert len(os.listdir(dir_rodada)) == 2
+
+
+def test_sem_colisao_nao_ha_sufixo():
+    bracos = run_pipeline.definir_bracos(_args([GEMINI, GPT]))
+    assert all(b.sufixo == "" for b in bracos)
+    assert {b.rotulo for b in bracos} == {f"{GEMINI}__baseline", f"{GPT}__baseline"}
+
+
+def test_rodada_so_comercial_nao_sonda(monkeypatch):
+    """A pipeline sem braço local continua rodando em máquina sem Ollama."""
+    def _explode(modelo):
+        raise AssertionError(f"não deveria instanciar provedor: {modelo}")
+
+    monkeypatch.setattr(run_pipeline, "criar_provedor", _explode)
+    assert run_pipeline.sondar_modelos_locais(MATRIZ) == {}
+    assert run_pipeline.modelos_locais(MATRIZ) == []
+
+
+def test_sondagem_roda_uma_vez_por_modelo_local(monkeypatch):
+    sondados = []
+
+    class ProvedorLocalFalso:
+        def __init__(self, modelo):
+            self.modelo = modelo
+
+        def sondar(self):
+            sondados.append(self.modelo)
+            return {"tag": "qwen2.5-coder:7b", "digest": "abc"}
+
+    monkeypatch.setattr(run_pipeline, "criar_provedor", ProvedorLocalFalso)
+    bracos = [Braco(OLLAMA, "baseline"), Braco(OLLAMA, "especialista"),
+              Braco(GEMINI, "baseline")]
+    assert set(run_pipeline.sondar_modelos_locais(bracos)) == {OLLAMA}
+    assert sondados == [OLLAMA]
+
+
+def test_manifesto_registra_a_identidade_do_modelo_local(tmp_path, catalogo):
+    from datetime import datetime, timezone
+    dir_rodada = tmp_path / "rodada"
+    dir_rodada.mkdir()
+    agora = datetime.now(timezone.utc)
+    sondagem = {OLLAMA: {"tag": "qwen2.5-coder:7b", "versao_ollama": "0.32.5",
+                         "digest": "dae161e27b0e", "quantizacao": "Q4_K_M",
+                         "parametros": "7.6B", "janela_maxima_declarada": 32768,
+                         "num_ctx": 8192, "num_predict": 512, "semente": 42,
+                         "processador": "100% GPU"}}
+    destino = gravar_manifesto(
+        str(dir_rodada), "20260730T120000Z-abc1234",
+        [Braco(OLLAMA, "baseline"), Braco(GEMINI, "baseline")],
+        {"FP": 791}, 791, agora, agora, catalogo, False, True,
+        "run_pipeline.py --tudo --modelo " + OLLAMA, sondagem)
+
+    m = json.load(open(destino, encoding="utf-8"))
+    local = m["modelos_locais"][OLLAMA]
+    assert local["digest"] == "dae161e27b0e"
+    assert local["quantizacao"] == "Q4_K_M"
+    assert local["num_ctx"] == 8192
+    assert local["semente"] == 42
+    assert local["processador"] == "100% GPU"
+    # Custo zero por execução local, e não "esqueceram de tabelar o preço".
+    assert m["precos"]["modelos_locais_sem_custo"] == [OLLAMA]
+    assert m["precos"]["modelos_sem_preco"] == []
+    assert m["bracos"][0]["csv"] == "ollama-qwen2.5-coder-7b__baseline.csv"
+    assert m["bracos"][0]["modelo"] == OLLAMA
+
+
+def test_manifesto_sem_braco_local_tem_bloco_vazio(tmp_path, catalogo):
+    from datetime import datetime, timezone
+    dir_rodada = tmp_path / "rodada"
+    dir_rodada.mkdir()
+    agora = datetime.now(timezone.utc)
+    destino = gravar_manifesto(str(dir_rodada), "r", MATRIZ, {"FP": 1}, 1,
+                               agora, agora, catalogo, False, True, "cmd")
+    m = json.load(open(destino, encoding="utf-8"))
+    assert m["modelos_locais"] == {}
+    assert m["precos"]["modelos_locais_sem_custo"] == []
 
 
 def test_inicializar_relatorio_grava_o_cabecalho(tmp_path):

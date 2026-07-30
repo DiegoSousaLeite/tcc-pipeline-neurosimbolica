@@ -476,6 +476,7 @@ só é variável independente se trocar de provedor não mudar mais nada:
 | `base.py` | `RespostaLLM`, protocolo `ProvedorLLM`, backoff, validação de schema |
 | `gemini.py` | REST `generateContent`, chave em `x-goog-api-key` |
 | `openai.py` | REST `/v1/chat/completions`, chave em `Authorization: Bearer` |
+| `ollama.py` | REST `/api/chat` num servidor local, **sem chave** |
 | `precos.py` | tabela de preços por 1M de tokens, datada e versionada |
 
 Decisões que afetam os números:
@@ -494,6 +495,141 @@ Decisões que afetam os números:
 - **Custo é derivado, não medido.** A API devolve contagem de tokens, não valor
   cobrado. A tabela de `precos.py` tem data de consulta e vai para o manifesto
   da rodada; sem ela o custo total não é auditável.
+
+---
+
+## Provedor Local (Ollama)
+
+Terceiro ponto do eixo "modelo": um modelo aberto rodando na máquina do
+pesquisador. Custo marginal zero, sem cota, e o código-fonte de terceiros nunca
+sai da máquina — é a resposta à pergunta de viabilidade on-premise da abordagem.
+**Não** substitui os braços comerciais nem entra em `--matriz`: só roda quando
+nomeado.
+
+### Preparação
+
+```bash
+# 1. Instalar o Ollama (https://ollama.com/download) e subir o serviço
+ollama serve                       # ou o aplicativo, que já sobe o serviço
+
+# 2. Baixar o modelo
+ollama pull qwen2.5-coder:7b
+
+# 3. Conferir que a inferência coube na GPU
+ollama run qwen2.5-coder:7b "oi" && ollama ps   # coluna PROCESSOR: 100% GPU
+```
+
+Se `ollama ps` mostrar CPU, os vereditos são os mesmos, mas o throughput cai
+~10x. O manifesto registra qual foi o caso — é nota de viabilidade, não
+resultado.
+
+### Escolha de modelo por VRAM
+
+Referência para os 8 GB da RX 7600 desta máquina, em quantização Q4:
+
+| Modelo | Peso residente | Cabe nos 8 GB? |
+|---|---|---|
+| `qwen2.5-coder:7b` | ~4,7 GB | sim (validado, `100% GPU`) |
+| `gemma2:9b` | ~5,4 GB | sim, com menos folga de cache KV |
+| `qwen2.5-coder:14b` | ~9 GB | não: offload parcial para CPU, 3–6x mais lento |
+| `deepseek-coder-v2:16b` | ~8,9 GB | não: idem (mistura de especialistas ameniza) |
+
+Trocar de modelo é só trocar o `--modelo`; não há código novo para nenhum deles.
+
+### Uso
+
+```bash
+# Braço local, prompt especialista
+python run_pipeline.py --tudo --modelo ollama:qwen2.5-coder:7b --prompt especialista
+
+# Braço local junto de um comercial, nos dois prompts
+python run_pipeline.py --tudo --modelo ollama:qwen2.5-coder:7b \
+    --modelo gemini-2.5-flash-lite --prompt baseline --prompt especialista
+```
+
+O namespace `ollama:` é obrigatório e explícito. Sem ele não haveria como
+distinguir `gemma2` (modelo aberto do Google, local) de `gemini` (API do mesmo
+Google), e um erro de digitação cairia em "modelo sem provedor conhecido" em vez
+de "modelo não instalado".
+
+### Variáveis de ambiente
+
+| Variável | Padrão | Para quê |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | endereço do servidor |
+| `OLLAMA_NUM_CTX` | `8192` | janela de contexto pedida em toda requisição |
+| `OLLAMA_TIMEOUT` | `600` | segundos por requisição (cobre o carregamento dos pesos) |
+
+### Truncamento silencioso de contexto — o ponto de atenção
+
+O padrão do servidor é `num_ctx = 4096` e **o excedente é descartado sem aviso**:
+nenhuma exceção, nenhum campo de erro. Um veredito emitido sobre um arquivo Go
+visto pela metade entraria no CSV indistinguível de um veredito legítimo. É o
+modo de falha mais perigoso do braço local, e por isso a pipeline:
+
+1. fixa `num_ctx` explicitamente em toda requisição, sem herdar o padrão;
+2. **antes** da chamada, recusa prompt cuja estimativa (`len/3.5`, que
+   superestima em código) passe de `num_ctx - num_predict`, sem gastar GPU;
+3. **depois** da chamada, transforma em `ERROR` a resposta cujo
+   `prompt_eval_count` encoste no teto, cujo `done_reason` seja `length` ou que
+   venha com `done: false` (o servidor abortou a geração no meio), mesmo que o
+   JSON tenha vindo bem-formado;
+4. registra a janela efetiva, o digest, a quantização e a semente no manifesto.
+
+Para escolher `num_ctx` com medida em vez de chute:
+
+```bash
+python scripts/medir_prompts.py                  # distribuição por tipo de prompt
+python scripts/medir_prompts.py --num-ctx 16384  # quantos casos estourariam
+```
+
+### Verificação prévia e reprodutibilidade
+
+Antes do primeiro caso, a rodada sonda o servidor uma vez (`/api/version`,
+`/api/tags`, `/api/show`) e **aborta** se ele estiver fora do ar ou se a tag não
+estiver instalada — nomeando o endereço tentado, os modelos disponíveis e o
+`ollama pull` correspondente. Sem isso, um `ollama serve` esquecido produziria
+uma linha `ERROR` por caso, cada uma depois de quatro tentativas com backoff.
+
+A sondagem também é o que alimenta o bloco `modelos_locais` do manifesto:
+versão do servidor, **digest**, quantização, tamanho de parâmetros, janela
+máxima declarada, `num_ctx` efetivo, semente e GPU/CPU. O digest importa porque
+`qwen2.5-coder:7b` é ponteiro mutável no registry, igual a `latest`: sem ele um
+número do capítulo de resultados não é reatribuível aos pesos que o geraram — é
+o mesmo raciocínio do `sha256` do catálogo de CWE.
+
+Determinismo é aproximado: temperatura 0 e semente fixa (42) não garantem
+reprodução bit a bit entre versões do servidor, quantizações ou divisões
+GPU/CPU. O que se afirma é "geração determinística dentro da configuração
+registrada".
+
+### O que NÃO é afrouxado para o braço local
+
+Nada. Mesma validação de schema, mesmo número de tentativas, mesmo
+`format: "json"` sem enum forçado — o Ollama aceitaria um JSON Schema que
+restringisse a saída a `VP`/`FP`, e usá-lo eliminaria do braço local uma
+modalidade de falha ("respondeu `TALVEZ`") que Gemini e GPT continuam correndo.
+A taxa de `ERROR` é um dos números comparados: se o modelo de 7B erra mais o
+formato, isso é **resultado a reportar**, não defeito a corrigir.
+
+O que muda por necessidade física: `timeout` de 600 s (contra 60 s), sem
+intervalo mínimo entre chamadas (não há cota) e `keep_alive` de 30 min (sem ele
+o servidor descarrega o modelo após 5 min ociosos e a chamada seguinte paga de
+novo os ~15 s de carregamento).
+
+### Custo zero declarado
+
+`Custo_USD` é zero em toda linha do braço local, e os tokens continuam sendo
+gravados. No manifesto isso aparece em `modelos_locais_sem_custo`, separado de
+`modelos_sem_preco` — os dois custam zero, mas por motivos opostos: o primeiro é
+zero por construção, o segundo é anomalia (alguém esqueceu de tabelar o preço).
+
+### Comparabilidade
+
+Um braço local **não é comparável** aos comerciais em nada além do veredito:
+latência e custo saem de regimes diferentes, e a máquina é de uso geral, sem
+controle de carga. O texto da monografia precisa dizer isso ao apresentar a
+tabela.
 
 ---
 

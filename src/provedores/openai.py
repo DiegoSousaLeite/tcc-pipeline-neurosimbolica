@@ -22,6 +22,7 @@ class ProvedorOpenAI(ProvedorHTTP):
     nome: str = "openai"
 
     def __post_init__(self):
+        super().__post_init__()
         if self.api_key is None:
             self.api_key = os.environ.get("OPENAI_API_KEY")
         if self.intervalo_minimo_s is None:

@@ -34,6 +34,7 @@ USO
 import argparse
 import csv
 import glob
+import hashlib
 import json
 import logging
 import os
@@ -73,9 +74,12 @@ from src.fonte import (
 from src.prompts import BASELINE, ESPECIALISTA, TIPOS, versao_prompt
 from src.provedores import (
     MODELO_GEMINI_PADRAO,
+    MODELO_OLLAMA_PADRAO,
     MODELO_OPENAI_PADRAO,
     criar_provedor,
+    familia_do_modelo,
 )
+from src.provedores.ollama import OllamaIndisponivel
 from src.provedores.precos import tabela_para_manifesto
 
 log = logging.getLogger("pipeline")
@@ -454,16 +458,40 @@ def definir_nome_relatorio_unico(caminho_padrao):
 # Identidade da rodada
 # ---------------------------------------------------------------------------
 
+# Caracteres que o Windows recusa em nome de arquivo. As tags do Ollama trazem
+# dois-pontos (`qwen2.5-coder:7b`), e o rótulo do braço vira nome de CSV: sem o
+# saneamento a rodada morre ao abrir o arquivo, antes do primeiro caso.
+CARACTERES_RESERVADOS = ':*?"<>|/\\'
+
+
+def sanear_rotulo(texto: str) -> str:
+    """Troca os caracteres reservados por `-`, deixando o resto intacto.
+
+    Rótulo já válido sai IDÊNTICO: `gemini-2.5-flash-lite__especialista`
+    continua com esse nome, o que preserva a retomada de rodadas em andamento e
+    a leitura dos CSVs já gravados.
+    """
+    return "".join("-" if c in CARACTERES_RESERVADOS else c for c in texto)
+
+
 @dataclass(frozen=True)
 class Braco:
-    """Um ponto da matriz experimental: um modelo com um tipo de prompt."""
+    """Um ponto da matriz experimental: um modelo com um tipo de prompt.
+
+    `sufixo` só é preenchido quando dois modelos distintos saneariam para o
+    mesmo nome de arquivo (ver `definir_bracos`); nome de modelo é identidade e
+    continua inteiro na coluna `Modelo_LLM` e no manifesto — o rótulo é só nome
+    de arquivo.
+    """
 
     modelo: str
     prompt: str
+    sufixo: str = ""
 
     @property
     def rotulo(self) -> str:
-        return f"{self.modelo}__{self.prompt}"
+        base = sanear_rotulo(f"{self.modelo}__{self.prompt}")
+        return f"{base}-{self.sufixo}" if self.sufixo else base
 
     def __str__(self) -> str:
         return f"({self.modelo}, {self.prompt})"
@@ -495,7 +523,8 @@ def novo_run_id() -> str:
 
 
 def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
-                     inicio, fim, catalogo, sem_llm, cache_ativo, argv):
+                     inicio, fim, catalogo, sem_llm, cache_ativo, argv,
+                     sondagens=None):
     """Registra a configuração completa da rodada.
 
     É o que permite, meses depois, dizer de qual código, ruleset, catálogo e
@@ -520,7 +549,13 @@ def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
         "prompts": {tipo: versao_prompt(tipo) for tipo in TIPOS},
         "bracos": [{"modelo": b.modelo, "prompt": b.prompt,
                     "csv": f"{b.rotulo}.csv"} for b in bracos],
-        "precos": tabela_para_manifesto(sorted({b.modelo for b in bracos})),
+        "precos": tabela_para_manifesto(sorted({b.modelo for b in bracos}),
+                                        modelos_locais=modelos_locais(bracos)),
+        # Identidade dos pesos que produziram os vereditos do braço local:
+        # versão do servidor, digest, quantização, janela efetiva, semente e se
+        # a inferência coube na GPU. A tag sozinha não identifica nada — é
+        # ponteiro mutável no registry.
+        "modelos_locais": sondagens or {},
         "populacao": {
             "total": total_casos,
             "por_trilha": por_trilha,
@@ -753,12 +788,35 @@ def executar_matriz(casos, bracos, dir_rodada, sem_llm=False,
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _desambiguar_rotulos(bracos: list) -> list:
+    """Dá sufixo de hash aos braços cujos modelos colidem depois do saneamento.
+
+    Improvável na prática, mas um braço sobrescrever silenciosamente o CSV de
+    outro seria falha de integridade dos dados — do mesmo tipo do checkpoint
+    indexado só por `ID_Caso`.
+    """
+    crus_por_saneado = {}
+    for b in bracos:
+        crus_por_saneado.setdefault(sanear_rotulo(b.modelo), set()).add(b.modelo)
+    colididos = {s for s, crus in crus_por_saneado.items() if len(crus) > 1}
+    if not colididos:
+        return bracos
+    return [
+        Braco(b.modelo, b.prompt,
+              hashlib.sha256(b.modelo.encode("utf-8")).hexdigest()[:8]
+              if sanear_rotulo(b.modelo) in colididos else "")
+        for b in bracos
+    ]
+
+
 def definir_bracos(args) -> list:
     """Braços selecionados na linha de comando.
 
-    `--matriz` é a matriz 2x2 do experimento. Sem ele, o produto cartesiano de
-    `--modelo` por `--prompt`, cada um caindo no padrão da Parte 1 quando
-    omitido — assim `run_pipeline.py --amostra 10` continua fazendo o que fazia.
+    `--matriz` é a matriz de referência do experimento, e continua sendo só o
+    par comercial: um braço local roda quando nomeado, nunca por promoção
+    automática. Sem `--matriz`, o produto cartesiano de `--modelo` por
+    `--prompt`, cada um caindo no padrão da Parte 1 quando omitido — assim
+    `run_pipeline.py --amostra 10` continua fazendo o que fazia.
     """
     if args.matriz:
         modelos = [MODELO_GEMINI_PADRAO, MODELO_OPENAI_PADRAO]
@@ -766,7 +824,30 @@ def definir_bracos(args) -> list:
     else:
         modelos = args.modelo or [MODELO_LLM]
         prompts = args.prompt or [PROMPT_TYPE]
-    return [Braco(m, p) for m in modelos for p in prompts]
+    return _desambiguar_rotulos([Braco(m, p) for m in modelos for p in prompts])
+
+
+def _e_local(modelo: str) -> bool:
+    try:
+        return familia_do_modelo(modelo) == "ollama"
+    except ValueError:
+        # Modelo sem provedor conhecido não é problema da sondagem local:
+        # `criar_provedor` o rejeita mais adiante, com a mensagem certa.
+        return False
+
+
+def modelos_locais(bracos) -> list:
+    return sorted({b.modelo for b in bracos if _e_local(b.modelo)})
+
+
+def sondar_modelos_locais(bracos) -> dict:
+    """Verifica servidor e modelo de cada braço local, antes do primeiro caso.
+
+    Devolve `{modelo: identidade}`, que é o que o manifesto registra. Rodada só
+    com modelos comerciais não faz sondagem nenhuma — a pipeline continua
+    funcionando em máquina sem Ollama instalado.
+    """
+    return {m: criar_provedor(m).sondar() for m in modelos_locais(bracos)}
 
 
 def main():
@@ -801,7 +882,9 @@ def main():
                     help="Reexecuta Fases 1-2 sempre, sem ler nem gravar o "
                          "cache de resultado simbólico.")
     ap.add_argument("--modelo", action="append", metavar="MODELO",
-                    help=f"Modelo do braço. Repetível. Padrão: {MODELO_LLM}.")
+                    help=f"Modelo do braço. Repetível. Padrão: {MODELO_LLM}. "
+                         f"Modelo local via Ollama: ollama:<tag> "
+                         f"(ex.: {MODELO_OLLAMA_PADRAO}).")
     ap.add_argument("--prompt", action="append", choices=TIPOS, metavar="TIPO",
                     help=f"Tipo de prompt ({'|'.join(TIPOS)}). Repetível. "
                          f"Padrão: {PROMPT_TYPE}.")
@@ -872,6 +955,22 @@ def main():
         log.info("[+] --dry-run: nada foi executado.")
         return
 
+    # Sondagem antes do primeiro caso: sem ela, um `ollama serve` esquecido
+    # produziria uma linha ERROR por caso, cada uma depois de quatro tentativas
+    # com backoff — dezenas de minutos para descobrir um erro de operação.
+    sondagens = {}
+    if not args.sem_llm:
+        try:
+            sondagens = sondar_modelos_locais(bracos)
+        except OllamaIndisponivel as e:
+            log.error("[X] %s", e)
+            sys.exit(2)
+        for modelo, info in sondagens.items():
+            log.info("[+] Modelo local %s: Ollama %s | %s | digest %s... | "
+                     "num_ctx %d | %s", modelo, info["versao_ollama"],
+                     info["quantizacao"], (info["digest"] or "?")[:12],
+                     info["num_ctx"], info["processador"] or "processador ?")
+
     run_id = args.run_id or novo_run_id()
     dir_rodada = os.path.join(RESULTS_DIR, run_id)
     os.makedirs(dir_rodada, exist_ok=True)
@@ -896,7 +995,7 @@ def main():
         destino = gravar_manifesto(
             dir_rodada, run_id, bracos, por_trilha, len(casos), inicio,
             datetime.now(timezone.utc), catalogo, args.sem_llm,
-            cache_simbolico.ativo, " ".join(sys.argv))
+            cache_simbolico.ativo, " ".join(sys.argv), sondagens)
         log.info("[+] Manifesto: %s", os.path.relpath(destino, BASE))
 
 

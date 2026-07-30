@@ -12,7 +12,7 @@ import random
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Optional, Protocol
+from typing import ClassVar, Optional, Protocol
 
 import requests
 
@@ -34,6 +34,10 @@ CODIGOS_TRANSITORIOS = frozenset({429, 500, 502, 503, 504})
 BACKOFF_BASE_S = 5.0
 BACKOFF_TETO_S = 120.0
 MAX_TENTATIVAS = 4
+
+# Timeout de quem não declarar outro. Adequado a API comercial; inferência local
+# precisa de muito mais (ver `ollama.py`), e por isso o padrão é por provedor.
+TIMEOUT_PADRAO_S = 60
 
 
 @dataclass
@@ -195,13 +199,26 @@ class ProvedorHTTP:
     # 0 é valor legítimo (desativa o throttle) e por isso não pode ser o
     # sentinela: `if not intervalo` trataria 0 como ausente.
     intervalo_minimo_s: Optional[float] = None
-    timeout_s: int = 60
+    # Mesmo tratamento de sentinela: None = "não informado", e cada subclasse
+    # aplica `timeout_padrao_s`. Um valor explícito do chamador nunca é
+    # sobrescrito, senão não haveria como encurtar o limite num teste.
+    timeout_s: Optional[int] = None
     max_tentativas: int = MAX_TENTATIVAS
     sessao: Optional[requests.Session] = None
     # None = nenhuma chamada feita ainda; a primeira não espera.
     _ultima_chamada: Optional[float] = field(default=None, init=False, repr=False)
 
     nome: str = "http"
+    # Provedor que não autentica (o servidor local) declara False; para os
+    # comerciais, chave ausente continua sendo erro antes de tocar a rede.
+    exige_chave: bool = True
+
+    # Não é campo da dataclass: é o padrão do provedor, escolhido pela classe.
+    timeout_padrao_s: ClassVar[int] = TIMEOUT_PADRAO_S
+
+    def __post_init__(self):
+        if self.timeout_s is None:
+            self.timeout_s = self.timeout_padrao_s
 
     # -- a implementar pelas subclasses ------------------------------------
 
@@ -242,7 +259,7 @@ class ProvedorHTTP:
     def avaliar(self, prompt: str, dormir=time.sleep,
                 relogio=time.monotonic) -> RespostaLLM:
         """Uma avaliação completa: throttle, POST, retry e validação."""
-        if not self.api_key:
+        if self.exige_chave and not self.api_key:
             return RespostaLLM(
                 veredito=ERROR,
                 justificativa=f"Chave de API ausente para o provedor {self.nome}.",
@@ -260,7 +277,7 @@ class ProvedorHTTP:
                                  timeout=self.timeout_s)
             except requests.RequestException as e:
                 # Timeout e falha de conexão são transitórios por natureza.
-                ultimo_erro = f"falha de rede: {type(e).__name__}"
+                ultimo_erro = self._descrever_erro_de_rede(e)
                 if tentativa < self.max_tentativas:
                     self._dormir_backoff(tentativa, None, dormir)
                     continue
@@ -304,6 +321,16 @@ class ProvedorHTTP:
                            f"provedor {self.nome}: {ultimo_erro}"),
             modelo=self.modelo, tentativas=self.max_tentativas,
         )
+
+    def _descrever_erro_de_rede(self, e: Exception) -> str:
+        """Motivo registrado quando a chamada nem chega a ter resposta.
+
+        O nome da exceção basta para as APIs comerciais, onde toda falha de rede
+        é do mesmo tipo operacional. O provedor local sobrescreve: lá, "servidor
+        fora do ar" e "inferência lenta demais" são diagnósticos diferentes, e a
+        taxa de erro do braço mistura os dois se a mensagem não distinguir.
+        """
+        return f"falha de rede: {type(e).__name__}"
 
     def _dormir_backoff(self, tentativa, retry_after, dormir):
         espera = espera_backoff(tentativa, retry_after)

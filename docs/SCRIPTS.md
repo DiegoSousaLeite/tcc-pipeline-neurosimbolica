@@ -113,6 +113,31 @@ python scripts/diag_gemini.py
 
 ---
 
+### `scripts/medir_prompts.py`
+
+**Propósito:** Mede a distribuição de tamanho de prompt (em tokens estimados)
+sobre a população, por tipo de prompt, para calibrar o `num_ctx` do braço local
+com medida em vez de chute. Não chama LLM, não roda Semgrep e não toca a rede:
+monta os mesmos prompts da Fase 3/4 a partir do contexto já gravado no cache
+simbólico.
+
+**Entradas:** `data/dataset.json`, `tp_pairs*.json` e `cache_simbolico/`
+
+**Saídas:** relatório no terminal — n, mínimo, mediana, p95, máximo e quantos
+casos estourariam a janela avaliada
+
+**Uso:**
+```bash
+python scripts/medir_prompts.py
+python scripts/medir_prompts.py --num-ctx 16384
+python scripts/medir_prompts.py --trilha FP
+```
+
+Casos ausentes do cache simbólico ficam de fora e são reportados: preencha o
+cache com `python run_pipeline.py --tudo --sem-llm` antes de fixar `num_ctx`.
+
+---
+
 ## Pipeline Principal (`src/`)
 
 ### `src/config.py`
@@ -229,9 +254,11 @@ de controle: qualquer camada da metodologia que vaze para ele mata o contraste.
 | `base.py` | `RespostaLLM`, protocolo `ProvedorLLM`, `ProvedorHTTP` (throttle, retry, validação), `validar_resposta`, `espera_backoff`, `ler_retry_after` |
 | `gemini.py` | `ProvedorGemini` — REST `generateContent`, header `x-goog-api-key` |
 | `openai.py` | `ProvedorOpenAI` — REST `/v1/chat/completions`, `Authorization: Bearer` |
+| `ollama.py` | `ProvedorOllama` — REST `/api/chat` local, sem chave; `num_ctx` explícito, estouro vira `ERROR`; `sondar()` para a verificação prévia e o manifesto |
 | `precos.py` | `TABELA` por 1M de tokens, `custo_usd()`, `tabela_para_manifesto()` |
 
-`criar_provedor(modelo)` escolhe a implementação pelo nome do modelo.
+`criar_provedor(modelo)` escolhe a implementação pelo nome do modelo — o
+namespace `ollama:` é testado antes dos prefixos comerciais.
 `avaliar(prompt)` devolve sempre `RespostaLLM`, com veredito já validado
 (`VP`/`FP`/`ERROR`), tokens e custo.
 

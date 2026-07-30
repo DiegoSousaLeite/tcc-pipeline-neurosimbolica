@@ -1,7 +1,7 @@
 # TCC — Pipeline Neuro-Simbólica de Triagem de Alertas SAST em Go
 
-Pipeline que combina **Semgrep** (motor simbólico) com um **LLM** (Gemini ou GPT)
-para triar alertas de análise estática em código Go, reduzindo falsos positivos e
+Pipeline que combina **Semgrep** (motor simbólico) com um **LLM** (Gemini, GPT ou
+um modelo aberto rodando localmente via Ollama) para triar alertas de análise estática em código Go, reduzindo falsos positivos e
 avaliando verdadeiros positivos. O LLM é um filtro puro do Semgrep: nada chega a
 ele sem que a Fase 1 tenha alertado antes.
 
@@ -21,6 +21,19 @@ GEMINI_API_KEY=sua_chave_aqui
 As demais variáveis têm padrão e estão listadas em `docs/SCRIPTS.md`
 (`src/config.py`).
 
+Para o braço local não há chave: instale o [Ollama](https://ollama.com/download),
+suba o serviço e baixe o modelo.
+
+```bash
+ollama pull qwen2.5-coder:7b
+```
+
+| Variável | Padrão | Para quê |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | endereço do servidor Ollama |
+| `OLLAMA_NUM_CTX` | `8192` | janela de contexto do braço local |
+| `OLLAMA_TIMEOUT` | `600` | segundos por requisição (cobre o carregamento dos pesos) |
+
 ## Como rodar
 
 ```bash
@@ -36,12 +49,18 @@ python run_pipeline.py --tudo
 # Matriz 2x2 completa: Gemini e GPT x baseline e especialista
 python run_pipeline.py --tudo --matriz
 
+# Braço local (sem custo e sem cota; exige o Ollama de pé):
+python run_pipeline.py --tudo --modelo ollama:qwen2.5-coder:7b --prompt especialista
+
 # Só cobertura simbólica, sem gastar cota de API:
 python run_pipeline.py --tp-only --sem-llm
 ```
 
 Cada execução cria `results/<run_id>/`, com um CSV por braço
-(`<modelo>__<prompt>.csv`) e um `manifesto.json`.
+(`<modelo>__<prompt>.csv`) e um `manifesto.json`. Caractere inválido em nome de
+arquivo é saneado — `ollama:qwen2.5-coder:7b` vira
+`ollama-qwen2.5-coder-7b__especialista.csv` —, e o nome cru do modelo continua
+em cada linha do CSV e no manifesto.
 
 ```bash
 # Métricas de uma rodada (ou de um CSV avulso)
