@@ -38,6 +38,6 @@
 
 ## 7. Verificação final
 
-- [ ] 7.1 Comparar contra o baseline da etapa 1: `python -m pytest tests/ -q` e `python run_pipeline.py --tudo --dry-run` devem reproduzir a mesma população e os mesmos braços. Verificar: `diff` do dry-run contra `baseline_dryrun.txt` sem diferença material e a suíte com a mesma contagem de testes passando.
-- [ ] 7.2 Conferir que nenhum dado protegido foi tocado: `git status --short` sem deleção sob `data/`, `cache/`, `tp_pairs*.json`, `results/`, `legacy/resultados_parte1/*.csv` ou `TCC1___Diego_Sousa_e_João_Artur_Leles/`. Verificar: `git status --short -- data cache legacy/resultados_parte1 tp_pairs.json tp_pairs_osv.json` sem nenhuma linha começando por `D`.
-- [ ] 7.3 Commitar a limpeza em português, listando o que saiu do índice e o que saiu do disco. Verificar: `git ls-files | grep -c pyc` retorna `0` no commit e `git status --short` mostra apenas os arquivos que o autor deliberadamente deixa untracked.
+- [x] 7.1 Comparar contra o baseline da etapa 1: `python -m pytest tests/ -q` e `python run_pipeline.py --tudo --dry-run` devem reproduzir a mesma população e os mesmos braços. Verificar: `diff` do dry-run contra `baseline_dryrun.txt` sem diferença material e a suíte com a mesma contagem de testes passando.
+- [x] 7.2 Conferir que nenhum dado protegido foi tocado: `git status --short` sem deleção sob `data/`, `cache/`, `tp_pairs*.json`, `results/`, `legacy/resultados_parte1/*.csv` ou `TCC1___Diego_Sousa_e_João_Artur_Leles/`. Verificar: `git status --short -- data cache legacy/resultados_parte1 tp_pairs.json tp_pairs_osv.json` sem nenhuma linha começando por `D`.
+- [x] 7.3 Commitar a limpeza em português, listando o que saiu do índice e o que saiu do disco. Verificar: `git ls-files | grep -c pyc` retorna `0` no commit e `git status --short` mostra apenas os arquivos que o autor deliberadamente deixa untracked.
