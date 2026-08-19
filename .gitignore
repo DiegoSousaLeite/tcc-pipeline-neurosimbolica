@@ -48,3 +48,8 @@ apresentacao/
 # exige refazer o fetch raso dos ~70 repos (~1 h). São entrada da pipeline.
 
 TCC1___Diego_Sousa_e_João_Artur_Leles
+
+# Configuração local do Claude Code: caminhos absolutos desta máquina e
+# allowlist de permissões por sessão. Os comandos e skills do OpenSpec em
+# .claude/commands/ e .claude/skills/ SÃO versionados; só este arquivo não é.
+.claude/settings.local.json
