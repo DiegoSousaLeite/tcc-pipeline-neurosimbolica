@@ -1,4 +1,16 @@
-## ADDED Requirements
+# higiene-repositorio
+
+## Purpose
+
+Definir o que entra no controle de versão e o que fica de fora, para que o repositório do TCC seja legível por quem tenta entendê-lo — a banca inclusive — e reproduzível a partir de um clone limpo.
+
+O critério de corte é: **o que a pipeline lê, o que a monografia cita, ou o que reproduz a execução**. Fica versionado o código, os dados de entrada e gabaritos que não se recuperam sem refazer coleta de rede, a documentação e os CSVs de resultado citados. Fica fora tudo que um comando local regenera — bytecode, caches de ferramenta, SARIFs, rodadas, binários de apresentação — e esse material precisa ser *ignorado* pelo Git, não apenas estar ausente do índice: uma regra de `.gitignore` só age sobre arquivo ainda não rastreado, então bytecode que entrou num commit antigo permanece rastreado apesar da regra.
+
+Define também `docs/` como fonte única da documentação de detalhe, com o `README.md` restrito a orientação inicial. A duplicação entre os dois não é redundância inofensiva: quando a mesma informação mora em três arquivos, a atualização é sempre parcial e a versão errada fica indistinguível da certa — o que já ocorreu neste repositório com contagens de casos e caminhos de saída.
+
+E fixa um limite para a limpeza de comentários: nota que registra decisão de método é o que sustenta as escolhas na defesa, e vale mais preservada literalmente do que reescrita.
+
+## Requirements
 
 ### Requirement: Classificação de artefatos entre versionado e derivado
 
@@ -26,6 +38,11 @@ Todo artefato que possa ser regenerado por um comando local SHALL ser ignorado p
 - **WHEN** `git ls-files legacy/` é executado
 - **THEN** os CSVs de `legacy/resultados_parte1/` e o `README.md` daquele diretório estão presentes, e nenhum arquivo `.py` está presente
 
+#### Scenario: Regra genérica de artefato gerado não captura resultado citado
+
+- **WHEN** uma regra do `.gitignore` que ignora artefato gerado por padrão de nome casa também com um CSV de `legacy/resultados_parte1/`
+- **THEN** existe uma exceção explícita que mantém aqueles CSVs versionados, porque eles não são regeneráveis e a monografia cita seus números
+
 #### Scenario: Binários da apresentação saem do versionamento sem sair do disco
 
 - **WHEN** `git status --short` e `git ls-files apresentacao/` são executados
@@ -41,7 +58,7 @@ Código superado SHALL ser preservado apenas pelo histórico do Git, não por c�
 #### Scenario: Nenhum arquivo do repositório referencia caminho inexistente
 
 - **WHEN** cada caminho de arquivo `.py`, `.json` ou `.md` mencionado em `README.md`, em `docs/*.md` e em comentário ou `print` de arquivo sob `src/`, `scripts/` e na raiz é resolvido no disco
-- **THEN** todo caminho mencionado existe
+- **THEN** todo caminho mencionado existe, exceto quando citado deliberadamente como caminho do histórico (`git show <ref>:<caminho>`)
 
 #### Scenario: Diretório de rascunho de regra Semgrep foi removido
 
@@ -66,7 +83,7 @@ Arquitetura da pipeline, semântica das trilhas e referência de módulos e scri
 #### Scenario: Documentação reflete os arquivos existentes
 
 - **WHEN** `docs/PIPELINE.md` e `docs/SCRIPTS.md` são lidos
-- **THEN** nenhuma seção descreve script removido por esta mudança
+- **THEN** nenhuma seção descreve script que não existe no repositório
 
 ### Requirement: Preservação do racional metodológico nos comentários
 
