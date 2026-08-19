@@ -27,6 +27,12 @@ db_codeql/
 # Cache do resultado simbólico: derivado de cache/ + Semgrep, e depende da
 # versão do ruleset. Ao contrário de cache/, é reconstruível localmente.
 cache_simbolico/
+# Cópia do cache gravado sob a regra de pareamento ANTIGA (substring + fallback
+# de alerta único), tirada antes da varredura que a substituiu. Uma entrada
+# invalidada não é apagada, mas É sobrescrita quando o caso é recomputado no
+# mesmo caminho — sem esta cópia não haveria como remedir o efeito da mudança.
+# Remede: scripts/medir_pareamento.py --cache cache_simbolico_pre_estrito
+cache_simbolico_pre_estrito/
 # Rodadas da Parte 2. Os CSVs são reexecutáveis; o que precisa ser preservado
 # de uma rodada é o manifesto (versionado à parte, quando a rodada for citada).
 results/

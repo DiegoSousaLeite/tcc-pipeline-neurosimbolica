@@ -183,11 +183,21 @@ Importado por `fase2_middleware.py` e `scripts/tp_reconstruct.py`.
 
 **Propósito:** Roda `semgrep --config p/default --sarif --quiet` sobre o arquivo
 já resolvido por `src/fonte.py` — não clona nem faz checkout. Devolve o alerta
-cuja CWE casa com a do dataset, ou `None` (NAO_DETECTADO).
+emitido por regra que declara **exatamente** a CWE do gabarito nas tags
+(comparação por identificador inteiro, não por substring: `CWE-77` ≠ `CWE-770`).
+Não há fallback — o número de alertas no arquivo não é critério de pareamento.
+Entre vários alertas casados, escolhe o primeiro por `(linha inicial, check_id)`.
 
 **Entrada:** `(caminho_arquivo, cwe)`
 
-**Saída:** dict do alerta Semgrep com `start.line`, `check_id`, `extra.message`
+**Saída:** `ResultadoFase1(alerta, motivo, regras_nao_casadas)` — `alerta` é o
+dict do alerta Semgrep com `start.line`, `check_id` e `extra.message`, ou `None`
+(NAO_DETECTADO); `motivo ∈ {SEM_ALERTA, ALERTA_OUTRA_CWE, N/A}`;
+`regras_nao_casadas` são os `check_id` que dispararam sem casar, deduplicados e
+em ordem alfabética.
+
+**Versionamento:** `VERSAO_PAREAMENTO` identifica a regra de pareamento vigente.
+Subi-la invalida todo o cache simbólico.
 
 **Exceções:** `SemgrepFileNotFoundError`, `SemgrepTimeoutError`, `SemgrepError`
 
@@ -213,11 +223,15 @@ da matriz não reexecutem o Semgrep e vejam contexto byte-a-byte idêntico.
 **Chave:** `(repo, commit, arquivo, cwe)` →
 `cache_simbolico/<owner>__<repo>/<commit>/<hash>__<cwe>.json`
 
-**Payload:** `{versao_formato, versao_ruleset, status_semgrep, alerta,
-contexto_hidratado, ...}`. `NAO_DETECTADO` também é gravado.
+**Payload:** `{versao_formato, versao_ruleset, versao_pareamento, status_semgrep,
+alerta, motivo, regras_nao_casadas, contexto_hidratado, ...}`. `NAO_DETECTADO`
+também é gravado, com o motivo e as regras, para que o diagnóstico de cobertura
+sobreviva ao cache.
 
-**Invalidação:** divergência de `versao_ruleset` ou de `versao_formato` faz a
-entrada ser ignorada (não apagada). Nada sob `cache/` é tocado.
+**Invalidação:** divergência de `versao_ruleset`, `versao_pareamento` ou
+`versao_formato` faz a entrada ser ignorada (não apagada) — inclusive quando
+`versao_pareamento` está ausente, que é o estado das entradas anteriores ao
+campo. Nada sob `cache/` é tocado.
 
 ---
 
@@ -290,9 +304,14 @@ matrizes.
 **Colunas do CSV:** `ID_Caso, Repositorio, CWE, Origem, Modelo_LLM,
 Tipo_Prompt, Gabarito, Status_Semgrep, Classificacao_Semgrep, Veredito_LLM,
 Classificacao_LLM, Tempo_Execucao_s, Justificativa, Num_Locations, Ficha_CWE,
-Versao_Prompt, Hash_Catalogo, Tokens_Entrada, Tokens_Saida, Custo_USD`
+Versao_Prompt, Hash_Catalogo, Tokens_Entrada, Tokens_Saida, Custo_USD,
+Motivo_Nao_Deteccao, Regras_Nao_Casadas`
 
-As sete últimas são da Parte 2 (`COLUNAS_PARTE2`); CSVs da Parte 1 não as têm.
+As nove últimas são posteriores à Parte 1 (`COLUNAS_PARTE2`); CSVs da Parte 1
+não as têm, e as duas de pareamento faltam também nos CSVs anteriores a ela —
+quem lê trata a ausência como "indisponível", nunca como erro. Elas vão no fim
+porque `registrar_resultado` escreve a linha posicionalmente e `COLUNAS_PARTE2`
+é uma fatia do cabeçalho.
 
 ---
 
@@ -375,3 +394,4 @@ trecho de código sai daqui, para não contaminar quem escreve as fichas.
 python scripts/ranking_cwe.py            # top 15 + cobertura acumulada
 python scripts/ranking_cwe.py --json
 ```
+

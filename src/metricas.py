@@ -174,6 +174,31 @@ def contar_status(linhas):
     return dict(c)
 
 
+# CSVs anteriores à coluna de motivo não sabem dizer qual dos dois produziu a
+# não-detecção; são reportados assim em vez de derrubarem a leitura.
+MOTIVO_INDISPONIVEL = "indisponível"
+
+
+def contar_motivos(linhas):
+    """Não-detecção discriminada por motivo, sobre linhas já únicas por caso.
+
+    A distinção separa duas afirmações diferentes sobre o motor simbólico: "não
+    existe regra que alcance esta fraqueza neste arquivo" e "existem regras que
+    dispararam, mas sobre outra fraqueza". Colapsá-las descreveria como ponto
+    cego uniforme algo que tem duas causas.
+
+    Cada caso `NAO_DETECTADO` entra exatamente uma vez, então a soma dos motivos
+    é igual ao total de `NAO_DETECTADO` e a matriz de cobertura não se move.
+    """
+    c = defaultdict(int)
+    for linha in linhas:
+        if linha.get("Status_Semgrep") != "NAO_DETECTADO":
+            continue
+        motivo = (linha.get("Motivo_Nao_Deteccao") or "").strip()
+        c[motivo if motivo and motivo != "N/A" else MOTIVO_INDISPONIVEL] += 1
+    return dict(c)
+
+
 def vulneraveis_avaliadas(linhas):
     """Amostras `gabarito=vulneravel` que chegaram ao LLM com veredito válido.
 
@@ -469,6 +494,9 @@ def relatorio(alvo, por_cwe=False, com_mcnemar=False, com_estratos=False,
             unicas.append(linha)
     _imprimir_metricas("Global", contar(unicas, "semgrep"))
     print(f"\n    Status: {contar_status(unicas)}")
+    motivos = contar_motivos(unicas)
+    if motivos:
+        print(f"    NAO_DETECTADO por motivo: {motivos}")
 
     if com_estratos:
         print("\n--- Estratificação (matriz de ACERTO do LLM) ---")

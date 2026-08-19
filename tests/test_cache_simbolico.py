@@ -7,6 +7,13 @@ import pytest
 import run_pipeline
 from run_pipeline import Caso, resolver_simbolico
 from src.cache_simbolico import CacheSimbolico
+from src.fase1_semgrep import (
+    ALERTA_OUTRA_CWE,
+    MOTIVO_NA,
+    SEM_ALERTA,
+    VERSAO_PAREAMENTO,
+    ResultadoFase1,
+)
 
 ALERTA = {
     "start": {"line": 42},
@@ -98,6 +105,63 @@ def test_formato_divergente_invalida(cache):
     assert cache.ler(*CHAVE) is None
 
 
+# --- Invalidação por regra de pareamento -----------------------------------
+
+def test_pareamento_divergente_invalida(tmp_path):
+    """Uma entrada gravada sob a regra antiga pode guardar um alerta que a regra
+    corrente recusaria; servi-la do disco reintroduziria em silêncio justamente
+    o emparelhamento que a regra nova elimina."""
+    dir_cache = str(tmp_path / "cache_simbolico")
+    antigo = CacheSimbolico(diretorio=dir_cache,
+                            versao_pareamento=VERSAO_PAREAMENTO - 1)
+    antigo.gravar(*CHAVE, "DETECTADO", alerta=ALERTA, contexto_hidratado=CONTEXTO)
+
+    atual = CacheSimbolico(diretorio=dir_cache)
+    assert atual.ler(*CHAVE) is None
+    # Não é apagada: continua sendo evidência do que a regra antiga produziu.
+    assert os.path.exists(atual.caminho(*CHAVE))
+
+
+def test_pareamento_divergente_invalida_ate_nao_detectado(tmp_path):
+    """O status delas continuaria correto — endurecer o pareamento nunca
+    transforma não-detecção em detecção —, mas elas não sabem informar qual dos
+    dois motivos as produziu, e são a maioria da população."""
+    dir_cache = str(tmp_path / "cache_simbolico")
+    CacheSimbolico(diretorio=dir_cache,
+                   versao_pareamento=VERSAO_PAREAMENTO - 1).gravar(
+        *CHAVE, "NAO_DETECTADO")
+    assert CacheSimbolico(diretorio=dir_cache).ler(*CHAVE) is None
+
+
+def test_entrada_sem_versao_de_pareamento_e_tratada_como_anterior(cache):
+    """É o estado de todas as entradas gravadas antes do campo existir: elas
+    são recomputadas, e não aceitas por omissão."""
+    cache.gravar(*CHAVE, "DETECTADO", alerta=ALERTA, contexto_hidratado=CONTEXTO)
+    destino = cache.caminho(*CHAVE)
+    with open(destino, encoding="utf-8") as f:
+        payload = json.load(f)
+    del payload["versao_pareamento"]
+    with open(destino, "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+
+    assert cache.ler(*CHAVE) is None
+    assert os.path.exists(destino)
+
+
+def test_motivo_e_regras_sobrevivem_ao_cache(cache):
+    """O diagnóstico de cobertura tem que vir do cache junto com o status: sem
+    ele, recuperá-lo exigiria reexecutar o Semgrep na população inteira."""
+    regras = ["go.lang.security.audit.crypto.math-random-used",
+              "go.lang.security.audit.dangerous-exec-command"]
+    cache.gravar(*CHAVE, "NAO_DETECTADO", motivo=ALERTA_OUTRA_CWE,
+                 regras_nao_casadas=regras)
+
+    payload = cache.ler(*CHAVE)
+    assert payload["motivo"] == ALERTA_OUTRA_CWE
+    assert payload["regras_nao_casadas"] == regras
+    assert payload["versao_pareamento"] == VERSAO_PAREAMENTO
+
+
 def test_arquivo_corrompido_nao_derruba_a_rodada(cache):
     cache.gravar(*CHAVE, "DETECTADO", alerta=ALERTA, contexto_hidratado=CONTEXTO)
     with open(cache.caminho(*CHAVE), "w", encoding="utf-8") as f:
@@ -157,7 +221,7 @@ def semgrep_contado(monkeypatch, tmp_path):
 
     def _semgrep(caminho, cwe):
         chamadas["semgrep"] += 1
-        return ALERTA
+        return ResultadoFase1(ALERTA, MOTIVO_NA, [])
 
     def _hidratar(alerta, caminho):
         chamadas["hidratacao"] += 1
@@ -182,14 +246,44 @@ def test_segunda_execucao_nao_invoca_semgrep(cache, caso, semgrep_contado):
     assert cache.leituras == 3
 
 
+def _nao_detecta(contador, motivo=SEM_ALERTA, regras=()):
+    """Dublê de Fase 1 que não emparelha nada e conta as invocações."""
+    def _semgrep(caminho, cwe):
+        contador["semgrep"] += 1
+        return ResultadoFase1(None, motivo, list(regras))
+    return _semgrep
+
+
 def test_nao_detectado_tambem_pula_semgrep_na_segunda(cache, caso, monkeypatch,
                                                       semgrep_contado):
     monkeypatch.setattr(run_pipeline, "executar_semgrep",
-                        lambda c, cwe: semgrep_contado.__setitem__(
-                            "semgrep", semgrep_contado["semgrep"] + 1) or None)
+                        _nao_detecta(semgrep_contado))
     assert resolver_simbolico(caso, cache)[0] == "NAO_DETECTADO"
     assert resolver_simbolico(caso, cache)[0] == "NAO_DETECTADO"
     assert semgrep_contado["semgrep"] == 1
+
+
+def test_motivo_atravessa_a_pipeline_e_o_cache(cache, caso, monkeypatch,
+                                               semgrep_contado):
+    """Segunda rodada, servida do disco, tem que reportar o mesmo diagnóstico
+    da primeira sem reexecutar o Semgrep."""
+    regras = ["go.lang.security.audit.crypto.use-of-md5"]
+    monkeypatch.setattr(run_pipeline, "executar_semgrep",
+                        _nao_detecta(semgrep_contado, ALERTA_OUTRA_CWE, regras))
+
+    primeiro = resolver_simbolico(caso, cache)
+    assert primeiro.status == "NAO_DETECTADO"
+    assert primeiro.motivo == ALERTA_OUTRA_CWE
+    assert primeiro.regras_nao_casadas == regras
+
+    do_cache = resolver_simbolico(caso, cache)
+    assert do_cache == primeiro
+    assert semgrep_contado["semgrep"] == 1
+
+
+def test_caso_emparelhado_nao_tem_motivo(cache, caso, semgrep_contado):
+    assert resolver_simbolico(caso, cache).motivo == MOTIVO_NA
+    assert resolver_simbolico(caso, cache).regras_nao_casadas == []
 
 
 def test_cache_desativado_reexecuta_sempre(caso, semgrep_contado, tmp_path):
@@ -211,8 +305,7 @@ def test_hidratacao_falha_nao_vira_nao_detectado(cache, caso, monkeypatch,
     os dois contaminaria a matriz de cobertura com um FN falso."""
     monkeypatch.setattr(run_pipeline, "extrair_e_hidratar_contexto",
                         lambda a, c: "")
-    status, _, _ = resolver_simbolico(caso, cache)
-    assert status == "HIDRATACAO_FALHOU"
+    assert resolver_simbolico(caso, cache).status == "HIDRATACAO_FALHOU"
 
 
 # --- 3.4 Contexto byte-a-byte idêntico -------------------------------------

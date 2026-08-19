@@ -11,12 +11,14 @@ from run_pipeline import (
     BRACO_PARTE1,
     Braco,
     Caso,
+    ResultadoSimbolico,
     carregar_processados,
     executar_matriz,
     gravar_manifesto,
     novo_run_id,
 )
 from src.catalogo import Catalogo
+from src.fase1_semgrep import ALERTA_OUTRA_CWE, SEM_ALERTA
 from src.fase5_auditoria import CABECALHO, COLUNAS_PARTE2, inicializar_relatorio
 from src.provedores import RespostaLLM
 
@@ -53,16 +55,19 @@ class ProvedorFalso:
 
 @pytest.fixture
 def simbolico_dublado(monkeypatch):
-    """Fase 1/2 dubladas; `detectado` controla o que o Semgrep 'viu'."""
-    estado = {"detectado": True, "chamadas": 0, "excecao": None}
+    """Fase 1/2 dubladas; `detectado` controla o que o Semgrep 'viu' e
+    `motivo`/`regras` controlam o diagnóstico da não-detecção."""
+    estado = {"detectado": True, "chamadas": 0, "excecao": None,
+              "motivo": SEM_ALERTA, "regras": []}
 
     def _resolver(caso_, cache=None):
         estado["chamadas"] += 1
         if estado["excecao"]:
             raise estado["excecao"]
         if not estado["detectado"]:
-            return "NAO_DETECTADO", None, ""
-        return "DETECTADO", {"start": {"line": 1}}, CONTEXTO
+            return ResultadoSimbolico("NAO_DETECTADO", None, "",
+                                      estado["motivo"], estado["regras"])
+        return ResultadoSimbolico("DETECTADO", {"start": {"line": 1}}, CONTEXTO)
 
     monkeypatch.setattr(run_pipeline, "resolver_simbolico", _resolver)
     return estado
@@ -102,7 +107,14 @@ def test_cabecalho_tem_as_colunas_novas():
     assert CABECALHO[0] == "ID_Caso"   # checkpoint depende disso
     assert set(COLUNAS_PARTE2) == {
         "Num_Locations", "Ficha_CWE", "Versao_Prompt", "Hash_Catalogo",
-        "Tokens_Entrada", "Tokens_Saida", "Custo_USD"}
+        "Tokens_Entrada", "Tokens_Saida", "Custo_USD",
+        "Motivo_Nao_Deteccao", "Regras_Nao_Casadas"}
+
+
+def test_colunas_de_pareamento_vao_para_o_fim():
+    """Ao fim, e não no meio: `registrar_resultado` escreve a linha
+    posicionalmente e `COLUNAS_PARTE2` é uma fatia do cabeçalho."""
+    assert CABECALHO[-2:] == ["Motivo_Nao_Deteccao", "Regras_Nao_Casadas"]
 
 
 def test_colunas_novas_preenchidas_em_caso_detectado(tmp_path, catalogo,
@@ -137,6 +149,62 @@ def test_num_locations_preenchido_mesmo_sem_deteccao(tmp_path, catalogo,
     assert linha["Num_Locations"] == "11"
     assert linha["Status_Semgrep"] == "NAO_DETECTADO"
     assert linha["Custo_USD"] == "0.00000000"
+
+
+# --- Motivo da não-detecção no CSV -----------------------------------------
+
+def test_sem_alerta_registrado_no_csv(tmp_path, catalogo, simbolico_dublado):
+    simbolico_dublado.update(detectado=False, motivo=SEM_ALERTA, regras=[])
+    braco = Braco(GEMINI, "especialista")
+    dir_rodada, _, _ = _rodar([caso("c1")], [braco], tmp_path, catalogo)
+    linha = _ler(dir_rodada, braco)[0]
+    assert linha["Status_Semgrep"] == "NAO_DETECTADO"
+    assert linha["Motivo_Nao_Deteccao"] == SEM_ALERTA
+    # Vazio aqui não pode ser confundido com informação perdida sobre um caso
+    # `ALERTA_OUTRA_CWE`: não havia regra alguma a registrar.
+    assert linha["Regras_Nao_Casadas"] == ""
+
+
+def test_alerta_de_outra_cwe_registra_as_regras_concorrentes(tmp_path, catalogo,
+                                                             simbolico_dublado):
+    """'O Semgrep leu o arquivo, mas enxergou outra fraqueza' é uma afirmação
+    diferente de 'o Semgrep não viu nada' — e é a que sustenta a análise de
+    cobertura simbólica sem re-executar a pipeline."""
+    regras = ["go.lang.security.audit.crypto.math-random-used",
+              "go.lang.security.audit.dangerous-exec-command"]
+    simbolico_dublado.update(detectado=False, motivo=ALERTA_OUTRA_CWE,
+                             regras=regras)
+    braco = Braco(GEMINI, "especialista")
+    dir_rodada, _, _ = _rodar([caso("c1", gabarito="vulneravel")], [braco],
+                              tmp_path, catalogo)
+
+    linha = _ler(dir_rodada, braco)[0]
+    assert linha["Status_Semgrep"] == "NAO_DETECTADO"
+    assert linha["Motivo_Nao_Deteccao"] == ALERTA_OUTRA_CWE
+    assert linha["Regras_Nao_Casadas"] == ";".join(regras)
+    # Ponto cego simbólico nos dois motivos: a CWE rotulada não foi detectada.
+    assert "Semgrep FN" in linha["Classificacao_Semgrep"]
+    assert linha["Veredito_LLM"] == "N/A"
+
+
+def test_caso_detectado_sai_com_motivo_neutro(tmp_path, catalogo,
+                                              simbolico_dublado):
+    braco = Braco(GEMINI, "especialista")
+    dir_rodada, _, _ = _rodar([caso("c1")], [braco], tmp_path, catalogo)
+    linha = _ler(dir_rodada, braco)[0]
+    assert linha["Motivo_Nao_Deteccao"] == "N/A"
+    assert linha["Regras_Nao_Casadas"] == ""
+
+
+def test_falha_de_esteira_nao_tem_motivo_de_nao_deteccao(tmp_path, catalogo,
+                                                         simbolico_dublado):
+    from src.fonte import FetchError
+    simbolico_dublado["excecao"] = FetchError("sem rede")
+    braco = Braco(GEMINI, "especialista")
+    dir_rodada, _, _ = _rodar([caso("c1")], [braco], tmp_path, catalogo)
+    linha = _ler(dir_rodada, braco)[0]
+    assert linha["Status_Semgrep"] == "FETCH_FAIL"
+    assert linha["Motivo_Nao_Deteccao"] == "N/A"
 
 
 # --- 7.2 Checkpoint por chave composta -------------------------------------
@@ -241,6 +309,42 @@ def test_detectado_com_veredito_valido_e_checkpointado(tmp_path):
     assert ("vp", GEMINI, "baseline") in p
     assert ("fp", GEMINI, "baseline") in p
     assert ("err", GEMINI, "baseline") not in p
+
+
+def test_checkpoint_trata_os_dois_motivos_como_resolvidos(tmp_path):
+    """O motivo vive em coluna própria justamente para isto: o checkpoint
+    compara a string `Status_Semgrep` diretamente, e um terceiro valor de status
+    faria o caso ser reexecutado em toda rodada — falha silenciosa."""
+    arq = tmp_path / "r.csv"
+    _gravar_csv(arq, [
+        {"ID_Caso": "sem", "Modelo_LLM": GEMINI, "Tipo_Prompt": "baseline",
+         "Status_Semgrep": "NAO_DETECTADO", "Motivo_Nao_Deteccao": SEM_ALERTA},
+        {"ID_Caso": "outra", "Modelo_LLM": GEMINI, "Tipo_Prompt": "baseline",
+         "Status_Semgrep": "NAO_DETECTADO",
+         "Motivo_Nao_Deteccao": ALERTA_OUTRA_CWE,
+         "Regras_Nao_Casadas": "go.lang.security.audit.crypto.use-of-md5"},
+    ])
+    p = carregar_processados([str(arq)])
+    assert p == {("sem", GEMINI, "baseline"), ("outra", GEMINI, "baseline")}
+
+
+def test_caso_com_alerta_de_outra_cwe_nao_e_reexecutado(tmp_path, catalogo,
+                                                        simbolico_dublado):
+    """Mesma garantia atravessando o runner: a linha já gravada faz o caso ser
+    pulado, e as Fases 1/2 não rodam de novo."""
+    braco = Braco(GEMINI, "baseline")
+    dir_rodada = tmp_path / "rodada"
+    dir_rodada.mkdir(parents=True)
+    _gravar_csv(dir_rodada / f"{braco.rotulo}.csv", [
+        {"ID_Caso": "c1", "Modelo_LLM": GEMINI, "Tipo_Prompt": "baseline",
+         "Status_Semgrep": "NAO_DETECTADO",
+         "Motivo_Nao_Deteccao": ALERTA_OUTRA_CWE,
+         "Regras_Nao_Casadas": "go.lang.security.audit.crypto.use-of-md5"},
+    ])
+
+    executar_matriz([caso("c1")], [braco], str(dir_rodada), catalogo=catalogo)
+    assert simbolico_dublado["chamadas"] == 0
+    assert [ln["ID_Caso"] for ln in _ler(str(dir_rodada), braco)] == ["c1"]
 
 
 def test_erros_nao_sao_checkpointados(tmp_path):

@@ -31,27 +31,40 @@ import logging
 import os
 
 from .config import CACHE_SIMBOLICO_DIR
-from .fase1_semgrep import SEMGREP_CONFIG
+from .fase1_semgrep import SEMGREP_CONFIG, VERSAO_PAREAMENTO
 
 log = logging.getLogger(__name__)
 
 # Versão do formato do payload. Subir isto invalida todas as entradas — use
 # quando a estrutura gravada mudar, não quando o ruleset mudar.
-VERSAO_FORMATO = 1
+#   1 — sem motivo de não-detecção nem versão de pareamento
+#   2 — com `versao_pareamento`, `motivo` e `regras_nao_casadas`
+VERSAO_FORMATO = 2
 
 
 class CacheSimbolico:
     """Leitura e gravação do resultado simbólico, indexado por caso.
 
-    `versao_ruleset` identifica o ruleset do Semgrep vigente. Uma entrada
-    gravada sob outro ruleset é ignorada (não apagada): ela continua sendo
-    evidência do que aquele ruleset produziu.
+    `versao_ruleset` identifica o ruleset do Semgrep vigente e
+    `versao_pareamento` a regra que decide qual alerta pertence ao caso. Uma
+    entrada gravada sob qualquer uma das duas divergente é ignorada (não
+    apagada): ela continua sendo evidência do que aquele ruleset e aquela regra
+    produziram.
+
+    Os dois eixos não são redundantes. O ruleset muda quando o Semgrep passa a
+    enxergar coisas diferentes; a regra de pareamento muda quando a pipeline
+    passa a aceitar como do caso um conjunto diferente de alertas. Uma alteração
+    da regra de pareamento não muda a estrutura do payload, e sem eixo próprio
+    alguém teria de lembrar de subir a versão de FORMATO por um motivo que não é
+    de formato.
     """
 
     def __init__(self, diretorio: str = CACHE_SIMBOLICO_DIR,
-                 versao_ruleset: str = SEMGREP_CONFIG, ativo: bool = True):
+                 versao_ruleset: str = SEMGREP_CONFIG, ativo: bool = True,
+                 versao_pareamento: int = VERSAO_PAREAMENTO):
         self.diretorio = diretorio
         self.versao_ruleset = versao_ruleset
+        self.versao_pareamento = versao_pareamento
         self.ativo = ativo
         self.leituras = 0
         self.gravacoes = 0
@@ -74,8 +87,9 @@ class CacheSimbolico:
     def ler(self, repo_name: str, commit: str, arquivo: str, cwe: str):
         """Devolve o payload gravado, ou None se ausente/inválido.
 
-        Retorna None quando a versão do ruleset ou do formato diverge: o caso
-        precisa ser recomputado, porque o alerta pode ter mudado.
+        Retorna None quando a versão do formato, do ruleset ou da regra de
+        pareamento diverge: o caso precisa ser recomputado, porque o alerta pode
+        ter mudado.
         """
         if not self.ativo:
             return None
@@ -97,6 +111,16 @@ class CacheSimbolico:
             log.debug("ruleset divergente (%s != %s), recomputando: %s",
                       payload.get("versao_ruleset"), self.versao_ruleset, destino)
             return None
+        # Ausente é o estado das entradas gravadas antes deste campo existir:
+        # tratá-las como divergentes é o ponto, não um efeito colateral. A
+        # invalidação alcança também os `NAO_DETECTADO`, cujo status continuaria
+        # correto — endurecer o pareamento nunca transforma não-detecção em
+        # detecção —, mas que não sabem informar qual motivo os produziu.
+        if payload.get("versao_pareamento") != self.versao_pareamento:
+            log.debug("regra de pareamento divergente (%s != %s), recomputando: %s",
+                      payload.get("versao_pareamento"), self.versao_pareamento,
+                      destino)
+            return None
 
         self.leituras += 1
         return payload
@@ -104,11 +128,18 @@ class CacheSimbolico:
     # -- gravação -----------------------------------------------------------
 
     def gravar(self, repo_name: str, commit: str, arquivo: str, cwe: str,
-               status_semgrep: str, alerta=None, contexto_hidratado: str = ""):
+               status_semgrep: str, alerta=None, contexto_hidratado: str = "",
+               motivo: str = "N/A", regras_nao_casadas=()):
         """Grava o resultado das Fases 1 e 2.
 
         `NAO_DETECTADO` também é gravado, de propósito: é a maioria dos casos e
         é justamente onde o Semgrep gasta tempo sem produzir chamada de LLM.
+
+        O motivo da não-detecção e as regras que dispararam sem casar entram no
+        payload porque são produto da Fase 1 como qualquer outro: sem eles, uma
+        rodada servida do cache perderia o diagnóstico de cobertura simbólica e
+        só o recuperaria reexecutando o Semgrep sobre a população inteira —
+        exatamente o custo que este cache existe para evitar.
         """
         if not self.ativo:
             return
@@ -116,12 +147,15 @@ class CacheSimbolico:
         payload = {
             "versao_formato": VERSAO_FORMATO,
             "versao_ruleset": self.versao_ruleset,
+            "versao_pareamento": self.versao_pareamento,
             "repo_name": repo_name,
             "commit": commit,
             "arquivo": arquivo,
             "cwe": cwe,
             "status_semgrep": status_semgrep,
             "alerta": alerta,
+            "motivo": motivo,
+            "regras_nao_casadas": list(regras_nao_casadas),
             "contexto_hidratado": contexto_hidratado,
         }
         os.makedirs(os.path.dirname(destino), exist_ok=True)

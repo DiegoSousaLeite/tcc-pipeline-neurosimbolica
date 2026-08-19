@@ -100,6 +100,47 @@ A Fase 1 re-executa o Semgrep no arquivo exato do commit marcado pelo dataset,
 reproduzindo o alerta original. Se o alerta casa com a CWE → DETECTADO; caso
 contrário → NAO_DETECTADO (ponto cego simbólico, entra só na matriz de cobertura).
 
+#### Regra de pareamento: casamento explícito de CWE
+
+Um alerta é emparelhado ao caso **somente** quando a regra que o emitiu declara a
+CWE do gabarito nas suas tags. É condição necessária e suficiente: o número de
+alertas no arquivo não é critério, e não há aproximação por família de CWE.
+
+A comparação é por identificador inteiro, e não por substring — `CWE-20`,
+`CWE-77` e `CWE-79` são prefixos de `CWE-200`/`CWE-209`, `CWE-770` e `CWE-798`,
+todos presentes na população, e um casamento textual emparelharia o caso à regra
+errada sem que nada no CSV denunciasse. Quando mais de um alerta casa, o
+escolhido é o primeiro por `(linha inicial, check_id)`, e não o primeiro da saída
+do Semgrep, cuja ordem é detalhe interno da ferramenta.
+
+Existiu aqui um fallback que aceitava o alerta quando ele era o único do arquivo,
+para cobrir regra sem tag de CWE explícita. Ele foi removido: não distinguia "a
+regra não declara CWE" de "a regra declara OUTRA CWE", e era o segundo grupo que
+dominava. O efeito era assimétrico por construção e caía sobre a trilha TP — do
+lado FP o gabarito veio do próprio Semgrep, então a CWE sempre casa com alguma
+regra; do lado TP o gabarito vem de CVE/CVEfixes, e não há razão para que exista
+regra do `p/default` com aquela tag naquele arquivo.
+
+#### Taxonomia da não-detecção
+
+`NAO_DETECTADO` tem dois motivos, registrados em coluna própria do CSV:
+
+| Motivo | Significado |
+|--------|-------------|
+| `SEM_ALERTA` | o Semgrep não emitiu alerta algum sobre o arquivo |
+| `ALERTA_OUTRA_CWE` | emitiu alertas, mas nenhum casa com a CWE do gabarito |
+
+Os dois continuam em `Status_Semgrep = NAO_DETECTADO` e entram na mesma célula da
+matriz de cobertura — a CWE rotulada de fato não foi detectada nos dois casos. O
+motivo não vira valor novo de status de propósito: o checkpoint por tripla, o
+cache simbólico e as métricas comparam a string `NAO_DETECTADO` diretamente, e um
+terceiro valor quebraria cada um deles em silêncio.
+
+Em `ALERTA_OUTRA_CWE` os `check_id` das regras que dispararam sem casar vão para
+`Regras_Nao_Casadas`, deduplicados e em ordem alfabética. É o que sustenta a
+leitura de que "o Semgrep leu o arquivo, mas enxergou outra fraqueza" —
+afirmação diferente de "o Semgrep não viu nada" — sem re-executar a pipeline.
+
 #### Amostragem: todas as `locations`, só `.go`
 
 O dataset agrega por `cwe_per_commit` — cada entrada reúne todos os achados
@@ -439,7 +480,8 @@ python scripts/preencher_cache.py
 ## Cache do Resultado Simbólico
 
 `src/cache_simbolico.py` persiste, por caso, o resultado das Fases 1 e 2:
-alerta do Semgrep, contexto hidratado, status e versão do ruleset. Chave:
+alerta do Semgrep, contexto hidratado, status, motivo da não-detecção e regras
+não casadas, mais a versão do ruleset e a da regra de pareamento. Chave:
 `(repo, commit, arquivo, CWE)`. Arquivos em
 `cache_simbolico/<owner>__<repo>/<commit>/<hash-do-caminho>__<cwe>.json`.
 
@@ -461,6 +503,18 @@ Semgrep, que muda. Por isso `versao_ruleset` entra no payload e uma divergência
 invalida a entrada **daqui**, sem tocar em um byte de `cache/`. Uma entrada
 invalidada é ignorada, não apagada: ela continua sendo evidência do que aquele
 ruleset produziu.
+
+**Dois eixos de invalidação.** `versao_pareamento` acompanha `versao_ruleset` no
+payload, e divergência em qualquer um dos dois invalida a entrada — inclusive
+quando o campo está ausente, que é o estado das entradas gravadas antes de ele
+existir. Os eixos variam por motivos independentes: o ruleset muda quando o
+Semgrep passa a enxergar coisas diferentes, a regra de pareamento muda quando a
+pipeline passa a aceitar como do caso um conjunto diferente de alertas. A
+invalidação por pareamento alcança também os `NAO_DETECTADO`: o status deles
+continuaria correto — endurecer o pareamento nunca transforma não-detecção em
+detecção —, mas eles não sabem informar qual dos dois motivos os produziu, e são
+a maioria da população. É o que torna uma mudança de regra de pareamento uma
+varredura completa do Semgrep, e não parcial.
 
 Desativação: `--sem-cache-simbolico` reexecuta as Fases 1 e 2 sempre.
 
@@ -695,6 +749,10 @@ Hash_Catalogo      → SHA-256 do catalogo_cwe.json vigente na execução
 Tokens_Entrada     → tokens do prompt, reportados pela API
 Tokens_Saida       → tokens da resposta
 Custo_USD          → derivado de src/provedores/precos.py
+Motivo_Nao_Deteccao → SEM_ALERTA | ALERTA_OUTRA_CWE | N/A
+Regras_Nao_Casadas → check_id das regras que dispararam sem casar com a CWE do
+                     gabarito, separados por ';' e em ordem alfabética; vazio
+                     fora de ALERTA_OUTRA_CWE
 ```
 
 `<erro>` é uma das categorias de `src/fase5_auditoria.py`: `FETCH_FAIL`,

@@ -43,6 +43,7 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import NamedTuple
 
 from src.cache_simbolico import CacheSimbolico
 from src.catalogo import catalogo_padrao
@@ -54,6 +55,7 @@ from src.config import (
     RESULTS_DIR,
 )
 from src.fase1_semgrep import (
+    MOTIVO_NA,
     SEMGREP,
     SEMGREP_CONFIG,
     SemgrepError,
@@ -576,10 +578,25 @@ def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
 # Pipeline principal
 # ---------------------------------------------------------------------------
 
+class ResultadoSimbolico(NamedTuple):
+    """Resultado das Fases 1 e 2 de um caso.
+
+    Os três primeiros campos são a tripla histórica `(status, alerta, contexto)`;
+    o motivo e as regras foram acrescentados NO FIM de propósito, para que quem
+    já lê a tupla por posição continue lendo a mesma coisa.
+    """
+
+    status: str
+    alerta: dict | None
+    contexto: str
+    motivo: str = MOTIVO_NA
+    regras_nao_casadas: list = ()
+
+
 def resolver_simbolico(caso, cache_simbolico=None):
     """Fases 1 e 2 de um caso, servidas do cache simbólico quando possível.
 
-    Devolve `(status, alerta, contexto)` com status em
+    Devolve `ResultadoSimbolico` com status em
     `DETECTADO | NAO_DETECTADO | HIDRATACAO_FALHOU`. Exceções de esteira sobem
     para quem chamou categorizá-las — nada de resultado parcial vai para o
     cache, para que uma falha de rede não vire um `NAO_DETECTADO` permanente.
@@ -589,15 +606,21 @@ def resolver_simbolico(caso, cache_simbolico=None):
                                       caso["arquivo"], caso["cwe"])
         if payload is not None:
             log.info("    -> Fases 1-2: reaproveitadas do cache simbólico.")
-            return (payload["status_semgrep"], payload["alerta"],
-                    payload["contexto_hidratado"])
+            # O diagnóstico de cobertura vem do cache junto com o status: sem
+            # ele, uma rodada servida do disco só o recuperaria reexecutando o
+            # Semgrep sobre a população inteira.
+            return ResultadoSimbolico(
+                payload["status_semgrep"], payload["alerta"],
+                payload["contexto_hidratado"],
+                payload.get("motivo", MOTIVO_NA),
+                payload.get("regras_nao_casadas") or [])
 
     # FASE 1 — resolve o arquivo-alvo (cache / clone local / rede) e roda o
     # Semgrep sobre ele. Nenhum clone é feito aqui: ver src/fonte.py.
     caminho_arquivo = obter_arquivo(caso["repo_name"], caso["commit"],
                                     caso["arquivo"])
     log.info("    -> Fase 1: executando Semgrep...")
-    alerta = executar_semgrep(caminho_arquivo, caso["cwe"])
+    alerta, motivo, regras = executar_semgrep(caminho_arquivo, caso["cwe"])
 
     if alerta is None:
         status, contexto = "NAO_DETECTADO", ""
@@ -611,8 +634,9 @@ def resolver_simbolico(caso, cache_simbolico=None):
         # Semgrep gasta tempo sem produzir chamada de LLM.
         cache_simbolico.gravar(caso["repo_name"], caso["commit"],
                                caso["arquivo"], caso["cwe"], status,
-                               alerta=alerta, contexto_hidratado=contexto)
-    return status, alerta, contexto
+                               alerta=alerta, contexto_hidratado=contexto,
+                               motivo=motivo, regras_nao_casadas=regras)
+    return ResultadoSimbolico(status, alerta, contexto, motivo, regras)
 
 
 ERRO_POR_EXCECAO = [
@@ -657,7 +681,8 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
         log.info("    [PULADO] Já processado em todos os braços selecionados.")
         return 0
 
-    def _registrar(braco, status, tempo, resposta=None, erro=None, resp_llm=None):
+    def _registrar(braco, status, tempo, resposta=None, erro=None, resp_llm=None,
+                   motivo=MOTIVO_NA, regras=()):
         registrar_resultado(
             csvs_por_braco[braco], caso_id, caso["repo_name"], caso["cwe"],
             caso["origem"], caso["gabarito"],
@@ -671,12 +696,13 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
             tokens_entrada=resp_llm.tokens_entrada if resp_llm else 0,
             tokens_saida=resp_llm.tokens_saida if resp_llm else 0,
             custo_usd=resp_llm.custo_usd if resp_llm else 0.0,
+            motivo_nao_deteccao=motivo,
+            regras_nao_casadas=regras,
         )
 
     t0 = time.time()
     try:
-        status_simbolico, _alerta, contexto = resolver_simbolico(
-            caso, cache_simbolico)
+        simbolico = resolver_simbolico(caso, cache_simbolico)
     except Exception as e:                       # falha de esteira
         categoria = _categoria_de_erro(e)
         log.info("    [FALHA] %s: %s", categoria, str(e)[:120])
@@ -684,12 +710,19 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
             _registrar(braco, categoria, time.time() - t0, erro=str(e))
         return 0
 
+    status_simbolico, contexto = simbolico.status, simbolico.contexto
     tempo_simbolico = time.time() - t0
 
     if status_simbolico == "NAO_DETECTADO":
-        log.info("    [!] Semgrep não detectou esta CWE (NAO_DETECTADO).")
+        # O status continua um só nos dois motivos: quem compara a string
+        # `NAO_DETECTADO` — checkpoint, cache e métricas — segue enxergando o
+        # caso como resolvido, e o motivo viaja em coluna própria.
+        log.info("    [!] Semgrep não detectou esta CWE (NAO_DETECTADO, %s).",
+                 simbolico.motivo)
         for braco in pendentes:
-            _registrar(braco, "NAO_DETECTADO", tempo_simbolico)
+            _registrar(braco, "NAO_DETECTADO", tempo_simbolico,
+                       motivo=simbolico.motivo,
+                       regras=simbolico.regras_nao_casadas)
         return 0
 
     if status_simbolico == "HIDRATACAO_FALHOU":

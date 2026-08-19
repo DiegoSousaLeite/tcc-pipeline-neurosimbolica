@@ -12,11 +12,14 @@ from src.fase5_auditoria import (
 )
 from src.metricas import (
     MINIMO_VULNERAVEIS,
+    MOTIVO_INDISPONIVEL,
     _binomial_bicaudal,
     _qui_quadrado_yates,
     avisos,
     carregar,
     contar,
+    contar_motivos,
+    contar_status,
     estratificar,
     exportar_latex,
     mcnemar,
@@ -30,9 +33,12 @@ GPT = "gpt-4o-mini"
 
 def linha(id_, gabarito, veredito, modelo=GEMINI, prompt="especialista",
           status="DETECTADO", origem="FP", num_locations="1",
-          ficha="especifica", hash_cat="h1", cwe="CWE-327", custo="0.0001"):
+          ficha="especifica", hash_cat="h1", cwe="CWE-327", custo="0.0001",
+          motivo=None, regras=""):
     """Uma linha de CSV coerente: as classificações vêm das funções reais."""
     detectado = status == "DETECTADO"
+    if motivo is None:
+        motivo = "SEM_ALERTA" if status == "NAO_DETECTADO" else "N/A"
     return {
         "ID_Caso": id_, "Repositorio": "acme/servico", "CWE": cwe,
         "Origem": origem, "Modelo_LLM": modelo, "Tipo_Prompt": prompt,
@@ -47,6 +53,7 @@ def linha(id_, gabarito, veredito, modelo=GEMINI, prompt="especialista",
         "Num_Locations": num_locations, "Ficha_CWE": ficha,
         "Versao_Prompt": f"{prompt}:abcd1234", "Hash_Catalogo": hash_cat,
         "Tokens_Entrada": "1000", "Tokens_Saida": "50", "Custo_USD": custo,
+        "Motivo_Nao_Deteccao": motivo, "Regras_Nao_Casadas": regras,
     }
 
 
@@ -143,6 +150,58 @@ def test_matriz_simbolica_e_separada_da_neural(rodada):
     # O NAO_DETECTADO entra só na cobertura simbólica.
     assert sg["Total"] == 6 and llm["Total"] == 5
     assert sg["VN"] == 1     # c6: seguro e não detectado
+
+
+def test_nao_deteccao_discriminada_por_motivo(tmp_path):
+    p = tmp_path / "r.csv"
+    gravar(p, [
+        linha("c1", "seguro", "N/A", status="NAO_DETECTADO",
+              motivo="SEM_ALERTA"),
+        linha("c2", "vulneravel", "N/A", status="NAO_DETECTADO",
+              motivo="ALERTA_OUTRA_CWE", regras="regra-a;regra-b"),
+        linha("c3", "vulneravel", "N/A", status="NAO_DETECTADO",
+              motivo="ALERTA_OUTRA_CWE", regras="regra-c"),
+        linha("c4", "seguro", "FP"),
+    ])
+    assert contar_motivos(carregar(str(p))[0].linhas) == {
+        "SEM_ALERTA": 1, "ALERTA_OUTRA_CWE": 2}
+
+
+def test_soma_dos_motivos_e_o_total_de_nao_detectado(rodada):
+    """A discriminação não pode mover a matriz de cobertura: ela apenas explica
+    a mesma célula."""
+    unicas = {}
+    for br in carregar(str(rodada)):
+        for ln in br.linhas:
+            unicas.setdefault(ln["ID_Caso"], ln)
+    linhas = list(unicas.values())
+    assert sum(contar_motivos(linhas).values()) == \
+        contar_status(linhas)["NAO_DETECTADO"]
+
+
+def test_motivo_conta_cada_caso_uma_vez_so(rodada):
+    """Pela mesma razão que a matriz de cobertura não é por braço: o Semgrep
+    roda uma vez por caso, não uma por braço."""
+    todas = [ln for br in carregar(str(rodada)) for ln in br.linhas]
+    assert contar_motivos(todas) == {"SEM_ALERTA": 2}      # c6 nos dois braços
+    unicas = list({ln["ID_Caso"]: ln for ln in todas}.values())
+    assert contar_motivos(unicas) == {"SEM_ALERTA": 1}
+
+
+def test_csv_sem_a_coluna_de_motivo_nao_derruba_a_leitura(tmp_path):
+    """CSVs anteriores à coluna: o motivo sai como indisponível e as demais
+    métricas são calculadas normalmente."""
+    p = tmp_path / "legado.csv"
+    antigo = CABECALHO[:13]
+    gravar(p, [
+        linha("c1", "seguro", "N/A", status="NAO_DETECTADO"),
+        linha("c2", "vulneravel", "N/A", status="NAO_DETECTADO"),
+        linha("c3", "seguro", "FP"),
+    ], cabecalho=antigo)
+
+    braco = carregar(str(p))[0]
+    assert contar_motivos(braco.linhas) == {MOTIVO_INDISPONIVEL: 2}
+    assert contar(braco.linhas, "semgrep")["Total"] == 3
 
 
 # --- 8.2 Tabela lado a lado -------------------------------------------------

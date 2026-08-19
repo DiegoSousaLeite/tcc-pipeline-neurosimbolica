@@ -28,10 +28,19 @@ CABECALHO = [
     "Versao_Prompt",           # hash curto do template usado
     "Hash_Catalogo",           # SHA-256 do catálogo vigente na execução
     "Tokens_Entrada", "Tokens_Saida", "Custo_USD",
+    # Motivo da não-detecção, em coluna própria e não em valor novo de
+    # `Status_Semgrep`: o checkpoint por tripla, o cache e as métricas comparam
+    # a string `NAO_DETECTADO` diretamente, e um terceiro valor de status
+    # quebraria cada um deles de um jeito diferente, nenhum ruidosamente.
+    # No FIM do cabeçalho porque `registrar_resultado` escreve a linha
+    # posicionalmente e `COLUNAS_PARTE2` é definido por fatia.
+    "Motivo_Nao_Deteccao",     # SEM_ALERTA | ALERTA_OUTRA_CWE | N/A
+    "Regras_Nao_Casadas",      # check_id separados por ';', ordem alfabética
 ]
 
-# Colunas que os CSVs da Parte 1 não têm. Quem lê um CSV antigo trata a ausência
-# delas como "indisponível", nunca como erro.
+# Colunas que os CSVs da Parte 1 não têm — e às quais as duas de pareamento se
+# somaram depois. Quem lê um CSV antigo trata a ausência delas como
+# "indisponível", nunca como erro.
 COLUNAS_PARTE2 = CABECALHO[13:]
 
 CATEGORIAS_ERRO = {
@@ -102,14 +111,22 @@ def registrar_resultado(
     tokens_entrada: int = 0,
     tokens_saida: int = 0,
     custo_usd: float = 0.0,
+    motivo_nao_deteccao: str = "N/A",
+    regras_nao_casadas=(),
 ):
     """Consolida um caso no relatório, mantendo as duas matrizes separadas.
 
     - status_semgrep == "DETECTADO":    preenche cobertura Semgrep E acerto LLM.
-    - status_semgrep == "NAO_DETECTADO": preenche só a cobertura (LLM = N/A).
+    - status_semgrep == "NAO_DETECTADO": preenche só a cobertura (LLM = N/A) e
+      registra qual dos dois motivos produziu a não-detecção.
     - status_semgrep em CATEGORIAS_ERRO: falha de esteira, fora das duas matrizes.
     """
     tempo_fmt = f"{tempo_exec:.2f}"
+    # Só a não-detecção tem motivo a explicar: nos demais estados as colunas
+    # saem neutras, para que o campo vazio não seja lido como informação
+    # perdida sobre um caso `ALERTA_OUTRA_CWE`.
+    motivo = "N/A"
+    regras = ""
 
     if status_semgrep in CATEGORIAS_ERRO:
         classificacao_semgrep = "N/A (Falha de Esteira)"
@@ -122,6 +139,9 @@ def registrar_resultado(
         veredito_llm = "N/A"
         classificacao_llm = "N/A (Semgrep nao detectou)"
         justificativa = "Semgrep nao emitiu alerta para esta CWE (cobertura simbolica)."
+        motivo = motivo_nao_deteccao or "N/A"
+        regras = (regras_nao_casadas if isinstance(regras_nao_casadas, str)
+                  else ";".join(regras_nao_casadas))
 
     else:  # DETECTADO
         classificacao_semgrep = classificar_cobertura_semgrep(gabarito, detectado=True)
@@ -150,6 +170,8 @@ def registrar_resultado(
             tokens_entrada,
             tokens_saida,
             f"{custo_usd:.8f}",
+            motivo,
+            regras,
         ])
 
     log.info("    [Cobertura Semgrep] %s", classificacao_semgrep)
