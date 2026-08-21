@@ -102,7 +102,13 @@ docs/                    # Documentação de detalhe (abaixo)
 |---|---|
 | `docs/PIPELINE.md` | Como funciona: arquitetura das 5 fases, trilhas de entrada, as duas matrizes, métricas, catálogo de CWE, caches, provedores |
 | `docs/SCRIPTS.md` | O que cada módulo e script faz: entradas, saídas, flags, variáveis de ambiente |
+| `docs/ANALISE-RODADA-1.md` | Análise da rodada `20260730T180648Z-14d6af8`: o que ela mede (supressão de ruído, n≈792), o que ela não mede (detecção, 1 positivo válido), quais métricas levar para a monografia e com que ressalva, e a viabilidade de construir a classe positiva |
 | `docs/OPENSPEC.md` | Comandos do OpenSpec e o fluxo de trabalho de mudanças |
+
+> Antes de citar Recall, F1 ou MCC da Parte 2 em qualquer lugar, leia a seção 4.5
+> de `docs/ANALISE-RODADA-1.md`: estas três métricas são governadas por uma
+> classe positiva de 13 amostras das quais 12 têm emparelhamento inválido, e o
+> relatório recomenda omiti-las.
 
 O código da Parte 1 (fluxo CodeQL) não é mantido em cópia: vive no histórico do
 Git e se recupera por caminho antigo.

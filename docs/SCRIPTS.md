@@ -395,3 +395,53 @@ python scripts/ranking_cwe.py            # top 15 + cobertura acumulada
 python scripts/ranking_cwe.py --json
 ```
 
+---
+
+### `scripts/analise_rodada.py`
+
+**Propósito:** Imprime os números derivados de uma rodada que `src/metricas.py`
+não produz. `metricas.py` responde "qual o desempenho de cada braço"; este
+script responde "quantas amostras sustentam esse desempenho". É a ferramenta de
+conferência do relatório `docs/ANALISE-RODADA-1.md`: cada tabela de lá cita a
+invocação exata que a regenera.
+
+Reusa `carregar`, `contar`, `mcnemar` e as funções de categorização de
+`src.metricas`, para que não existam duas verdades sobre o que conta como
+Verdadeiro Positivo.
+
+**Garantias:** somente-leitura (não escreve, move nem regenera artefato algum),
+offline (nenhuma chamada de rede ou de LLM) e determinístico (toda ordenação tem
+chave explícita; duas execuções produzem saída idêntica).
+
+**Seções** — sem `--secao`, saem todas nesta ordem:
+
+| seção | o que imprime |
+|---|---|
+| `funil` | degraus de "gabarito vulneravel" até o veredito do LLM, com perda absoluta e percentual por degrau, a causa de cada uma, e recall medido contra recall de ponta a ponta |
+| `nao-detectados` | casos vulneráveis sem alerta pareado, por CWE e por trilha, cruzados com o catálogo de triagem e com as CWEs que o ruleset declara cobrir em Go |
+| `conjuntos` | conjuntos de VP/VN/FP/FN por braço, especificidade, taxa de veredito "vulnerável", interseção, contenção com direção declarada, e a tabela 2x2 de discordâncias conferida contra `src.metricas.mcnemar` |
+| `esteira` | linhas e status do Semgrep por braço, taxa de erro, denominador efetivo, e estatísticas de `Tokens_Entrada` e `Tempo_Execucao_s` |
+| `positivos` | um registro por caso de gabarito vulnerável que chegou ao LLM, com a regra que disparou, a CWE que ela declara, e veredito e justificativa de cada braço |
+| `regras` | quais regras do ruleset de fato dispararam sobre o corpus, com a CWE declarada e o pareamento exato contra o pareamento por fallback, separado por classe de gabarito |
+
+**Uso:**
+```bash
+python scripts/analise_rodada.py results/<run_id>
+python scripts/analise_rodada.py results/<run_id> --secao funil
+python scripts/analise_rodada.py results/<run_id> --secao positivos --justificativa-completa
+python scripts/analise_rodada.py results/<run_id> --secao regras --cache cache_simbolico_pre_estrito
+```
+
+**Flags:** `--secao` isola uma seção; `--justificativa-completa` não trunca as
+justificativas do LLM; `--cache` escolhe o diretório de cache simbólico
+consultado por `positivos` e `regras`.
+
+**Sobre `--cache`:** o CSV não grava qual regra produziu o alerta — esse dado só
+existe no cache simbólico, que é invalidado e regravado quando a regra de
+pareamento muda. Ler um cache regravado descreveria outra pipeline, então as
+seções que dependem dele imprimem a distribuição de `versao_pareamento` das
+entradas lidas e avisam quando o cache está misto.
+
+Um diretório inexistente ou sem CSV de rodada encerra com mensagem explícita e
+código de saída 1, em vez de imprimir tabelas vazias. Não é chamado por
+`run_pipeline.py`.
