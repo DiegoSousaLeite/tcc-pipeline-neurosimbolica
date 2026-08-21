@@ -1,0 +1,194 @@
+{
+  "CWE-79": {
+    "definicao": "Neutralização inadequada de entrada controlável por terceiros durante a geração de uma página web (Cross-site Scripting). Dados do usuário são incorporados à saída HTML sem escape apropriado ao contexto, permitindo que o navegador da vítima execute script injetado pelo atacante.",
+    "heuristica_go": "Em Go, procurar por conversões para template.HTML, template.JS, template.CSS ou template.URL aplicadas a dados de origem externa dentro de html/template, e por escrita direta de entrada do usuário via fmt.Fprintf(w, ...) no http.ResponseWriter. O uso de html/template com valores string comuns (escape contextual automático) ou de template.HTML sobre constante estática não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func renderComentario(w http.ResponseWriter, comentario string) {\n\t// template.HTML desliga o escape automático do html/template\n\tt := template.Must(template.New(\"c\").Parse(\"<div>{{.}}</div>\"))\n\tt.Execute(w, template.HTML(comentario)) // entrada do usuário sem escape\n}",
+      "porque": "template.HTML desativa o escape do html/template; comentário do usuário renderizado como HTML permite injeção de <script>."
+    },
+    "exemplo_fp": {
+      "codigo": "const avisoDoSistema = \"<strong>Manutenção programada</strong>\"\n\nfunc renderAviso(w http.ResponseWriter) {\n\t// mesmo template.HTML, agora sobre constante: nada externo na marcação\n\tt := template.Must(template.New(\"a\").Parse(\"<div>{{.}}</div>\"))\n\tt.Execute(w, template.HTML(avisoDoSistema))\n}",
+      "porque": "O mesmo template.HTML, agora sobre constante do próprio programa: o escape está desligado, mas nenhuma entrada externa compõe a marcação, então o atacante não escolhe o HTML renderizado. (Uma string comum passada a Execute também seria FP, por receber o escape contextual automático.)"
+    }
+  },
+  "CWE-327": {
+    "definicao": "Uso de um algoritmo criptográfico comprovadamente quebrado ou inadequado para a finalidade pretendida. Empregar cifras ou funções de hash cujas garantias já não se sustentam enfraquece a proteção em contextos que exigem sigilo, integridade ou autenticação.",
+    "heuristica_go": "Em Go, procurar por crypto/md5 e crypto/sha1 (e cifras como crypto/des, crypto/rc4) em caminhos de autenticação, assinatura, derivação de chave ou armazenamento de credencial. O mesmo import em caminho de deduplicação, cache ou checksum não criptográfico não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func hashSenha(senha string) string {\n\tsoma := md5.Sum([]byte(senha))\n\treturn hex.EncodeToString(soma[:])\n}",
+      "porque": "md5.Sum aplicado a credencial: hash rápido e sem sal, vulnerável a busca exaustiva e a colisão."
+    },
+    "exemplo_fp": {
+      "codigo": "func chaveCache(url string) string {\n\tsoma := md5.Sum([]byte(url))\n\treturn hex.EncodeToString(soma[:])\n}",
+      "porque": "md5.Sum usado como chave de cache/ETag: propriedade exigida é dispersão, não resistência a adversário."
+    }
+  },
+  "CWE-94": {
+    "definicao": "Controle inadequado da geração de código (injeção de código): parte do que o programa executa é construída a partir de entrada externa. Um agente que influencia esse trecho passa a determinar a lógica executada, e não apenas os dados processados.",
+    "heuristica_go": "Em Go, procurar por text/template ou html/template cujo TEXTO do template - o argumento de Parse/ParseFiles/New().Parse - provém de entrada externa, permitindo injeção de ações {{...}}. Passar entrada externa apenas como dado em Execute, com o texto do template fixo no código, não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func renderPagina(w http.ResponseWriter, layoutDoUsuario string, dados any) {\n\t// o TEXTO do template vem do usuário: ele controla a lógica executada\n\tt := template.Must(template.New(\"p\").Parse(layoutDoUsuario))\n\tt.Execute(w, dados)\n}",
+      "porque": "O texto do template é entrada externa; o usuário injeta ações {{...}} e acessa métodos/campos do contexto - injeção via template."
+    },
+    "exemplo_fp": {
+      "codigo": "func renderPagina(w http.ResponseWriter, nomeDoUsuario string) {\n\t// texto do template é constante; a entrada externa entra só como dado\n\tt := template.Must(template.New(\"p\").Parse(\"<h1>Olá, {{.}}</h1>\"))\n\tt.Execute(w, nomeDoUsuario)\n}",
+      "porque": "O texto do template é constante do programa; a entrada externa é apenas dado interpolado, não código de template."
+    }
+  },
+  "CWE-319": {
+    "definicao": "Transmissão de informação sensível em texto claro: dados que exigem confidencialidade trafegam por um canal sem cifragem. Qualquer intermediário com acesso ao tráfego pode lê-los ou alterá-los.",
+    "heuristica_go": "Em Go, procurar por literais de URL com esquema http:// (não https://) em chamadas como http.Get, http.Post ou http.NewRequest que transportam dados sensíveis - credenciais, tokens de autenticação ou dados pessoais. A mesma chamada sob https:// não caracteriza a fraqueza, pois o TLS cifra o corpo em trânsito.",
+    "exemplo_vp": {
+      "codigo": "func enviarCredenciais(usuario, senha string) (*http.Response, error) {\n\t// esquema http:// -> corpo com credenciais trafega em texto claro\n\tcorpo := strings.NewReader(\"user=\" + usuario + \"&pass=\" + senha)\n\treturn http.Post(\"http://api.exemplo.com/login\", \"application/x-www-form-urlencoded\", corpo)\n}",
+      "porque": "Credenciais enviadas via URL http://: o conteúdo trafega sem TLS e pode ser lido por qualquer intermediário na rede."
+    },
+    "exemplo_fp": {
+      "codigo": "func enviarCredenciais(usuario, senha string) (*http.Response, error) {\n\t// mesmo envio sob https:// -> TLS protege o corpo em trânsito\n\tcorpo := strings.NewReader(\"user=\" + usuario + \"&pass=\" + senha)\n\treturn http.Post(\"https://api.exemplo.com/login\", \"application/x-www-form-urlencoded\", corpo)\n}",
+      "porque": "Mesma requisição sob https://: o TLS cifra o corpo em trânsito, então a transmissão da credencial não é em texto claro."
+    }
+  },
+  "CWE-338": {
+    "definicao": "Uso de gerador de números pseudoaleatórios (PRNG) criptograficamente fraco em um contexto de segurança. Como a sequência gerada é previsível, um atacante pode reconstruí-la ou adivinhá-la, comprometendo tokens, chaves ou nonces que dependem de imprevisibilidade.",
+    "heuristica_go": "Em Go, procurar por math/rand (funções como rand.Intn, rand.Int63, rand.Read) alimentando tokens, senhas, IDs de sessão, nonces ou chaves - contextos que exigem imprevisibilidade e pedem crypto/rand. O mesmo math/rand em jitter de backoff, amostragem, embaralhamento de exibição ou simulação não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func tokenSessao() string {\n\t// math/rand é previsível: a sequência é reconstruível a partir da seed\n\tb := make([]byte, 32)\n\tfor i := range b {\n\t\tb[i] = byte(rand.Intn(256))\n\t}\n\treturn hex.EncodeToString(b)\n}",
+      "porque": "Token de sessão gerado com math/rand: a saída é previsível e um atacante pode reconstruir ou adivinhar tokens válidos."
+    },
+    "exemplo_fp": {
+      "codigo": "func atrasoComJitter(base time.Duration) time.Duration {\n\t// jitter só espalha as tentativas no tempo; previsibilidade é irrelevante\n\tjitter := time.Duration(rand.Intn(100)) * time.Millisecond\n\treturn base + jitter\n}",
+      "porque": "math/rand usado como jitter de backoff: a propriedade exigida é dispersão temporal, não imprevisibilidade contra adversário."
+    }
+  },
+  "CWE-665": {
+    "definicao": "Inicialização inadequada: o programa não inicializa, ou inicializa incorretamente, um recurso antes de usá-lo, deixando-o em estado inesperado. Quando esse recurso é relevante para a segurança, o estado não inicializado pode ser previsível ou inseguro.",
+    "heuristica_go": "Em Go, procurar por recursos de segurança usados com o valor zero de make ou de um struct literal antes de serem preenchidos - por exemplo, uma chave []byte passada a aes.NewCipher ou hmac.New sem ter recebido material de crypto/rand, ou campos deixados no zero. A mesma construção com o recurso inicializado antes do uso não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func novaCifra() (cipher.Block, error) {\n\t// a chave fica toda-zero: make aloca mas não preenche material secreto\n\tchave := make([]byte, 32)\n\treturn aes.NewCipher(chave)\n}",
+      "porque": "A chave AES fica com o valor zero de make, nunca preenchida com segredo real - cifra inicializada em estado previsível e sem proteção."
+    },
+    "exemplo_fp": {
+      "codigo": "func novaCifra() (cipher.Block, error) {\n\t// a chave é preenchida com bytes aleatórios antes do uso (crypto/rand)\n\tchave := make([]byte, 32)\n\tif _, err := rand.Read(chave); err != nil {\n\t\treturn nil, err\n\t}\n\treturn aes.NewCipher(chave)\n}",
+      "porque": "A mesma chave é preenchida por crypto/rand antes de aes.NewCipher; o recurso está inicializado com segredo imprevisível."
+    }
+  },
+  "CWE-328": {
+    "definicao": "Uso de hash fraco: a função de hash empregada não atende às expectativas de segurança do contexto, seja por fragilidade do próprio algoritmo, seja por aplicá-lo de forma que quebra suas garantias (por exemplo, hash rápido e sem sal para senhas). Isso viabiliza ataques de pré-imagem, colisão ou tabela arco-íris mais eficientes que a força bruta.",
+    "heuristica_go": "Em Go, procurar por funções de hash de propósito geral - sha256.Sum256, sha512.Sum512, e as já quebradas md5.Sum/sha1.Sum - aplicadas a senhas ou segredos que exigem KDF com sal e custo (golang.org/x/crypto/bcrypt, scrypt, argon2). A mesma função em integridade de arquivo, endereçamento de conteúdo ou checksum não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func armazenarSenha(senha string) string {\n\t// SHA-256 é rápido e sem sal: inadequado para armazenar senha\n\tsoma := sha256.Sum256([]byte(senha))\n\treturn hex.EncodeToString(soma[:])\n}",
+      "porque": "sha256.Sum256 sobre senha: hash rápido, sem sal e sem fator de trabalho, permite ataque de dicionário e força bruta em GPU (o correto seria bcrypt/scrypt/argon2)."
+    },
+    "exemplo_fp": {
+      "codigo": "func idConteudo(dados []byte) string {\n\t// integridade / endereçamento de conteúdo: SHA-256 é adequado\n\tsoma := sha256.Sum256(dados)\n\treturn hex.EncodeToString(soma[:])\n}",
+      "porque": "sha256.Sum256 para integridade/identificação de conteúdo: a propriedade exigida é resistência a colisão, plenamente atendida por SHA-256."
+    }
+  },
+  "CWE-614": {
+    "definicao": "Cookie sensível transmitido em sessão HTTPS sem o atributo Secure. Sem esse atributo, o navegador também envia o cookie por conexões HTTP não cifradas, expondo o valor sensível na rede.",
+    "heuristica_go": "Em Go, procurar por http.Cookie / http.SetCookie criando cookies de sessão, autenticação ou token (nomes como sessionid, token, auth) com o campo Secure ausente ou false. O mesmo cookie sem Secure para dado não sensível (preferência de idioma, tema, layout) não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func setSessao(w http.ResponseWriter, id string) {\n\t// Secure ausente: o cookie de sessão pode ir por HTTP em texto claro\n\thttp.SetCookie(w, &http.Cookie{\n\t\tName:  \"sessionid\",\n\t\tValue: id,\n\t})\n}",
+      "porque": "Cookie de sessão sem Secure: o navegador o envia também em conexões http://, expondo o identificador em texto claro na rede."
+    },
+    "exemplo_fp": {
+      "codigo": "func setPreferencia(w http.ResponseWriter, tema string) {\n\t// cookie não sensível (tema); ausência de Secure é aceitável\n\thttp.SetCookie(w, &http.Cookie{\n\t\tName:  \"theme\",\n\t\tValue: tema,\n\t})\n}",
+      "porque": "Cookie de preferência de tema, sem dado sensível: transmitir por http:// não expõe segredo, então a ausência de Secure não caracteriza a fraqueza."
+    }
+  },
+  "CWE-601": {
+    "definicao": "Redirecionamento de URL para site não confiável (open redirect): o destino de um redirecionamento é derivado de entrada externa sem validação. O atacante induz a aplicação a redirecionar a vítima para um site sob controle dele, viabilizando phishing.",
+    "heuristica_go": "Em Go, procurar por http.Redirect (ou header Location definido via w.Header().Set) cujo destino vem de r.URL.Query(), r.FormValue ou r.Header sem validação. A mesma chamada com destino restrito a caminho relativo (prefixo / e rejeição de //) ou a uma lista de hosts confiáveis não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func redirecionar(w http.ResponseWriter, r *http.Request) {\n\t// destino vem direto do parâmetro: atacante aponta para site externo\n\tdestino := r.URL.Query().Get(\"next\")\n\thttp.Redirect(w, r, destino, http.StatusFound)\n}",
+      "porque": "O destino do redirecionamento é entrada externa não validada; um atacante fornece uma URL absoluta para um site malicioso (phishing)."
+    },
+    "exemplo_fp": {
+      "codigo": "func redirecionar(w http.ResponseWriter, r *http.Request) {\n\tdestino := r.URL.Query().Get(\"next\")\n\t// só aceita caminho relativo interno (começa com / e não com //)\n\tif !strings.HasPrefix(destino, \"/\") || strings.HasPrefix(destino, \"//\") {\n\t\tdestino = \"/\"\n\t}\n\thttp.Redirect(w, r, destino, http.StatusFound)\n}",
+      "porque": "A mesma entrada só é aceita como caminho relativo interno (começa com / e não com //); redirecionamento para host externo é rejeitado."
+    }
+  },
+  "CWE-470": {
+    "definicao": "Uso de entrada controlada externamente para selecionar classes ou código (reflexão insegura): o nome de um tipo, método ou função resolvido em tempo de execução vem de entrada externa. O atacante passa a escolher que código é invocado, para além do previsto pelo desenvolvedor.",
+    "heuristica_go": "Em Go, procurar por reflect.MethodByName, reflect.FieldByName ou seleção de handler/tipo por nome vindo de entrada externa (r.URL.Query, r.FormValue), e por plugin.Open com caminho externo. A mesma reflexão cujo nome provém de uma lista fixa mapeada antes da chamada não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func executarAcao(servico any, r *http.Request) {\n\t// o nome do método vem do usuário: qualquer método exportado é chamável\n\tnome := r.URL.Query().Get(\"acao\")\n\tif m := reflect.ValueOf(servico).MethodByName(nome); m.IsValid() {\n\t\tm.Call(nil)\n\t}\n}",
+      "porque": "O nome do método a invocar é entrada externa; o atacante seleciona qualquer método exportado do serviço, inclusive os não previstos para essa rota."
+    },
+    "exemplo_fp": {
+      "codigo": "func executarAcao(servico any, r *http.Request) {\n\t// a entrada só indexa um conjunto fixo de métodos permitidos\n\tpermitidos := map[string]string{\"listar\": \"Listar\", \"criar\": \"Criar\"}\n\tif nome, ok := permitidos[r.URL.Query().Get(\"acao\")]; ok {\n\t\treflect.ValueOf(servico).MethodByName(nome).Call(nil)\n\t}\n}",
+      "porque": "A entrada externa só indexa uma lista fixa de métodos permitidos; a reflexão nunca recebe um nome arbitrário do atacante."
+    }
+  },
+  "CWE-115": {
+    "definicao": "Interpretação incorreta de entrada: o programa interpreta uma entrada - de um atacante ou de outro componente - de modo divergente do pretendido, de forma relevante para a segurança. A própria MITRE classifica a fraqueza como de definição imprecisa e frequentemente resultante de outras.",
+    "heuristica_go": "Em Go, procurar por interpretações de entrada dependentes de configuração implícita - strconv.ParseInt/ParseUint com base 0 (inferência de octal/hex pelo prefixo), ou parsing que assume formato diferente do produtor do dado. A mesma chamada com base explícita (10) ou formato acordado entre as pontas não caracteriza a fraqueza. CWE de definição vaga: quando o sinal for fraco, prefira encaminhar ao __fallback__.",
+    "exemplo_vp": {
+      "codigo": "func lerQuantidade(entrada string) (int64, error) {\n\t// base 0: \"010\" é interpretado como octal (8), não decimal (10)\n\treturn strconv.ParseInt(entrada, 0, 64)\n}",
+      "porque": "Com base 0, strconv.ParseInt infere a base pelo prefixo; entrada como \"010\" vira 8 e \"0x1F\" vira 31, divergindo do decimal que o código presume."
+    },
+    "exemplo_fp": {
+      "codigo": "func lerQuantidade(entrada string) (int64, error) {\n\t// base 10 fixa: a string é sempre lida como decimal\n\treturn strconv.ParseInt(entrada, 10, 64)\n}",
+      "porque": "Com base 10 explícita, a mesma entrada é sempre interpretada como decimal; não há reinterpretação de prefixo octal ou hexadecimal."
+    }
+  },
+  "CWE-352": {
+    "definicao": "Cross-Site Request Forgery (CSRF): a aplicação não verifica de forma confiável se uma requisição que altera estado foi intencionalmente enviada pelo usuário. Um site malicioso consegue disparar ações autenticadas no navegador da vítima sem o consentimento dela.",
+    "heuristica_go": "Em Go, procurar por cookies de sessão/autenticação com http.SameSiteNoneMode (ou SameSite não definido) e por handlers que alteram estado sem validar token anti-CSRF (padrão gorilla/csrf) nem a origem (r.Header.Get(\"Origin\")). O mesmo cookie com http.SameSiteLaxMode/StrictMode ou handler que valida token não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func setSessao(w http.ResponseWriter, id string) {\n\t// SameSite=None: o cookie acompanha requisições cross-site -> exposto a CSRF\n\thttp.SetCookie(w, &http.Cookie{\n\t\tName:     \"session\",\n\t\tValue:    id,\n\t\tSecure:   true,\n\t\tSameSite: http.SameSiteNoneMode,\n\t})\n}",
+      "porque": "Cookie de sessão com SameSite=None é enviado em requisições originadas por outros sites, permitindo que um formulário malicioso dispare ações autenticadas (CSRF)."
+    },
+    "exemplo_fp": {
+      "codigo": "func setSessao(w http.ResponseWriter, id string) {\n\t// SameSite=Lax: o navegador não envia o cookie em POST cross-site\n\thttp.SetCookie(w, &http.Cookie{\n\t\tName:     \"session\",\n\t\tValue:    id,\n\t\tSecure:   true,\n\t\tSameSite: http.SameSiteLaxMode,\n\t})\n}",
+      "porque": "SameSite=Lax impede o envio do cookie de sessão em requisições cross-site que mudam estado, bloqueando o vetor de CSRF."
+    }
+  },
+  "CWE-681": {
+    "definicao": "Conversão incorreta entre tipos numéricos: um valor é convertido entre tipos de larguras ou sinais diferentes sem verificar se cabe no tipo de destino. A conversão pode truncar, estourar ou trocar o sinal do valor de forma silenciosa.",
+    "heuristica_go": "Em Go, procurar por conversões estreitantes entre inteiros - int64->int32, int->int16, ou com/sem sinal (int->uint, que torna negativos enormes) - sobre valores de origem externa ou de len/tamanho, sem verificação de faixa. A mesma conversão precedida de checagem contra math.MaxInt32 (ou limite equivalente) não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func encolher(n int64) int32 {\n\t// n pode exceder MaxInt32: a conversão trunca/estoura em silêncio\n\treturn int32(n)\n}",
+      "porque": "Conversão de int64 para int32 sem checar faixa: valores acima de 2147483647 sofrem overflow silencioso e mudam de sinal/magnitude."
+    },
+    "exemplo_fp": {
+      "codigo": "func encolher(n int64) int32 {\n\t// n é limitado a [0, MaxInt32] antes da conversão\n\tif n < 0 || n > math.MaxInt32 {\n\t\tn = math.MaxInt32\n\t}\n\treturn int32(n)\n}",
+      "porque": "A mesma conversão só ocorre após limitar n a [0, math.MaxInt32]; sem valor fora de faixa, não há truncamento nem overflow."
+    }
+  },
+  "CWE-1004": {
+    "definicao": "Cookie sensível sem o atributo HttpOnly: um cookie que carrega dado sensível fica acessível a scripts do lado do cliente (document.cookie). Combinado a um XSS, isso permite roubo do valor, como o identificador de sessão.",
+    "heuristica_go": "Em Go, procurar por http.Cookie de sessão/autenticação com o campo HttpOnly ausente ou false, o que expõe o valor a document.cookie e a roubo via XSS. O mesmo HttpOnly=false em cookie que o front-end precisa ler por projeto (token CSRF double-submit, sinalizador de UI não sensível) não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "func setSessao(w http.ResponseWriter, id string) {\n\t// HttpOnly ausente: JavaScript lê o cookie de sessão (roubo via XSS)\n\thttp.SetCookie(w, &http.Cookie{\n\t\tName:  \"session\",\n\t\tValue: id,\n\t})\n}",
+      "porque": "Cookie de sessão sem HttpOnly é acessível via document.cookie; um XSS consegue ler o identificador de sessão e sequestrar a conta."
+    },
+    "exemplo_fp": {
+      "codigo": "func setTokenCSRF(w http.ResponseWriter, token string) {\n\t// token CSRF double-submit PRECISA ser lido pelo JS: HttpOnly seria errado\n\thttp.SetCookie(w, &http.Cookie{\n\t\tName:     \"csrf_token\",\n\t\tValue:    token,\n\t\tHttpOnly: false,\n\t})\n}",
+      "porque": "O token CSRF (padrão double-submit) precisa ser lido pelo próprio front-end para ser reenviado em um header; não é segredo de sessão, então a ausência de HttpOnly é intencional e correta."
+    }
+  },
+  "CWE-667": {
+    "definicao": "Travamento inadequado (locking): o programa não adquire ou não libera um lock de forma correta em todos os caminhos de execução. A falha pode deixar um lock retido permanentemente (deadlock) ou expor estado compartilhado a corrida.",
+    "heuristica_go": "Em Go, procurar por sync.Mutex/sync.RWMutex cujo Unlock não está protegido por defer logo após o Lock, de modo que um caminho de erro (return no meio da função) sai sem destravar. O mesmo Lock seguido de defer c.mu.Unlock() garante a liberação em todos os retornos e não caracteriza a fraqueza.",
+    "exemplo_vp": {
+      "codigo": "type Contador struct {\n\tmu      sync.Mutex\n\tvalor   int\n\tfechado bool\n}\n\nfunc (c *Contador) Incrementar() error {\n\tc.mu.Lock()\n\tif c.fechado {\n\t\treturn errors.New(\"fechado\") // retorna com o mutex ainda travado\n\t}\n\tc.valor++\n\tc.mu.Unlock()\n\treturn nil\n}",
+      "porque": "No caminho de erro a função retorna sem Unlock; o mutex fica travado para sempre e qualquer Lock posterior trava (deadlock)."
+    },
+    "exemplo_fp": {
+      "codigo": "type Contador struct {\n\tmu      sync.Mutex\n\tvalor   int\n\tfechado bool\n}\n\nfunc (c *Contador) Incrementar() error {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock() // Unlock garantido em todos os caminhos de retorno\n\tif c.fechado {\n\t\treturn errors.New(\"fechado\")\n\t}\n\tc.valor++\n\treturn nil\n}",
+      "porque": "defer c.mu.Unlock() logo após o Lock garante a liberação em todos os retornos, inclusive o de erro; não há trava residual."
+    }
+  },
+  "__fallback__": {
+    "definicao": "Alerta de segurança de uma CWE não coberta por ficha específica. Trate-o como uma possível fraqueza cujo veredito depende de dois fatores: se a entrada suspeita é controlável por um agente externo e se o efeito perigoso é de fato alcançável em produção.",
+    "heuristica_go": "Sem sinal específico de pacote: avaliar alcançabilidade e mitigação. É VP quando dado de origem externa (r.URL.Query, r.FormValue, r.Body, os.Args, variáveis de ambiente, arquivos de terceiros) chega ao ponto perigoso sem validação, sanitização ou verificação, e o caminho é atingível em produção. É FP quando a entrada é constante/confiável, já foi validada antes do ponto, o código é de teste/exemplo, ou o caminho é inalcançável (morto, atrás de flag desligada).",
+    "exemplo_vp": {
+      "codigo": "func manipular(w http.ResponseWriter, r *http.Request) {\n\tentrada := r.URL.Query().Get(\"x\")\n\toperacaoPerigosa(entrada) // entrada externa alcança a operação sem validação\n}",
+      "porque": "Dado controlado pelo cliente (r.URL.Query) chega à operação perigosa sem qualquer verificação e o handler é atingível - a fraqueza é alcançável."
+    },
+    "exemplo_fp": {
+      "codigo": "func inicializar() {\n\tconst entrada = \"valor-fixo-do-binario\"\n\toperacaoPerigosa(entrada) // valor constante do binário, não influenciável\n}",
+      "porque": "A entrada da operação é uma constante embutida no binário, fora do controle de qualquer agente externo; não há vetor para explorar."
+    }
+  }
+}
