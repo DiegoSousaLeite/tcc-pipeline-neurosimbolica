@@ -1,0 +1,34 @@
+[project]
+name = "tcc-pipeline-neurosimbolica"
+version = "0.2.0"
+description = "Pipeline neuro-simbólica de triagem de alertas SAST em Go (Semgrep + LLM) — TCC UnB"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8.0",
+]
+
+[tool.ruff]
+# Sem reformatação em massa: o diff precisa continuar revisável pela banca.
+line-length = 100
+extend-exclude = ["legacy", "repos", "cache", "cache_simbolico", "apresentacao"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+# E501 (comprimento de linha) fica fora: o código atual tem docstrings longas em
+# português e reflowar tudo agora poluiria o diff sem ganho de correção.
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "tests", "run_pipeline"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

@@ -1,0 +1,1 @@
+ID_Caso,Repositorio,CWE,Origem,Modelo_LLM,Tipo_Prompt,Gabarito,Status_Semgrep,Classificacao_Semgrep,Veredito_LLM,Classificacao_LLM,Tempo_Execucao_s,Justificativa

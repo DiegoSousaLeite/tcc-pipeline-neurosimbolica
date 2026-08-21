@@ -1,0 +1,386 @@
+[
+  {
+    "repo": "argoproj/gitops-engine",
+    "cwe_id": "CWE-200",
+    "cve_ids": [
+      "CVE-2025-23216"
+    ],
+    "fix_commit": "7e21b91e9d0f64104c8a661f3f390c5e6d73ddca",
+    "parent_commit": "d78929e7f6c7e114241e7cbfa5fab14391027a2e",
+    "arquivo": "pkg/diff/diff.go",
+    "funcao": "NormalizeSecret",
+    "func_hint": "func NormalizeSecret(un *unstructured.Unstructured, opts ...Option) {",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 838,
+      "linha_fim": 880,
+      "codigo": "func NormalizeSecret(un *unstructured.Unstructured, opts ...Option) {\n\tif un == nil {\n\t\treturn\n\t}\n\tgvk := un.GroupVersionKind()\n\tif gvk.Group != \"\" || gvk.Kind != \"Secret\" {\n\t\treturn\n\t}\n\to := applyOptions(opts)\n\tvar secret corev1.Secret\n\terr := runtime.DefaultUnstructuredConverter.FromUnstructured(un.Object, &secret)\n\tif err != nil {\n\t\to.log.Error(err, \"Failed to convert from unstructured into Secret\")\n\t\treturn\n\t}\n\t// We normalize nils to empty string to handle: https://github.com/argoproj/argo-cd/issues/943\n\tfor k, v := range secret.Data {\n\t\tif len(v) == 0 {\n\t\t\tsecret.Data[k] = []byte(\"\")\n\t\t}\n\t}\n\tif len(secret.StringData) > 0 {\n\t\tif secret.Data == nil {\n\t\t\tsecret.Data = make(map[string][]byte)\n\t\t}\n\t\tfor k, v := range secret.StringData {\n\t\t\tsecret.Data[k] = []byte(v)\n\t\t}\n\t\tdelete(un.Object, \"stringData\")\n\t}\n\tnewObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&secret)\n\tif err != nil {\n\t\to.log.Error(err, \"object unable to convert from secret\")\n\t\treturn\n\t}\n\tif secret.Data != nil {\n\t\terr = unstructured.SetNestedField(un.Object, newObj[\"data\"], \"data\")\n\t\tif err != nil {\n\t\t\to.log.Error(err, \"failed to set secret.data\")\n\t\t\treturn\n\t\t}\n\t}\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 839,
+      "linha_fim": 898,
+      "codigo": "func NormalizeSecret(un *unstructured.Unstructured, opts ...Option) {\n\tif un == nil {\n\t\treturn\n\t}\n\tgvk := un.GroupVersionKind()\n\tif gvk.Group != \"\" || gvk.Kind != \"Secret\" {\n\t\treturn\n\t}\n\n\t// move stringData to data section\n\tif stringData, found, err := unstructured.NestedMap(un.Object, \"stringData\"); found && err == nil {\n\t\tvar data map[string]interface{}\n\t\tdata, found, _ = unstructured.NestedMap(un.Object, \"data\")\n\t\tif !found {\n\t\t\tdata = make(map[string]interface{})\n\t\t}\n\n\t\t// base64 encode string values and add non-string values as is.\n\t\t// This ensures that the apply fails if the secret is invalid.\n\t\tfor k, v := range stringData {\n\t\t\tstrVal, ok := v.(string)\n\t\t\tif ok {\n\t\t\t\tdata[k] = base64.StdEncoding.EncodeToString([]byte(strVal))\n\t\t\t} else {\n\t\t\t\tdata[k] = v\n\t\t\t}\n\t\t}\n\n\t\terr := unstructured.SetNestedField(un.Object, data, \"data\")\n\t\tif err == nil {\n\t\t\tdelete(un.Object, \"stringData\")\n\t\t}\n\t}\n\n\to := applyOptions(opts)\n\tvar secret corev1.Secret\n\terr := runtime.DefaultUnstructuredConverter.FromUnstructured(un.Object, &secret)\n\tif err != nil {\n\t\to.log.Error(err, \"Failed to convert from unstructured into Secret\")\n\t\treturn\n\t}\n\t// We normalize nils to empty string to handle: https://github.com/argoproj/argo-cd/issues/943\n\tfor k, v := range secret.Data {\n\t\tif len(v) == 0 {\n\t\t\tsecret.Data[k] = []byte(\"\")\n\t\t}\n\t}\n\tnewObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&secret)\n\tif err != nil {\n\t\to.log.Error(err, \"object unable to convert from secret\")\n\t\treturn\n\t}\n\tif secret.Data != nil {\n\t\terr = unstructured.SetNestedField(un.Object, newObj[\"data\"], \"data\")\n\t\tif err != nil {\n\t\t\to.log.Error(err, \"failed to set secret.data\")\n\t\t\treturn\n\t\t}\n\t}\n}"
+    }
+  },
+  {
+    "repo": "ctfer-io/chall-manager",
+    "cwe_id": "CWE-405",
+    "cve_ids": [
+      "CVE-2025-53633"
+    ],
+    "fix_commit": "e391620684f2466b75fe708f2ea75806ca9e2f82",
+    "parent_commit": "14042aa66a577caee777e10fe09adcf2587d20dd",
+    "arquivo": "pkg/scenario/decompressor.go",
+    "funcao": "copyTo",
+    "func_hint": "func (dec *Decompressor) copyTo(f *zip.File, filePath string) error {",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 91,
+      "linha_fim": 118,
+      "codigo": "func (dec *Decompressor) copyTo(f *zip.File, filePath string) error {\n\toutFile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, f.Mode())\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer outFile.Close()\n\n\trc, err := f.Open()\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer rc.Close()\n\n\tfor {\n\t\tn, err := io.CopyN(outFile, rc, blockSize)\n\t\tif err != nil {\n\t\t\tif err == io.EOF {\n\t\t\t\treturn nil\n\t\t\t}\n\t\t\treturn err\n\t\t}\n\t\tdec.currSize += n\n\n\t\tif dec.currSize > dec.MaxSize {\n\t\t\treturn ErrTooLargeContent\n\t\t}\n\t}\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 91,
+      "linha_fim": 120,
+      "codigo": "func (dec *Decompressor) copyTo(f *zip.File, filePath string) error {\n\toutFile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, f.Mode())\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer outFile.Close()\n\n\trc, err := f.Open()\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer rc.Close()\n\n\tfor {\n\t\tn, err := io.CopyN(outFile, rc, blockSize)\n\t\tif err != nil {\n\t\t\tif err == io.EOF {\n\t\t\t\treturn nil\n\t\t\t}\n\t\t\treturn err\n\t\t}\n\t\tdec.currSize += n\n\n\t\tif dec.MaxSize > 0 && dec.currSize > dec.MaxSize {\n\t\t\treturn ErrTooLargeContent{\n\t\t\t\tMaxSize: dec.MaxSize,\n\t\t\t}\n\t\t}\n\t}\n}"
+    }
+  },
+  {
+    "repo": "go-vela/server",
+    "cwe_id": "CWE-290",
+    "cve_ids": [
+      "CVE-2025-27616"
+    ],
+    "fix_commit": "257886e5a3eea518548387885894e239668584f5",
+    "parent_commit": "ff7c877f9ac113691dbd930af5b15ded5b0c3e63",
+    "arquivo": "router/middleware/header.go",
+    "funcao": "Options",
+    "func_hint": "func Options(c *gin.Context) {",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 27,
+      "linha_fim": 47,
+      "codigo": "func Options(c *gin.Context) {\n\tm := c.MustGet(\"metadata\").(*internal.Metadata)\n\n\tif c.Request.Method != \"OPTIONS\" {\n\t\tc.Next()\n\t} else {\n\t\tc.Header(\"Access-Control-Allow-Origin\", \"*\")\n\n\t\tif len(m.Vela.WebAddress) > 0 {\n\t\t\tc.Header(\"Access-Control-Allow-Origin\", m.Vela.WebAddress)\n\t\t\tc.Header(\"Access-Control-Allow-Credentials\", \"true\")\n\t\t}\n\n\t\tc.Header(\"Access-Control-Allow-Methods\", \"GET,POST,PUT,PATCH,DELETE,OPTIONS\")\n\t\tc.Header(\"Access-Control-Allow-Headers\", \"authorization, origin, content-type, accept\")\n\t\tc.Header(\"Access-Control-Max-Age\", \"86400\")\n\t\tc.Header(\"Allow\", \"HEAD,GET,POST,PUT,PATCH,DELETE,OPTIONS\")\n\t\tc.Header(\"Content-Type\", \"application/json\")\n\t\tc.AbortWithStatus(http.StatusOK)\n\t}\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 27,
+      "linha_fim": 48,
+      "codigo": "func Options(c *gin.Context) {\n\tm := c.MustGet(\"metadata\").(*internal.Metadata)\n\n\tif c.Request.Method != \"OPTIONS\" {\n\t\tc.Next()\n\t} else {\n\t\tc.Header(\"Access-Control-Allow-Origin\", \"*\")\n\n\t\torigin := CorsAllowOrigin(c, m)\n\t\tif len(origin) > 0 {\n\t\t\tc.Header(\"Access-Control-Allow-Origin\", origin)\n\t\t\tc.Header(\"Access-Control-Allow-Credentials\", \"true\")\n\t\t}\n\n\t\tc.Header(\"Access-Control-Allow-Methods\", \"GET,POST,PUT,PATCH,DELETE,OPTIONS\")\n\t\tc.Header(\"Access-Control-Allow-Headers\", \"authorization, origin, content-type, accept\")\n\t\tc.Header(\"Access-Control-Max-Age\", \"86400\")\n\t\tc.Header(\"Allow\", \"HEAD,GET,POST,PUT,PATCH,DELETE,OPTIONS\")\n\t\tc.Header(\"Content-Type\", \"application/json\")\n\t\tc.AbortWithStatus(http.StatusOK)\n\t}\n}"
+    }
+  },
+  {
+    "repo": "go-vela/server",
+    "cwe_id": "CWE-290",
+    "cve_ids": [
+      "CVE-2025-27616"
+    ],
+    "fix_commit": "257886e5a3eea518548387885894e239668584f5",
+    "parent_commit": "ff7c877f9ac113691dbd930af5b15ded5b0c3e63",
+    "arquivo": "router/middleware/header.go",
+    "funcao": "Cors",
+    "func_hint": "func Cors(c *gin.Context) {",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 63,
+      "linha_fim": 74,
+      "codigo": "func Cors(c *gin.Context) {\n\tm := c.MustGet(\"metadata\").(*internal.Metadata)\n\n\tc.Header(\"Access-Control-Allow-Origin\", \"*\")\n\n\tif len(m.Vela.WebAddress) > 0 {\n\t\tc.Header(\"Access-Control-Allow-Origin\", m.Vela.WebAddress)\n\t\tc.Header(\"Access-Control-Allow-Credentials\", \"true\")\n\t}\n\n\tc.Header(\"Access-Control-Expose-Headers\", \"link, x-total-count\")\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 64,
+      "linha_fim": 76,
+      "codigo": "func Cors(c *gin.Context) {\n\tm := c.MustGet(\"metadata\").(*internal.Metadata)\n\n\tc.Header(\"Access-Control-Allow-Origin\", \"*\")\n\n\torigin := CorsAllowOrigin(c, m)\n\tif len(origin) > 0 {\n\t\tc.Header(\"Access-Control-Allow-Origin\", origin)\n\t\tc.Header(\"Access-Control-Allow-Credentials\", \"true\")\n\t}\n\n\tc.Header(\"Access-Control-Expose-Headers\", \"link, x-total-count\")\n}"
+    }
+  },
+  {
+    "repo": "justinas/nosurf",
+    "cwe_id": "CWE-352",
+    "cve_ids": [
+      "CVE-2025-46721"
+    ],
+    "fix_commit": "ec9bb776d8e5ba9e906b6eb70428f4e7b009feee",
+    "parent_commit": "e5c9c1fe2d4f69668ff78f872abf3b396a08673a",
+    "arquivo": "handler.go",
+    "funcao": "ServeHTTP",
+    "func_hint": "func (h *CSRFHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 116,
+      "linha_fim": 181,
+      "codigo": "func (h *CSRFHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {\n\tr = addNosurfContext(r)\n\tdefer ctxClear(r)\n\tw.Header().Add(\"Vary\", \"Cookie\")\n\n\tvar realToken []byte\n\n\ttokenCookie, err := r.Cookie(h.getCookieName())\n\tif err == nil {\n\t\trealToken = b64decode(tokenCookie.Value)\n\t}\n\n\t// If the length of the real token isn't what it should be,\n\t// it has either been tampered with,\n\t// or we're migrating onto a new algorithm for generating tokens,\n\t// or it hasn't ever been set so far.\n\t// In any case of those, we should regenerate it.\n\t//\n\t// As a consequence, CSRF check will fail when comparing the tokens later on,\n\t// so we don't have to fail it just yet.\n\tif len(realToken) != tokenLength {\n\t\th.RegenerateToken(w, r)\n\t} else {\n\t\tctxSetToken(r, realToken)\n\t}\n\n\tif sContains(safeMethods, r.Method) || h.IsExempt(r) {\n\t\t// short-circuit with a success for safe methods\n\t\th.handleSuccess(w, r)\n\t\treturn\n\t}\n\n\t// if the request is secure, we enforce origin check\n\t// for referer to prevent MITM of http->https requests\n\tif r.URL.Scheme == \"https\" {\n\t\treferer, err := url.Parse(r.Header.Get(\"Referer\"))\n\n\t\t// if we can't parse the referer or it's empty,\n\t\t// we assume it's not specified\n\t\tif err != nil || referer.String() == \"\" {\n\t\t\tctxSetReason(r, ErrNoReferer)\n\t\t\th.handleFailure(w, r)\n\t\t\treturn\n\t\t}\n\n\t\t// if the referer doesn't share origin with the request URL,\n\t\t// we have another error for that\n\t\tif !sameOrigin(referer, r.URL) {\n\t\t\tctxSetReason(r, ErrBadReferer)\n\t\t\th.handleFailure(w, r)\n\t\t\treturn\n\t\t}\n\t}\n\n\t// Finally, we check the token itself.\n\tsentToken := extractToken(r)\n\n\tif !verifyToken(realToken, sentToken) {\n\t\tctxSetReason(r, ErrBadToken)\n\t\th.handleFailure(w, r)\n\t\treturn\n\t}\n\n\t// Everything else passed, handle the success.\n\th.handleSuccess(w, r)\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 123,
+      "linha_fim": 172,
+      "codigo": "func (h *CSRFHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {\n\tr = addNosurfContext(r)\n\tdefer ctxClear(r)\n\tw.Header().Add(\"Vary\", \"Cookie\")\n\n\tvar realToken []byte\n\n\ttokenCookie, err := r.Cookie(h.getCookieName())\n\tif err == nil {\n\t\trealToken = b64decode(tokenCookie.Value)\n\t}\n\n\t// If the length of the real token isn't what it should be,\n\t// it has either been tampered with,\n\t// or we're migrating onto a new algorithm for generating tokens,\n\t// or it hasn't ever been set so far.\n\t// In any case of those, we should regenerate it.\n\t//\n\t// As a consequence, CSRF check will fail when comparing the tokens later on,\n\t// so we don't have to fail it just yet.\n\tif len(realToken) != tokenLength {\n\t\th.RegenerateToken(w, r)\n\t} else {\n\t\tctxSetToken(r, realToken)\n\t}\n\n\tif sContains(safeMethods, r.Method) || h.IsExempt(r) {\n\t\t// short-circuit with a success for safe methods\n\t\th.handleSuccess(w, r)\n\t\treturn\n\t}\n\n\tif err := h.ensureSameOrigin(r); err != nil {\n\t\tctxSetReason(r, err)\n\t\th.handleFailure(w, r)\n\t\treturn\n\t}\n\n\t// Finally, we check the token itself.\n\tsentToken := extractToken(r)\n\n\tif !verifyToken(realToken, sentToken) {\n\t\tctxSetReason(r, ErrBadToken)\n\t\th.handleFailure(w, r)\n\t\treturn\n\t}\n\n\t// Everything else passed, handle the success.\n\th.handleSuccess(w, r)\n}"
+    }
+  },
+  {
+    "repo": "nrkno/terraform-provider-windns",
+    "cwe_id": "CWE-77",
+    "cve_ids": [
+      "CVE-2025-46735"
+    ],
+    "fix_commit": "c76f69610c1b502f90aaed8c4f102194530b5bce",
+    "parent_commit": "83ef736ca9b02018fffd8254a79e0b6026298e04",
+    "arquivo": "internal/dnshelper/dns.go",
+    "funcao": "Update",
+    "func_hint": "func (r *Record) Update(ctx context.Context, conf *config.ProviderConf, changes",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 166,
+      "linha_fim": 196,
+      "codigo": "func (r *Record) Update(ctx context.Context, conf *config.ProviderConf, changes map[string]interface{}) error {\n\texisting, err := GetDNSRecordFromId(ctx, conf, r.Id())\n\tif err != nil {\n\t\treturn err\n\t}\n\tif changes[\"records\"] == nil {\n\t\treturn nil\n\t}\n\tvar records []string\n\texpectedRecords := changes[\"records\"].(*schema.Set)\n\n\tfor _, v := range expectedRecords.List() {\n\t\trecords = append(records, SanitiseString(v.(string)))\n\t}\n\n\ttoAdd, toRemove := diffRecordLists(records, existing.Records)\n\tfor _, recordData := range toAdd {\n\t\terr = r.addRecordData(conf, recordData)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\n\tfor _, recordData := range toRemove {\n\t\terr = r.removeRecordData(conf, recordData)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 184,
+      "linha_fim": 218,
+      "codigo": "func (r *Record) Update(ctx context.Context, conf *config.ProviderConf, changes map[string]interface{}) error {\n\texisting, err := GetDNSRecordFromId(ctx, conf, r.Id())\n\tif err != nil {\n\t\treturn err\n\t}\n\tif changes[\"records\"] == nil {\n\t\treturn nil\n\t}\n\tvar records []string\n\texpectedRecords := changes[\"records\"].(*schema.Set)\n\n\tfor _, v := range expectedRecords.List() {\n\t\tsanitizedInput, err := SanitizeInputString(existing.RecordType, v.(string))\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\trecords = append(records, sanitizedInput)\n\t}\n\n\ttoAdd, toRemove := diffRecordLists(records, existing.Records)\n\tfor _, recordData := range toAdd {\n\t\terr = r.addRecordData(conf, recordData)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\n\tfor _, recordData := range toRemove {\n\t\terr = r.removeRecordData(conf, recordData)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}"
+    }
+  },
+  {
+    "repo": "nrkno/terraform-provider-windns",
+    "cwe_id": "CWE-77",
+    "cve_ids": [
+      "CVE-2025-46735"
+    ],
+    "fix_commit": "c76f69610c1b502f90aaed8c4f102194530b5bce",
+    "parent_commit": "83ef736ca9b02018fffd8254a79e0b6026298e04",
+    "arquivo": "internal/dnshelper/dns.go",
+    "funcao": "addRecordData",
+    "func_hint": "func (r *Record) addRecordData(conf *config.ProviderConf, recordData string) err",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 209,
+      "linha_fim": 249,
+      "codigo": "func (r *Record) addRecordData(conf *config.ProviderConf, recordData string) error {\n\tcmd := fmt.Sprintf(\"Add-DNSServerResourceRecord -ZoneName %s -name %s -%s\", r.ZoneName, r.HostName, r.RecordType)\n\n\tif r.RecordType == RecordTypeA {\n\t\tcmd = fmt.Sprintf(\"%s -IPv4Address %s\", cmd, recordData)\n\t} else if r.RecordType == RecordTypeAAAA {\n\t\tcmd = fmt.Sprintf(\"%s -IPv6Address %s\", cmd, strings.ToLower(recordData))\n\t} else if r.RecordType == RecordTypeTXT {\n\t\tcmd = fmt.Sprintf(\"%s -DescriptiveText %s\", cmd, recordData)\n\t} else if r.RecordType == RecordTypePTR {\n\t\tcmd = fmt.Sprintf(\"%s -PtrDomainName %s\", cmd, recordData)\n\t} else if r.RecordType == RecordTypeCNAME {\n\t\tcmd = fmt.Sprintf(\"%s -HostNameAlias %s\", cmd, recordData)\n\t} else {\n\t\treturn fmt.Errorf(\"record type %s is not supported\", r.RecordType)\n\t}\n\n\tif (r.RecordType == RecordTypeA || r.RecordType == RecordTypeAAAA) && r.CreatePtr {\n\t\tcmd = fmt.Sprintf(\"%s -CreatePtr\", cmd)\n\t}\n\n\tpsOpts := CreatePSCommandOpts{\n\t\tJSONOutput: false,\n\t\tForceArray: false,\n\t\tUsername:   conf.Settings.SshUsername,\n\t\tPassword:   conf.Settings.SshPassword,\n\t\tServer:     conf.Settings.DnsServer,\n\t}\n\tpsCmd := NewPSCommand([]string{cmd}, psOpts)\n\n\tresult, err := psCmd.Run(conf)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"ssh execution failure while creating a DNS object: %s\", err)\n\t}\n\n\tif result.ExitCode != 0 {\n\t\tfmt.Printf(\"CMD: %s\", psCmd.String())\n\t\treturn fmt.Errorf(\"Add-DnsServerResourceRecord exited with a non zero exit code (%d), stderr: %s\", result.ExitCode, result.StdErr)\n\t}\n\treturn nil\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 231,
+      "linha_fim": 271,
+      "codigo": "func (r *Record) addRecordData(conf *config.ProviderConf, recordData string) error {\n\tcmd := fmt.Sprintf(\"Add-DNSServerResourceRecord -ZoneName %s -name %s -%s\", r.ZoneName, r.HostName, r.RecordType)\n\n\tif r.RecordType == RecordTypeA {\n\t\tcmd = fmt.Sprintf(\"%s -IPv4Address %s\", cmd, recordData)\n\t} else if r.RecordType == RecordTypeAAAA {\n\t\tcmd = fmt.Sprintf(\"%s -IPv6Address %s\", cmd, strings.ToLower(recordData))\n\t} else if r.RecordType == RecordTypeTXT {\n\t\tcmd = fmt.Sprintf(\"%s -DescriptiveText \\\"%s\\\"\", cmd, recordData)\n\t} else if r.RecordType == RecordTypePTR {\n\t\tcmd = fmt.Sprintf(\"%s -PtrDomainName %s\", cmd, recordData)\n\t} else if r.RecordType == RecordTypeCNAME {\n\t\tcmd = fmt.Sprintf(\"%s -HostNameAlias %s\", cmd, recordData)\n\t} else {\n\t\treturn fmt.Errorf(\"record type %s is not supported\", r.RecordType)\n\t}\n\n\tif (r.RecordType == RecordTypeA || r.RecordType == RecordTypeAAAA) && r.CreatePtr {\n\t\tcmd = fmt.Sprintf(\"%s -CreatePtr\", cmd)\n\t}\n\n\tpsOpts := CreatePSCommandOpts{\n\t\tJSONOutput: false,\n\t\tForceArray: false,\n\t\tUsername:   conf.Settings.SshUsername,\n\t\tPassword:   conf.Settings.SshPassword,\n\t\tServer:     conf.Settings.DnsServer,\n\t}\n\tpsCmd := NewPSCommand([]string{cmd}, psOpts)\n\n\tresult, err := psCmd.Run(conf)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"ssh execution failure while creating a DNS object: %s\", err)\n\t}\n\n\tif result.ExitCode != 0 {\n\t\tfmt.Printf(\"CMD: %s\", psCmd.String())\n\t\treturn fmt.Errorf(\"Add-DnsServerResourceRecord exited with a non zero exit code (%d), stderr: %s\", result.ExitCode, result.StdErr)\n\t}\n\treturn nil\n}"
+    }
+  },
+  {
+    "repo": "nrkno/terraform-provider-windns",
+    "cwe_id": "CWE-77",
+    "cve_ids": [
+      "CVE-2025-46735"
+    ],
+    "fix_commit": "c76f69610c1b502f90aaed8c4f102194530b5bce",
+    "parent_commit": "83ef736ca9b02018fffd8254a79e0b6026298e04",
+    "arquivo": "internal/provider/resource_win_dns_record.go",
+    "funcao": "resourceDNSRecordUpdate",
+    "func_hint": "func resourceDNSRecordUpdate(ctx context.Context, d *schema.ResourceData, meta i",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 114,
+      "linha_fim": 129,
+      "codigo": "func resourceDNSRecordUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {\n\trecord := dnshelper.NewDNSRecordFromResource(d)\n\tkeys := []string{\"records\"}\n\tchanges := make(map[string]interface{})\n\tfor _, key := range keys {\n\t\tif d.HasChange(key) {\n\t\t\tchanges[key] = d.Get(key)\n\t\t}\n\t}\n\n\terr := record.Update(ctx, meta.(*config.ProviderConf), changes)\n\tif err != nil {\n\t\treturn diag.Errorf(\"error while updating record with id %q: %s\", d.Id(), err)\n\t}\n\treturn resourceDNSRecordRead(ctx, d, meta)\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 117,
+      "linha_fim": 135,
+      "codigo": "func resourceDNSRecordUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {\n\trecord, err := dnshelper.NewDNSRecordFromResource(d)\n\tif err != nil {\n\t\treturn diag.Errorf(\"error when mapping input data: %s\", err)\n\t}\n\tkeys := []string{\"records\"}\n\tchanges := make(map[string]interface{})\n\tfor _, key := range keys {\n\t\tif d.HasChange(key) {\n\t\t\tchanges[key] = d.Get(key)\n\t\t}\n\t}\n\n\terr = record.Update(ctx, meta.(*config.ProviderConf), changes)\n\tif err != nil {\n\t\treturn diag.Errorf(\"error while updating record with id %q: %s\", d.Id(), err)\n\t}\n\treturn resourceDNSRecordRead(ctx, d, meta)\n}"
+    }
+  },
+  {
+    "repo": "nrkno/terraform-provider-windns",
+    "cwe_id": "CWE-77",
+    "cve_ids": [
+      "CVE-2025-46735"
+    ],
+    "fix_commit": "c76f69610c1b502f90aaed8c4f102194530b5bce",
+    "parent_commit": "83ef736ca9b02018fffd8254a79e0b6026298e04",
+    "arquivo": "internal/provider/resource_win_dns_record.go",
+    "funcao": "resourceDNSRecordDelete",
+    "func_hint": "func resourceDNSRecordDelete(ctx context.Context, d *schema.ResourceData, meta i",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 131,
+      "linha_fim": 142,
+      "codigo": "func resourceDNSRecordDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {\n\tif d.Id() == \"\" {\n\t\treturn nil\n\t}\n\trecord := dnshelper.NewDNSRecordFromResource(d)\n\terr := record.Delete(meta.(*config.ProviderConf))\n\tif err != nil {\n\t\treturn diag.Errorf(\"error while deleting a record object with id %q: %s\", d.Id(), err)\n\t}\n\n\treturn nil\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 137,
+      "linha_fim": 152,
+      "codigo": "func resourceDNSRecordDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {\n\tif d.Id() == \"\" {\n\t\treturn nil\n\t}\n\trecord, err := dnshelper.NewDNSRecordFromResource(d)\n\tif err != nil {\n\t\treturn diag.Errorf(\"error when mapping input data: %s\", err)\n\t}\n\n\terr = record.Delete(meta.(*config.ProviderConf))\n\tif err != nil {\n\t\treturn diag.Errorf(\"error while deleting a record object with id %q: %s\", d.Id(), err)\n\t}\n\n\treturn nil\n}"
+    }
+  },
+  {
+    "repo": "octo-sts/app",
+    "cwe_id": "CWE-918",
+    "cve_ids": [
+      "CVE-2025-52477"
+    ],
+    "fix_commit": "0f177fde54f9318e33f0bba6abaea9463a7c3afd",
+    "parent_commit": "b3976e39bd8c8c217c0670747d34a4499043da92",
+    "arquivo": "pkg/octosts/octosts.go",
+    "funcao": "Exchange",
+    "func_hint": "func (s *sts) Exchange(ctx context.Context, request *pboidc.ExchangeRequest) (_",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 74,
+      "linha_fim": 194,
+      "codigo": "func (s *sts) Exchange(ctx context.Context, request *pboidc.ExchangeRequest) (_ *pboidc.RawToken, err error) {\n\tclog.FromContext(ctx).Infof(\"exchange request: %#v\", request.GetIdentity())\n\te := Event{\n\t\tScope:    request.Scope,\n\t\tIdentity: request.Identity,\n\t}\n\tif s.metrics {\n\t\tdefer func() {\n\t\t\tevent := cloudevents.NewEvent()\n\t\t\tevent.SetType(\"dev.octo-sts.exchange\")\n\t\t\tevent.SetSubject(fmt.Sprintf(\"%s/%s\", request.Scope, request.Identity))\n\t\t\tevent.SetSource(fmt.Sprintf(\"https://%s\", s.domain))\n\t\t\tif err != nil {\n\t\t\t\te.Error = err.Error()\n\t\t\t}\n\t\t\tif err := event.SetData(cloudevents.ApplicationJSON, e); err != nil {\n\t\t\t\tclog.FromContext(ctx).Infof(\"Failed to encode event payload: %v\", err)\n\t\t\t\treturn\n\t\t\t}\n\t\t\trctx := cloudevents.ContextWithRetriesExponentialBackoff(context.WithoutCancel(ctx), retryDelay, maxRetry)\n\t\t\tif ceresult := s.ceclient.Send(rctx, event); cloudevents.IsUndelivered(ceresult) || cloudevents.IsNACK(ceresult) {\n\t\t\t\tclog.FromContext(ctx).Errorf(\"Failed to deliver event: %v\", ceresult)\n\t\t\t}\n\t\t}()\n\t}\n\n\t// Extract the incoming bearer token.\n\tmd, ok := metadata.FromIncomingContext(ctx)\n\tif !ok {\n\t\treturn nil, status.Error(codes.Unauthenticated, \"no metadata found\")\n\t}\n\tauth := md.Get(\"authorization\")\n\tif len(auth) != 1 {\n\t\treturn nil, status.Error(codes.Unauthenticated, \"expected exactly one authorization header\")\n\t}\n\tbearer := strings.TrimPrefix(auth[0], \"Bearer \")\n\n\t// Validate the Bearer token.\n\tissuer, err := apiauth.ExtractIssuer(bearer)\n\tif err != nil {\n\t\treturn nil, status.Errorf(codes.InvalidArgument, \"invalid bearer token: %v\", err)\n\t}\n\n\t// Validate issuer format\n\tif !oidcvalidate.IsValidIssuer(issuer) {\n\t\treturn nil, status.Error(codes.InvalidArgument, \"invalid issuer format\")\n\t}\n\n\t// Fetch the provider from the cache or create a new one and add to the cache\n\tp, err := provider.Get(ctx, issuer)\n\tif err != nil {\n\t\treturn nil, status.Errorf(codes.InvalidArgument, \"unable to fetch or create the provider: %v\", err)\n\t}\n\n\tverifier := p.Verifier(&oidc.Config{\n\t\t// The audience is verified later on by the trust policy.\n\t\tSkipClientIDCheck: true,\n\t})\n\ttok, err := verifier.Verify(ctx, bearer)\n\tif err != nil {\n\t\treturn nil, status.Errorf(codes.Unauthenticated, \"unable to validate token: %v\", err)\n\t}\n\t// This is typically overwritten below, but we populate this here to enrich\n\t// certain error paths with the issuer and subject.\n\te.Actor = Actor{\n\t\tIssuer:  tok.Issuer,\n\t\tSubject: tok.Subject,\n\t}\n\n\te.InstallationID, e.TrustPolicy, err = s.lookupInstallAndTrustPolicy(ctx, request.Scope, request.Identity)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tclog.FromContext(ctx).Infof(\"trust policy: %#v\", e.TrustPolicy)\n\n\t// Check the token against the federation rules.\n\te.Actor, err = e.TrustPolicy.CheckToken(tok, s.domain)\n\tif err != nil {\n\t\tclog.FromContext(ctx).Warnf(\"token does not match trust policy: %v\", err)\n\t\treturn nil, err\n\t}\n\n\t// Synthesize a token for the requested scope and permissions based on the\n\t// trust policy.\n\tatr := ghinstallation.NewFromAppsTransport(s.atr, e.InstallationID)\n\tatr.InstallationTokenOptions = &github.InstallationTokenOptions{\n\t\tRepositories: e.TrustPolicy.Repositories,\n\t\tPermissions:  &e.TrustPolicy.Permissions,\n\t}\n\ttoken, err := atr.Token(ctx)\n\tif err != nil {\n\t\tvar herr *ghinstallation.HTTPError\n\t\tif errors.As(err, &herr) {\n\t\t\t// Github returns a 422 response when something is off, and the\n\t\t\t// transport surfaces a not useful error message, but Github\n\t\t\t// actually has a pretty reasonable error message in the response\n\t\t\t// body typically, so extract that.\n\t\t\tif herr.Response.StatusCode == http.StatusUnprocessableEntity {\n\t\t\t\tif body, err := io.ReadAll(herr.Response.Body); err == nil {\n\t\t\t\t\treturn nil, status.Errorf(codes.PermissionDenied, \"token exchange failure: %s\", body)\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\tbody, err := httputil.DumpResponse(herr.Response, true)\n\t\t\t\tif err == nil {\n\t\t\t\t\tclog.FromContext(ctx).Warnf(\"token exchange failure: %s\", body)\n\t\t\t\t}\n\t\t\t}\n\t\t} else {\n\t\t\tclog.FromContext(ctx).Warnf(\"token exchange failure: %v\", err)\n\t\t}\n\t\treturn nil, status.Errorf(codes.Internal, \"failed to get token: %v\", err)\n\t}\n\n\t// Compute the SHA256 hash of the token and store the hex-encoded value into e.TokenSHA256\n\thash := sha256.Sum256([]byte(token))\n\te.TokenSHA256 = hex.EncodeToString(hash[:])\n\n\treturn &pboidc.RawToken{\n\t\tToken: token,\n\t}, nil\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 74,
+      "linha_fim": 202,
+      "codigo": "func (s *sts) Exchange(ctx context.Context, request *pboidc.ExchangeRequest) (_ *pboidc.RawToken, err error) {\n\tclog.FromContext(ctx).Infof(\"exchange request: %#v\", request.GetIdentity())\n\te := Event{\n\t\tScope:    request.Scope,\n\t\tIdentity: request.Identity,\n\t}\n\tif s.metrics {\n\t\tdefer func() {\n\t\t\tevent := cloudevents.NewEvent()\n\t\t\tevent.SetType(\"dev.octo-sts.exchange\")\n\t\t\tevent.SetSubject(fmt.Sprintf(\"%s/%s\", request.Scope, request.Identity))\n\t\t\tevent.SetSource(fmt.Sprintf(\"https://%s\", s.domain))\n\t\t\tif err != nil {\n\t\t\t\te.Error = err.Error()\n\t\t\t}\n\t\t\tif err := event.SetData(cloudevents.ApplicationJSON, e); err != nil {\n\t\t\t\tclog.FromContext(ctx).Infof(\"Failed to encode event payload: %v\", err)\n\t\t\t\treturn\n\t\t\t}\n\t\t\trctx := cloudevents.ContextWithRetriesExponentialBackoff(context.WithoutCancel(ctx), retryDelay, maxRetry)\n\t\t\tif ceresult := s.ceclient.Send(rctx, event); cloudevents.IsUndelivered(ceresult) || cloudevents.IsNACK(ceresult) {\n\t\t\t\tclog.FromContext(ctx).Errorf(\"Failed to deliver event: %v\", ceresult)\n\t\t\t}\n\t\t}()\n\t}\n\n\t// Extract the incoming bearer token.\n\tmd, ok := metadata.FromIncomingContext(ctx)\n\tif !ok {\n\t\treturn nil, status.Error(codes.Unauthenticated, \"no metadata found\")\n\t}\n\tauth := md.Get(\"authorization\")\n\tif len(auth) != 1 {\n\t\treturn nil, status.Error(codes.Unauthenticated, \"expected exactly one authorization header\")\n\t}\n\tbearer := strings.TrimPrefix(auth[0], \"Bearer \")\n\n\t// Validate the Bearer token.\n\tissuer, err := apiauth.ExtractIssuer(bearer)\n\tif err != nil {\n\t\tclog.FromContext(ctx).Debugf(\"invalid bearer token: %v\", err)\n\t\treturn nil, status.Error(codes.InvalidArgument, \"invalid bearer token\")\n\t}\n\n\t// Validate issuer format\n\tif !oidcvalidate.IsValidIssuer(issuer) {\n\t\treturn nil, status.Error(codes.InvalidArgument, \"invalid issuer format\")\n\t}\n\n\t// Fetch the provider from the cache or create a new one and add to the cache\n\tp, err := provider.Get(ctx, issuer)\n\tif err != nil {\n\t\tclog.FromContext(ctx).Debugf(\"unable to fetch or create the provider: %v\", err)\n\t\treturn nil, status.Error(codes.InvalidArgument, \"unable to fetch or create the provider\")\n\t}\n\n\tverifier := p.Verifier(&oidc.Config{\n\t\t// The audience is verified later on by the trust policy.\n\t\tSkipClientIDCheck: true,\n\t})\n\ttok, err := verifier.Verify(ctx, bearer)\n\tif err != nil {\n\t\tclog.FromContext(ctx).Debugf(\"unable to validate token: %v\", err)\n\t\treturn nil, status.Error(codes.Unauthenticated, \"unable to verify bearer token\")\n\t}\n\t// This is typically overwritten below, but we populate this here to enrich\n\t// certain error paths with the issuer and subject.\n\te.Actor = Actor{\n\t\tIssuer:  tok.Issuer,\n\t\tSubject: tok.Subject,\n\t}\n\n\te.InstallationID, e.TrustPolicy, err = s.lookupInstallAndTrustPolicy(ctx, request.Scope, request.Identity)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tclog.FromContext(ctx).Infof(\"trust policy: %#v\", e.TrustPolicy)\n\n\t// Check the token against the federation rules.\n\te.Actor, err = e.TrustPolicy.CheckToken(tok, s.domain)\n\tif err != nil {\n\t\tclog.FromContext(ctx).Warnf(\"token does not match trust policy: %v\", err)\n\t\treturn nil, err\n\t}\n\n\t// Synthesize a token for the requested scope and permissions based on the\n\t// trust policy.\n\tatr := ghinstallation.NewFromAppsTransport(s.atr, e.InstallationID)\n\tatr.InstallationTokenOptions = &github.InstallationTokenOptions{\n\t\tRepositories: e.TrustPolicy.Repositories,\n\t\tPermissions:  &e.TrustPolicy.Permissions,\n\t}\n\ttoken, err := atr.Token(ctx)\n\tif err != nil {\n\t\tvar herr *ghinstallation.HTTPError\n\t\tif errors.As(err, &herr) {\n\t\t\t// Github returns a 422 response when something is off, and the\n\t\t\t// transport surfaces a not useful error message, but Github\n\t\t\t// actually has a pretty reasonable error message in the response\n\t\t\t// body typically, so extract that.\n\t\t\tif herr.Response.StatusCode == http.StatusUnprocessableEntity {\n\t\t\t\tif body, err := io.ReadAll(herr.Response.Body); err == nil {\n\t\t\t\t\tclog.FromContext(ctx).Debugf(\"token exchange failure (StatusUnprocessableEntity): %s\", body)\n\t\t\t\t\treturn nil, status.Error(codes.PermissionDenied, \"token exchange failure (StatusUnprocessableEntity)\")\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\tbody, err := httputil.DumpResponse(herr.Response, true)\n\t\t\t\tif err == nil {\n\t\t\t\t\tclog.FromContext(ctx).Warn(\"token exchange failure, redacting body in logs\")\n\t\t\t\t\t// Log the response body in debug mode only, as it may contain sensitive information.\n\t\t\t\t\tclog.FromContext(ctx).Debugf(\"token exchange failure: %s\", body)\n\t\t\t\t}\n\t\t\t}\n\t\t} else {\n\t\t\tclog.FromContext(ctx).Debugf(\"token exchange failure: %v\", err)\n\t\t\tclog.FromContext(ctx).Warn(\"token exchange failure, redacting error in logs\")\n\t\t}\n\t\tclog.FromContext(ctx).Debugf(\"failed to get token: %v\", err)\n\t\treturn nil, status.Error(codes.Internal, \"failed to get token\")\n\t}\n\n\t// Compute the SHA256 hash of the token and store the hex-encoded value into e.TokenSHA256\n\thash := sha256.Sum256([]byte(token))\n\te.TokenSHA256 = hex.EncodeToString(hash[:])\n\n\treturn &pboidc.RawToken{\n\t\tToken: token,\n\t}, nil\n}"
+    }
+  },
+  {
+    "repo": "osrg/gobgp",
+    "cwe_id": "CWE-119",
+    "cve_ids": [
+      "CVE-2025-7464"
+    ],
+    "fix_commit": "e748f43496d74946d14fed85c776452e47b99d64",
+    "parent_commit": "defe9ac1b1f1c854d1941a5b70dee3aaed6fb960",
+    "arquivo": "pkg/packet/rtr/rtr.go",
+    "funcao": "SplitRTR",
+    "func_hint": "func SplitRTR(data []byte, atEOF bool) (advance int, token []byte, err error) {",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 373,
+      "linha_fim": 386,
+      "codigo": "func SplitRTR(data []byte, atEOF bool) (advance int, token []byte, err error) {\n\tif atEOF && len(data) == 0 || len(data) < RTR_MIN_LEN {\n\t\treturn 0, nil, nil\n\t}\n\n\ttotalLen := binary.BigEndian.Uint32(data[4:8])\n\tif totalLen < RTR_MIN_LEN {\n\t\treturn 0, nil, fmt.Errorf(\"invalid length: %d\", totalLen)\n\t}\n\tif uint32(len(data)) < totalLen {\n\t\treturn 0, nil, nil\n\t}\n\treturn int(totalLen), data[0:totalLen], nil\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 373,
+      "linha_fim": 386,
+      "codigo": "func SplitRTR(data []byte, atEOF bool) (advance int, token []byte, err error) {\n\tif atEOF && len(data) == 0 || len(data) < RTR_MIN_LEN {\n\t\treturn 0, nil, nil\n\t}\n\n\ttotalLen := binary.BigEndian.Uint32(data[4:8])\n\tif totalLen < RTR_MIN_LEN {\n\t\treturn 0, nil, fmt.Errorf(\"invalid length: %d\", totalLen)\n\t}\n\tif len(data) < int(totalLen) {\n\t\treturn 0, nil, nil\n\t}\n\treturn int(totalLen), data[0:totalLen], nil\n}"
+    }
+  },
+  {
+    "repo": "portainer/portainer",
+    "cwe_id": "CWE-200",
+    "cve_ids": [
+      "CVE-2025-49593"
+    ],
+    "fix_commit": "384cb53c64af78af8e1ac7ef5b0f91bad530e989",
+    "parent_commit": "4240cbf029d76fc7d00d016ba76b88c8f050166f",
+    "arquivo": "api/http/proxy/factory/reverse_proxy.go",
+    "funcao": "newSingleHostReverseProxyWithHostHeader",
+    "func_hint": "func newSingleHostReverseProxyWithHostHeader(target *url.URL) *httputil.ReverseP",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 13,
+      "linha_fim": 31,
+      "codigo": "func newSingleHostReverseProxyWithHostHeader(target *url.URL) *httputil.ReverseProxy {\n\ttargetQuery := target.RawQuery\n\tdirector := func(req *http.Request) {\n\t\treq.URL.Scheme = target.Scheme\n\t\treq.URL.Host = target.Host\n\t\treq.URL.Path = singleJoiningSlash(target.Path, req.URL.Path)\n\t\treq.Host = req.URL.Host\n\t\tif targetQuery == \"\" || req.URL.RawQuery == \"\" {\n\t\t\treq.URL.RawQuery = targetQuery + req.URL.RawQuery\n\t\t} else {\n\t\t\treq.URL.RawQuery = targetQuery + \"&\" + req.URL.RawQuery\n\t\t}\n\t\tif _, ok := req.Header[\"User-Agent\"]; !ok {\n\t\t\t// explicitly disable User-Agent so it's not set to default value\n\t\t\treq.Header.Set(\"User-Agent\", \"\")\n\t\t}\n\t}\n\treturn &httputil.ReverseProxy{Director: director}\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 32,
+      "linha_fim": 56,
+      "codigo": "func createDirector(target *url.URL) func(*http.Request) {\n\ttargetQuery := target.RawQuery\n\treturn func(req *http.Request) {\n\t\treq.URL.Scheme = target.Scheme\n\t\treq.URL.Host = target.Host\n\t\treq.URL.Path = singleJoiningSlash(target.Path, req.URL.Path)\n\t\treq.Host = req.URL.Host\n\t\tif targetQuery == \"\" || req.URL.RawQuery == \"\" {\n\t\t\treq.URL.RawQuery = targetQuery + req.URL.RawQuery\n\t\t} else {\n\t\t\treq.URL.RawQuery = targetQuery + \"&\" + req.URL.RawQuery\n\t\t}\n\t\tif _, ok := req.Header[\"User-Agent\"]; !ok {\n\t\t\t// explicitly disable User-Agent so it's not set to default value\n\t\t\treq.Header.Set(\"User-Agent\", \"\")\n\t\t}\n\n\t\tfor k := range req.Header {\n\t\t\tif _, ok := allowedHeaders[k]; !ok {\n\t\t\t\t// We use delete here instead of req.Header.Del because we want to delete non canonical headers.\n\t\t\t\tdelete(req.Header, k)\n\t\t\t}\n\t\t}\n\t}\n}"
+    }
+  },
+  {
+    "repo": "project-zot/zot",
+    "cwe_id": "CWE-532",
+    "cve_ids": [
+      "CVE-2025-48374"
+    ],
+    "fix_commit": "8a99a3ed231fdcd8467e986182b4705342b6a15e",
+    "parent_commit": "af4a46b331a408a096f43200a306b0f4378dec4a",
+    "arquivo": "pkg/api/config/config.go",
+    "funcao": "Sanitize",
+    "func_hint": "func (c *Config) Sanitize() *Config {",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 327,
+      "linha_fim": 359,
+      "codigo": "func (c *Config) Sanitize() *Config {\n\tsanitizedConfig := &Config{}\n\n\tif err := DeepCopy(c, sanitizedConfig); err != nil {\n\t\tpanic(err)\n\t}\n\n\tif c.HTTP.Auth != nil && c.HTTP.Auth.LDAP != nil && c.HTTP.Auth.LDAP.bindPassword != \"\" {\n\t\tsanitizedConfig.HTTP.Auth.LDAP = &LDAPConfig{}\n\n\t\tif err := DeepCopy(c.HTTP.Auth.LDAP, sanitizedConfig.HTTP.Auth.LDAP); err != nil {\n\t\t\tpanic(err)\n\t\t}\n\n\t\tsanitizedConfig.HTTP.Auth.LDAP.bindPassword = \"******\"\n\t}\n\n\tif c.IsEventRecorderEnabled() {\n\t\tfor i, sink := range c.Extensions.Events.Sinks {\n\t\t\tif sink.Credentials == nil {\n\t\t\t\tcontinue\n\t\t\t}\n\n\t\t\tif err := DeepCopy(&c.Extensions.Events.Sinks[i], &sanitizedConfig.Extensions.Events.Sinks[i]); err != nil {\n\t\t\t\tpanic(err)\n\t\t\t}\n\n\t\t\tsanitizedConfig.Extensions.Events.Sinks[i].Credentials.Password = \"******\"\n\t\t}\n\t}\n\n\treturn sanitizedConfig\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 327,
+      "linha_fim": 381,
+      "codigo": "func (c *Config) Sanitize() *Config {\n\tsanitizedConfig := &Config{}\n\n\tif err := DeepCopy(c, sanitizedConfig); err != nil {\n\t\tpanic(err)\n\t}\n\n\t// Sanitize HTTP config\n\tif c.HTTP.Auth != nil {\n\t\t// Sanitize LDAP bind password\n\t\tif c.HTTP.Auth.LDAP != nil && c.HTTP.Auth.LDAP.bindPassword != \"\" {\n\t\t\tsanitizedConfig.HTTP.Auth.LDAP = &LDAPConfig{}\n\n\t\t\tif err := DeepCopy(c.HTTP.Auth.LDAP, sanitizedConfig.HTTP.Auth.LDAP); err != nil {\n\t\t\t\tpanic(err)\n\t\t\t}\n\n\t\t\tsanitizedConfig.HTTP.Auth.LDAP.bindPassword = \"******\"\n\t\t}\n\n\t\t// Sanitize OpenID client secrets\n\t\tif c.HTTP.Auth.OpenID != nil {\n\t\t\tsanitizedConfig.HTTP.Auth.OpenID = &OpenIDConfig{\n\t\t\t\tProviders: make(map[string]OpenIDProviderConfig),\n\t\t\t}\n\n\t\t\tfor provider, config := range c.HTTP.Auth.OpenID.Providers {\n\t\t\t\tsanitizedConfig.HTTP.Auth.OpenID.Providers[provider] = OpenIDProviderConfig{\n\t\t\t\t\tName:         config.Name,\n\t\t\t\t\tClientID:     config.ClientID,\n\t\t\t\t\tClientSecret: \"******\",\n\t\t\t\t\tKeyPath:      config.KeyPath,\n\t\t\t\t\tIssuer:       config.Issuer,\n\t\t\t\t\tScopes:       config.Scopes,\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\tif c.IsEventRecorderEnabled() {\n\t\tfor i, sink := range c.Extensions.Events.Sinks {\n\t\t\tif sink.Credentials == nil {\n\t\t\t\tcontinue\n\t\t\t}\n\n\t\t\tif err := DeepCopy(&c.Extensions.Events.Sinks[i], &sanitizedConfig.Extensions.Events.Sinks[i]); err != nil {\n\t\t\t\tpanic(err)\n\t\t\t}\n\n\t\t\tsanitizedConfig.Extensions.Events.Sinks[i].Credentials.Password = \"******\"\n\t\t}\n\t}\n\n\treturn sanitizedConfig\n}"
+    }
+  },
+  {
+    "repo": "quic-go/quic-go",
+    "cwe_id": "CWE-248",
+    "cve_ids": [
+      "CVE-2025-29785"
+    ],
+    "fix_commit": "b90058aba5f65f48e0e150c89bbaa21a72dda4de",
+    "parent_commit": "d726a795db8391d29b180f684f74b223d40471a1",
+    "arquivo": "internal/ackhandler/sent_packet_handler.go",
+    "funcao": "detectAndRemoveAckedPackets",
+    "func_hint": "func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 425,
+      "linha_fim": 502,
+      "codigo": "func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]*packet, error) {\n\tpnSpace := h.getPacketNumberSpace(encLevel)\n\th.ackedPackets = h.ackedPackets[:0]\n\tackRangeIndex := 0\n\tlowestAcked := ack.LowestAcked()\n\tlargestAcked := ack.LargestAcked()\n\tfor p := range pnSpace.history.Packets() {\n\t\t// ignore packets below the lowest acked\n\t\tif p.PacketNumber < lowestAcked {\n\t\t\tcontinue\n\t\t}\n\t\tif p.PacketNumber > largestAcked {\n\t\t\tbreak\n\t\t}\n\n\t\tif ack.HasMissingRanges() {\n\t\t\tackRange := ack.AckRanges[len(ack.AckRanges)-1-ackRangeIndex]\n\n\t\t\tfor p.PacketNumber > ackRange.Largest && ackRangeIndex < len(ack.AckRanges)-1 {\n\t\t\t\tackRangeIndex++\n\t\t\t\tackRange = ack.AckRanges[len(ack.AckRanges)-1-ackRangeIndex]\n\t\t\t}\n\n\t\t\tif p.PacketNumber < ackRange.Smallest { // packet not contained in ACK range\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tif p.PacketNumber > ackRange.Largest {\n\t\t\t\treturn nil, fmt.Errorf(\"BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d\", p.PacketNumber, ackRange.Smallest, ackRange.Largest)\n\t\t\t}\n\t\t}\n\t\tif p.skippedPacket {\n\t\t\treturn nil, &qerr.TransportError{\n\t\t\t\tErrorCode:    qerr.ProtocolViolation,\n\t\t\t\tErrorMessage: fmt.Sprintf(\"received an ACK for skipped packet number: %d (%s)\", p.PacketNumber, encLevel),\n\t\t\t}\n\t\t}\n\t\tif p.isPathProbePacket {\n\t\t\tprobePacket := pnSpace.history.RemovePathProbe(p.PacketNumber)\n\t\t\tif probePacket == nil {\n\t\t\t\tpanic(fmt.Sprintf(\"path probe doesn't exist: %d\", p.PacketNumber))\n\t\t\t}\n\t\t\th.ackedPackets = append(h.ackedPackets, probePacket)\n\t\t\tcontinue\n\t\t}\n\t\th.ackedPackets = append(h.ackedPackets, p)\n\t}\n\tif h.logger.Debug() && len(h.ackedPackets) > 0 {\n\t\tpns := make([]protocol.PacketNumber, len(h.ackedPackets))\n\t\tfor i, p := range h.ackedPackets {\n\t\t\tpns[i] = p.PacketNumber\n\t\t}\n\t\th.logger.Debugf(\"\\tnewly acked packets (%d): %d\", len(pns), pns)\n\t}\n\n\tfor _, p := range h.ackedPackets {\n\t\tif p.LargestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {\n\t\t\th.lowestNotConfirmedAcked = max(h.lowestNotConfirmedAcked, p.LargestAcked+1)\n\t\t}\n\n\t\tfor _, f := range p.Frames {\n\t\t\tif f.Handler != nil {\n\t\t\t\tf.Handler.OnAcked(f.Frame)\n\t\t\t}\n\t\t}\n\t\tfor _, f := range p.StreamFrames {\n\t\t\tif f.Handler != nil {\n\t\t\t\tf.Handler.OnAcked(f.Frame)\n\t\t\t}\n\t\t}\n\t\tif err := pnSpace.history.Remove(p.PacketNumber); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tif h.tracer != nil && h.tracer.AcknowledgedPacket != nil {\n\t\t\th.tracer.AcknowledgedPacket(encLevel, p.PacketNumber)\n\t\t}\n\t}\n\treturn h.ackedPackets, nil\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 425,
+      "linha_fim": 502,
+      "codigo": "func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]*packet, error) {\n\tpnSpace := h.getPacketNumberSpace(encLevel)\n\th.ackedPackets = h.ackedPackets[:0]\n\tackRangeIndex := 0\n\tlowestAcked := ack.LowestAcked()\n\tlargestAcked := ack.LargestAcked()\n\tfor p := range pnSpace.history.Packets() {\n\t\t// ignore packets below the lowest acked\n\t\tif p.PacketNumber < lowestAcked {\n\t\t\tcontinue\n\t\t}\n\t\tif p.PacketNumber > largestAcked {\n\t\t\tbreak\n\t\t}\n\n\t\tif ack.HasMissingRanges() {\n\t\t\tackRange := ack.AckRanges[len(ack.AckRanges)-1-ackRangeIndex]\n\n\t\t\tfor p.PacketNumber > ackRange.Largest && ackRangeIndex < len(ack.AckRanges)-1 {\n\t\t\t\tackRangeIndex++\n\t\t\t\tackRange = ack.AckRanges[len(ack.AckRanges)-1-ackRangeIndex]\n\t\t\t}\n\n\t\t\tif p.PacketNumber < ackRange.Smallest { // packet not contained in ACK range\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tif p.PacketNumber > ackRange.Largest {\n\t\t\t\treturn nil, fmt.Errorf(\"BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d\", p.PacketNumber, ackRange.Smallest, ackRange.Largest)\n\t\t\t}\n\t\t}\n\t\tif p.skippedPacket {\n\t\t\treturn nil, &qerr.TransportError{\n\t\t\t\tErrorCode:    qerr.ProtocolViolation,\n\t\t\t\tErrorMessage: fmt.Sprintf(\"received an ACK for skipped packet number: %d (%s)\", p.PacketNumber, encLevel),\n\t\t\t}\n\t\t}\n\t\tif p.isPathProbePacket {\n\t\t\tprobePacket := pnSpace.history.RemovePathProbe(p.PacketNumber)\n\t\t\t// the probe packet might already have been declared lost\n\t\t\tif probePacket != nil {\n\t\t\t\th.ackedPackets = append(h.ackedPackets, probePacket)\n\t\t\t}\n\t\t\tcontinue\n\t\t}\n\t\th.ackedPackets = append(h.ackedPackets, p)\n\t}\n\tif h.logger.Debug() && len(h.ackedPackets) > 0 {\n\t\tpns := make([]protocol.PacketNumber, len(h.ackedPackets))\n\t\tfor i, p := range h.ackedPackets {\n\t\t\tpns[i] = p.PacketNumber\n\t\t}\n\t\th.logger.Debugf(\"\\tnewly acked packets (%d): %d\", len(pns), pns)\n\t}\n\n\tfor _, p := range h.ackedPackets {\n\t\tif p.LargestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {\n\t\t\th.lowestNotConfirmedAcked = max(h.lowestNotConfirmedAcked, p.LargestAcked+1)\n\t\t}\n\n\t\tfor _, f := range p.Frames {\n\t\t\tif f.Handler != nil {\n\t\t\t\tf.Handler.OnAcked(f.Frame)\n\t\t\t}\n\t\t}\n\t\tfor _, f := range p.StreamFrames {\n\t\t\tif f.Handler != nil {\n\t\t\t\tf.Handler.OnAcked(f.Frame)\n\t\t\t}\n\t\t}\n\t\tif err := pnSpace.history.Remove(p.PacketNumber); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tif h.tracer != nil && h.tracer.AcknowledgedPacket != nil {\n\t\t\th.tracer.AcknowledgedPacket(encLevel, p.PacketNumber)\n\t\t}\n\t}\n\treturn h.ackedPackets, nil\n}"
+    }
+  },
+  {
+    "repo": "quic-go/quic-go",
+    "cwe_id": "CWE-248",
+    "cve_ids": [
+      "CVE-2025-29785"
+    ],
+    "fix_commit": "b90058aba5f65f48e0e150c89bbaa21a72dda4de",
+    "parent_commit": "d726a795db8391d29b180f684f74b223d40471a1",
+    "arquivo": "internal/ackhandler/sent_packet_handler.go",
+    "funcao": "detectLostPathProbes",
+    "func_hint": "func (h *sentPacketHandler) detectLostPathProbes(now time.Time) {",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 645,
+      "linha_fim": 664,
+      "codigo": "func (h *sentPacketHandler) detectLostPathProbes(now time.Time) {\n\tif !h.appDataPackets.history.HasOutstandingPathProbes() {\n\t\treturn\n\t}\n\tlossTime := now.Add(-pathProbePacketLossTimeout)\n\t// RemovePathProbe cannot be called while iterating.\n\tvar lostPathProbes []*packet\n\tfor p := range h.appDataPackets.history.PathProbes() {\n\t\tif !p.SendTime.After(lossTime) {\n\t\t\tlostPathProbes = append(lostPathProbes, p)\n\t\t}\n\t}\n\tfor _, p := range lostPathProbes {\n\t\tfor _, f := range p.Frames {\n\t\t\tf.Handler.OnLost(f.Frame)\n\t\t}\n\t\th.appDataPackets.history.Remove(p.PacketNumber)\n\t\th.appDataPackets.history.RemovePathProbe(p.PacketNumber)\n\t}\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 645,
+      "linha_fim": 663,
+      "codigo": "func (h *sentPacketHandler) detectLostPathProbes(now time.Time) {\n\tif !h.appDataPackets.history.HasOutstandingPathProbes() {\n\t\treturn\n\t}\n\tlossTime := now.Add(-pathProbePacketLossTimeout)\n\t// RemovePathProbe cannot be called while iterating.\n\tvar lostPathProbes []*packet\n\tfor p := range h.appDataPackets.history.PathProbes() {\n\t\tif !p.SendTime.After(lossTime) {\n\t\t\tlostPathProbes = append(lostPathProbes, p)\n\t\t}\n\t}\n\tfor _, p := range lostPathProbes {\n\t\tfor _, f := range p.Frames {\n\t\t\tf.Handler.OnLost(f.Frame)\n\t\t}\n\t\th.appDataPackets.history.RemovePathProbe(p.PacketNumber)\n\t}\n}"
+    }
+  },
+  {
+    "repo": "siyuan-note/siyuan",
+    "cwe_id": "CWE-459",
+    "cve_ids": [
+      "CVE-2025-21609"
+    ],
+    "fix_commit": "d9887aeec1b27073bec66299a9a4181dc42969f3",
+    "parent_commit": "98819ca4c780ab0064a255aa1df0c42c065707ef",
+    "arquivo": "kernel/model/history.go",
+    "funcao": "GetDocHistoryContent",
+    "func_hint": "func GetDocHistoryContent(historyPath, keyword string, highlight bool) (id, root",
+    "vulneravel": {
+      "metodo": "funcao",
+      "linha_inicio": 150,
+      "linha_fim": 221,
+      "codigo": "func GetDocHistoryContent(historyPath, keyword string, highlight bool) (id, rootID, content string, isLargeDoc bool, err error) {\n\tif !gulu.File.IsExist(historyPath) {\n\t\tlogging.LogWarnf(\"doc history [%s] not exist\", historyPath)\n\t\treturn\n\t}\n\n\tdata, err := filelock.ReadFile(historyPath)\n\tif err != nil {\n\t\tlogging.LogErrorf(\"read file [%s] failed: %s\", historyPath, err)\n\t\treturn\n\t}\n\tisLargeDoc = 1024*1024*1 <= len(data)\n\n\tluteEngine := NewLute()\n\thistoryTree, err := filesys.ParseJSONWithoutFix(data, luteEngine.ParseOptions)\n\tif err != nil {\n\t\tlogging.LogErrorf(\"parse tree from file [%s] failed, remove it\", historyPath)\n\t\tos.RemoveAll(historyPath)\n\t\treturn\n\t}\n\tid = historyTree.Root.ID\n\trootID = historyTree.Root.ID\n\n\tif !isLargeDoc {\n\t\trenderTree := &parse.Tree{Root: &ast.Node{Type: ast.NodeDocument}}\n\t\tkeyword = strings.Join(strings.Split(keyword, \" \"), search.TermSep)\n\t\tkeywords := search.SplitKeyword(keyword)\n\n\t\tvar unlinks []*ast.Node\n\t\tast.Walk(historyTree.Root, func(n *ast.Node, entering bool) ast.WalkStatus {\n\t\t\tif !entering {\n\t\t\t\treturn ast.WalkContinue\n\t\t\t}\n\n\t\t\t// 数据历史浏览时忽略内容块折叠状态 https://github.com/siyuan-note/siyuan/issues/5778\n\t\t\tn.RemoveIALAttr(\"heading-fold\")\n\t\t\tn.RemoveIALAttr(\"fold\")\n\n\t\t\tif highlight && 0 < len(keywords) {\n\t\t\t\tif markReplaceSpan(n, &unlinks, keywords, search.MarkDataType, luteEngine) {\n\t\t\t\t\treturn ast.WalkContinue\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn ast.WalkContinue\n\t\t})\n\n\t\tfor _, unlink := range unlinks {\n\t\t\tunlink.Unlink()\n\t\t}\n\n\t\tvar appends []*ast.Node\n\t\tfor n := historyTree.Root.FirstChild; nil != n; n = n.Next {\n\t\t\tappends = append(appends, n)\n\t\t}\n\t\tfor _, n := range appends {\n\t\t\trenderTree.Root.AppendChild(n)\n\t\t}\n\n\t\thistoryTree = renderTree\n\t}\n\n\t// 禁止文档历史内容可编辑 https://github.com/siyuan-note/siyuan/issues/6580\n\tluteEngine.RenderOptions.ProtyleContenteditable = false\n\tif isLargeDoc {\n\t\tutil.PushMsg(Conf.Language(36), 5000)\n\t\tformatRenderer := render.NewFormatRenderer(historyTree, luteEngine.RenderOptions)\n\t\tcontent = gulu.Str.FromBytes(formatRenderer.Render())\n\t} else {\n\t\tcontent = luteEngine.Tree2BlockDOM(historyTree, luteEngine.RenderOptions)\n\t}\n\treturn\n}"
+    },
+    "corrigido": {
+      "metodo": "funcao",
+      "linha_inicio": 151,
+      "linha_fim": 228,
+      "codigo": "func GetDocHistoryContent(historyPath, keyword string, highlight bool) (id, rootID, content string, isLargeDoc bool, err error) {\n\tif !util.IsAbsPathInWorkspace(historyPath) {\n\t\tmsg := \"Path [\" + historyPath + \"] is not in workspace\"\n\t\tlogging.LogErrorf(msg)\n\t\terr = errors.New(msg)\n\t\treturn\n\t}\n\n\tif !gulu.File.IsExist(historyPath) {\n\t\tlogging.LogWarnf(\"doc history [%s] not exist\", historyPath)\n\t\treturn\n\t}\n\n\tdata, err := filelock.ReadFile(historyPath)\n\tif err != nil {\n\t\tlogging.LogErrorf(\"read file [%s] failed: %s\", historyPath, err)\n\t\treturn\n\t}\n\tisLargeDoc = 1024*1024*1 <= len(data)\n\n\tluteEngine := NewLute()\n\thistoryTree, err := filesys.ParseJSONWithoutFix(data, luteEngine.ParseOptions)\n\tif err != nil {\n\t\tlogging.LogErrorf(\"parse tree from file [%s] failed: %s\", historyPath, err)\n\t\treturn\n\t}\n\tid = historyTree.Root.ID\n\trootID = historyTree.Root.ID\n\n\tif !isLargeDoc {\n\t\trenderTree := &parse.Tree{Root: &ast.Node{Type: ast.NodeDocument}}\n\t\tkeyword = strings.Join(strings.Split(keyword, \" \"), search.TermSep)\n\t\tkeywords := search.SplitKeyword(keyword)\n\n\t\tvar unlinks []*ast.Node\n\t\tast.Walk(historyTree.Root, func(n *ast.Node, entering bool) ast.WalkStatus {\n\t\t\tif !entering {\n\t\t\t\treturn ast.WalkContinue\n\t\t\t}\n\n\t\t\t// 数据历史浏览时忽略内容块折叠状态 https://github.com/siyuan-note/siyuan/issues/5778\n\t\t\tn.RemoveIALAttr(\"heading-fold\")\n\t\t\tn.RemoveIALAttr(\"fold\")\n\n\t\t\tif highlight && 0 < len(keywords) {\n\t\t\t\tif markReplaceSpan(n, &unlinks, keywords, search.MarkDataType, luteEngine) {\n\t\t\t\t\treturn ast.WalkContinue\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn ast.WalkContinue\n\t\t})\n\n\t\tfor _, unlink := range unlinks {\n\t\t\tunlink.Unlink()\n\t\t}\n\n\t\tvar appends []*ast.Node\n\t\tfor n := historyTree.Root.FirstChild; nil != n; n = n.Next {\n\t\t\tappends = append(appends, n)\n\t\t}\n\t\tfor _, n := range appends {\n\t\t\trenderTree.Root.AppendChild(n)\n\t\t}\n\n\t\thistoryTree = renderTree\n\t}\n\n\t// 禁止文档历史内容可编辑 https://github.com/siyuan-note/siyuan/issues/6580\n\tluteEngine.RenderOptions.ProtyleContenteditable = false\n\tif isLargeDoc {\n\t\tutil.PushMsg(Conf.Language(36), 5000)\n\t\tformatRenderer := render.NewFormatRenderer(historyTree, luteEngine.RenderOptions)\n\t\tcontent = gulu.Str.FromBytes(formatRenderer.Render())\n\t} else {\n\t\tcontent = luteEngine.Tree2BlockDOM(historyTree, luteEngine.RenderOptions)\n\t}\n\treturn\n}"
+    }
+  }
+]

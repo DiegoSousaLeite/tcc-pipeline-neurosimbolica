@@ -1,0 +1,562 @@
+[
+  {
+    "repo_name": "argoproj/argo-cd",
+    "repo_dir": "argo-cd",
+    "cwe_id": "CWE-200",
+    "cve_ids": [
+      "CVE-2025-55190"
+    ],
+    "commit_dataset": "5e5c4b7d03629d5f3a4c8a0f224478a0b4a122cb",
+    "fix_commit": "a70b2293a06be06dbb5fb30d0925331e72a6de14",
+    "fix_source": "osv:CVE-2025-55190",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/argoproj/argo-cd @ a70b2293a06be06dbb5fb30d0925331e72a6de14",
+      "https://github.com/argoproj/argo-cd @ 2bb617d02a7d888acaa3544862d3d174ea510816",
+      "https://github.com/argoproj/argo-cd @ 5a4ef23d96676d13e991ce970d88ba868728ff89",
+      "https://github.com/argoproj/argo-cd @ 791b036d983452402ed4aa0c96a7a9d47842871c"
+    ]
+  },
+  {
+    "repo_name": "argoproj/gitops-engine",
+    "repo_dir": "gitops-engine",
+    "cwe_id": "CWE-200",
+    "cve_ids": [
+      "CVE-2025-23216"
+    ],
+    "commit_dataset": "d78929e7f6c7e114241e7cbfa5fab14391027a2e",
+    "fix_commit": "7e21b91e9d0f64104c8a661f3f390c5e6d73ddca",
+    "fix_source": "osv:CVE-2025-23216",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/argoproj/argo-cd @ 102853d31a22e2031ad76bdc0b673d61c7c2cd89",
+      "https://github.com/argoproj/argo-cd @ 6c2db334e9540279717c9dd91dda5a93cd466cfe",
+      "https://github.com/argoproj/argo-cd @ bc51fa16de64271ba7aa973af94479e87b579899",
+      "https://github.com/argoproj/gitops-engine @ 7e21b91e9d0f64104c8a661f3f390c5e6d73ddca"
+    ]
+  },
+  {
+    "repo_name": "argoproj/gitops-engine",
+    "repo_dir": "gitops-engine",
+    "cwe_id": "CWE-209",
+    "cve_ids": [
+      "CVE-2025-23216"
+    ],
+    "commit_dataset": "d78929e7f6c7e114241e7cbfa5fab14391027a2e",
+    "fix_commit": "7e21b91e9d0f64104c8a661f3f390c5e6d73ddca",
+    "fix_source": "osv:CVE-2025-23216",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/argoproj/argo-cd @ 102853d31a22e2031ad76bdc0b673d61c7c2cd89",
+      "https://github.com/argoproj/argo-cd @ 6c2db334e9540279717c9dd91dda5a93cd466cfe",
+      "https://github.com/argoproj/argo-cd @ bc51fa16de64271ba7aa973af94479e87b579899",
+      "https://github.com/argoproj/gitops-engine @ 7e21b91e9d0f64104c8a661f3f390c5e6d73ddca"
+    ]
+  },
+  {
+    "repo_name": "beego/beego",
+    "repo_dir": "beego",
+    "cwe_id": "CWE-79",
+    "cve_ids": [
+      "CVE-2025-30223"
+    ],
+    "commit_dataset": "1f40a88b0ccc861dee094371aeeb29a3f70a2ee6",
+    "fix_commit": "5fa33bc11b947d0ddd0f68eb0cb8903741900f00",
+    "fix_source": "osv:CVE-2025-30223",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/beego/beego @ 5fa33bc11b947d0ddd0f68eb0cb8903741900f00"
+    ]
+  },
+  {
+    "repo_name": "ctfer-io/chall-manager",
+    "repo_dir": "chall-manager",
+    "cwe_id": "CWE-22",
+    "cve_ids": [
+      "CVE-2025-53632"
+    ],
+    "commit_dataset": "33d71763f4b8401d6cd6fca30afc8afc8a3837d5",
+    "fix_commit": "e391620684f2466b75fe708f2ea75806ca9e2f82",
+    "fix_source": "osv:CVE-2025-53632",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/ctfer-io/chall-manager @ e391620684f2466b75fe708f2ea75806ca9e2f82"
+    ]
+  },
+  {
+    "repo_name": "ctfer-io/chall-manager",
+    "repo_dir": "chall-manager",
+    "cwe_id": "CWE-405",
+    "cve_ids": [
+      "CVE-2025-53633"
+    ],
+    "commit_dataset": "3be55f5900fbb3b5c39911334912ecbd55f4f18f",
+    "fix_commit": "e391620684f2466b75fe708f2ea75806ca9e2f82",
+    "fix_source": "osv:CVE-2025-53633",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/ctfer-io/chall-manager @ e391620684f2466b75fe708f2ea75806ca9e2f82"
+    ]
+  },
+  {
+    "repo_name": "drakkan/sftpgo",
+    "repo_dir": "sftpgo",
+    "cwe_id": "CWE-78",
+    "cve_ids": [
+      "CVE-2025-24366"
+    ],
+    "commit_dataset": "4611d05d7fa1a7effa1d04e0d4eaec36ab4fb5a6",
+    "fix_commit": "d924811e1fe68cf6fdc87ee99a438f77df8793b5",
+    "fix_source": "osv:CVE-2025-24366",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/drakkan/sftpgo @ d924811e1fe68cf6fdc87ee99a438f77df8793b5"
+    ]
+  },
+  {
+    "repo_name": "go-vela/server",
+    "repo_dir": "server",
+    "cwe_id": "CWE-290",
+    "cve_ids": [
+      "CVE-2025-27616"
+    ],
+    "commit_dataset": "ff7c877f9ac113691dbd930af5b15ded5b0c3e63",
+    "fix_commit": "257886e5a3eea518548387885894e239668584f5",
+    "fix_source": "osv:CVE-2025-27616",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/go-vela/server @ 257886e5a3eea518548387885894e239668584f5",
+      "https://github.com/go-vela/server @ 67c1892e2464dc54b8d2588815dfb7819222500b",
+      "https://github.com/go-vela/server @ 67c1892e2464dc54b8d2588815dfb7819222500b",
+      "https://github.com/go-vela/server @ 15195c5a0eb8c3d662c6c4fa8299b94ad351e3eb"
+    ]
+  },
+  {
+    "repo_name": "go-vela/server",
+    "repo_dir": "server",
+    "cwe_id": "CWE-345",
+    "cve_ids": [
+      "CVE-2025-27616"
+    ],
+    "commit_dataset": "ff7c877f9ac113691dbd930af5b15ded5b0c3e63",
+    "fix_commit": "257886e5a3eea518548387885894e239668584f5",
+    "fix_source": "osv:CVE-2025-27616",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/go-vela/server @ 257886e5a3eea518548387885894e239668584f5",
+      "https://github.com/go-vela/server @ 67c1892e2464dc54b8d2588815dfb7819222500b",
+      "https://github.com/go-vela/server @ 67c1892e2464dc54b8d2588815dfb7819222500b",
+      "https://github.com/go-vela/server @ 15195c5a0eb8c3d662c6c4fa8299b94ad351e3eb"
+    ]
+  },
+  {
+    "repo_name": "harness/harness",
+    "repo_dir": "harness",
+    "cwe_id": "CWE-22",
+    "cve_ids": [
+      "CVE-2025-58158"
+    ],
+    "commit_dataset": "be0de1abd3db3bf97483a285dfc42309d2cb5da6",
+    "fix_commit": "c7470a71a698fe91f07dc0a6630e594db3354ad3",
+    "fix_source": "osv:CVE-2025-58158",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/harness/harness @ c7470a71a698fe91f07dc0a6630e594db3354ad3"
+    ]
+  },
+  {
+    "repo_name": "harness/harness",
+    "repo_dir": "harness",
+    "cwe_id": "CWE-73",
+    "cve_ids": [
+      "CVE-2025-58158"
+    ],
+    "commit_dataset": "be0de1abd3db3bf97483a285dfc42309d2cb5da6",
+    "fix_commit": "c7470a71a698fe91f07dc0a6630e594db3354ad3",
+    "fix_source": "osv:CVE-2025-58158",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/harness/harness @ c7470a71a698fe91f07dc0a6630e594db3354ad3"
+    ]
+  },
+  {
+    "repo_name": "justinas/nosurf",
+    "repo_dir": "nosurf",
+    "cwe_id": "CWE-352",
+    "cve_ids": [
+      "CVE-2025-46721"
+    ],
+    "commit_dataset": "e5c9c1fe2d4f69668ff78f872abf3b396a08673a",
+    "fix_commit": "ec9bb776d8e5ba9e906b6eb70428f4e7b009feee",
+    "fix_source": "osv:CVE-2025-46721",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/justinas/nosurf @ ec9bb776d8e5ba9e906b6eb70428f4e7b009feee"
+    ]
+  },
+  {
+    "repo_name": "kubewarden/kubewarden-controller",
+    "repo_dir": "kubewarden-controller",
+    "cwe_id": "CWE-155",
+    "cve_ids": [
+      "CVE-2025-24376"
+    ],
+    "commit_dataset": "7b8705a7cd4da20823b79b85e6f3e949de492609",
+    "fix_commit": "2548ba11bc17eb989434191e89a432726dd56dd0",
+    "fix_source": "osv:CVE-2025-24376",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/kubewarden/kubewarden-controller @ 2548ba11bc17eb989434191e89a432726dd56dd0"
+    ]
+  },
+  {
+    "repo_name": "kyverno/kyverno",
+    "repo_dir": "kyverno",
+    "cwe_id": "CWE-20",
+    "cve_ids": [
+      "CVE-2025-47281"
+    ],
+    "commit_dataset": "53d08d8095b98deba672c9bd2b2d1393b4b312a8",
+    "fix_commit": "40572b667e42a5234110e9b1492a7cc52f9a9bd0",
+    "fix_source": "osv:CVE-2025-47281",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/kyverno/kyverno @ 40572b667e42a5234110e9b1492a7cc52f9a9bd0"
+    ]
+  },
+  {
+    "repo_name": "kyverno/kyverno",
+    "repo_dir": "kyverno",
+    "cwe_id": "CWE-248",
+    "cve_ids": [
+      "CVE-2025-47281"
+    ],
+    "commit_dataset": "53d08d8095b98deba672c9bd2b2d1393b4b312a8",
+    "fix_commit": "40572b667e42a5234110e9b1492a7cc52f9a9bd0",
+    "fix_source": "osv:CVE-2025-47281",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/kyverno/kyverno @ 40572b667e42a5234110e9b1492a7cc52f9a9bd0"
+    ]
+  },
+  {
+    "repo_name": "kyverno/kyverno",
+    "repo_dir": "kyverno",
+    "cwe_id": "CWE-285",
+    "cve_ids": [
+      "CVE-2025-29778"
+    ],
+    "commit_dataset": "5f42a0bad8ca0812b676f11f8674f87403ca2367",
+    "fix_commit": "1d276d71bc62d2ec17184f80821fbead34d6aff7",
+    "fix_source": "osv:CVE-2025-29778",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/kyverno/kyverno @ 1d276d71bc62d2ec17184f80821fbead34d6aff7"
+    ]
+  },
+  {
+    "repo_name": "lxc/incus",
+    "repo_dir": "incus",
+    "cwe_id": "CWE-863",
+    "cve_ids": [
+      "CVE-2025-52890"
+    ],
+    "commit_dataset": "c2b310d3ed1915256ff1b847d52a4e2af6ff4cfa",
+    "fix_commit": "254dfd2483ab8de39b47c2258b7f1cf0759231c8",
+    "fix_source": "osv:CVE-2025-52890",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/lxc/incus @ 254dfd2483ab8de39b47c2258b7f1cf0759231c8"
+    ]
+  },
+  {
+    "repo_name": "lxc/incus",
+    "repo_dir": "incus",
+    "cwe_id": "CWE-770",
+    "cve_ids": [
+      "CVE-2025-52889"
+    ],
+    "commit_dataset": "d137a063c2fe2a6983c995ba75c03731bee1557d",
+    "fix_commit": "2516fb19ad8428454cb4edfe70c0a5f0dc1da214",
+    "fix_source": "osv:CVE-2025-52889",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/lxc/incus @ 2516fb19ad8428454cb4edfe70c0a5f0dc1da214",
+      "https://github.com/lxc/incus @ a7c33301738aede3c035063e973b1d885d9bac7c"
+    ]
+  },
+  {
+    "repo_name": "navidrome/navidrome",
+    "repo_dir": "navidrome",
+    "cwe_id": "CWE-89",
+    "cve_ids": [
+      "CVE-2025-48949"
+    ],
+    "commit_dataset": "175964b17a8bdd092e59b91d99cd81b61506b837",
+    "fix_commit": "b19d5f0d3e079639904cac95735228f445c798b6",
+    "fix_source": "osv:CVE-2025-48949",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/navidrome/navidrome @ b19d5f0d3e079639904cac95735228f445c798b6"
+    ]
+  },
+  {
+    "repo_name": "nrkno/terraform-provider-windns",
+    "repo_dir": "terraform-provider-windns",
+    "cwe_id": "CWE-77",
+    "cve_ids": [
+      "CVE-2025-46735"
+    ],
+    "commit_dataset": "83ef736ca9b02018fffd8254a79e0b6026298e04",
+    "fix_commit": "c76f69610c1b502f90aaed8c4f102194530b5bce",
+    "fix_source": "osv:CVE-2025-46735",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/nrkno/terraform-provider-windns @ c76f69610c1b502f90aaed8c4f102194530b5bce"
+    ]
+  },
+  {
+    "repo_name": "oauth2-proxy/oauth2-proxy",
+    "repo_dir": "oauth2-proxy",
+    "cwe_id": "CWE-290",
+    "cve_ids": [
+      "CVE-2025-54576"
+    ],
+    "commit_dataset": "f4b33b64bd66ad28e9b0d63bea51837b83c00ca1",
+    "fix_commit": "c0a928ededa40391baeedf8c5f3e104c047bfb6e",
+    "fix_source": "osv:CVE-2025-54576",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/oauth2-proxy/oauth2-proxy @ c0a928ededa40391baeedf8c5f3e104c047bfb6e"
+    ]
+  },
+  {
+    "repo_name": "octo-sts/app",
+    "repo_dir": "app",
+    "cwe_id": "CWE-918",
+    "cve_ids": [
+      "CVE-2025-52477"
+    ],
+    "commit_dataset": "b3976e39bd8c8c217c0670747d34a4499043da92",
+    "fix_commit": "0f177fde54f9318e33f0bba6abaea9463a7c3afd",
+    "fix_source": "osv:CVE-2025-52477",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/octo-sts/app @ 0f177fde54f9318e33f0bba6abaea9463a7c3afd"
+    ]
+  },
+  {
+    "repo_name": "osrg/gobgp",
+    "repo_dir": "gobgp",
+    "cwe_id": "CWE-1284",
+    "cve_ids": [
+      "CVE-2025-43972"
+    ],
+    "commit_dataset": "5693c58a4815cc6327b8d3b6980f0e5aced28abe",
+    "fix_commit": "5365453707a9f9bcbeb2cc4cff24803ffcc9bbaa",
+    "fix_source": "osv:CVE-2025-43972",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/osrg/gobgp @ 5365453707a9f9bcbeb2cc4cff24803ffcc9bbaa",
+      "https://github.com/osrg/gobgp @ ca7383f450f7b296c5389feceef2467de5ab6e5a"
+    ]
+  },
+  {
+    "repo_name": "osrg/gobgp",
+    "repo_dir": "gobgp",
+    "cwe_id": "CWE-1284",
+    "cve_ids": [
+      "CVE-2025-43970"
+    ],
+    "commit_dataset": "56e6b1045292f353d3cd6b68d61e48e272569852",
+    "fix_commit": "5365453707a9f9bcbeb2cc4cff24803ffcc9bbaa",
+    "fix_source": "osv:CVE-2025-43970",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/osrg/gobgp @ 5365453707a9f9bcbeb2cc4cff24803ffcc9bbaa",
+      "https://github.com/osrg/gobgp @ 5153bafbe8dbe1a2f02a70bbf0365e98b80e47b0"
+    ]
+  },
+  {
+    "repo_name": "osrg/gobgp",
+    "repo_dir": "gobgp",
+    "cwe_id": "CWE-193",
+    "cve_ids": [
+      "CVE-2025-43971"
+    ],
+    "commit_dataset": "ca7383f450f7b296c5389feceef2467de5ab6e5a",
+    "fix_commit": "5365453707a9f9bcbeb2cc4cff24803ffcc9bbaa",
+    "fix_source": "osv:CVE-2025-43971",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/osrg/gobgp @ 5365453707a9f9bcbeb2cc4cff24803ffcc9bbaa",
+      "https://github.com/osrg/gobgp @ 08a001e06d90e8bcc190084c66992f46f62c0986"
+    ]
+  },
+  {
+    "repo_name": "osrg/gobgp",
+    "repo_dir": "gobgp",
+    "cwe_id": "CWE-119",
+    "cve_ids": [
+      "CVE-2025-7464"
+    ],
+    "commit_dataset": "defe9ac1b1f1c854d1941a5b70dee3aaed6fb960",
+    "fix_commit": "e748f43496d74946d14fed85c776452e47b99d64",
+    "fix_source": "osv:CVE-2025-7464",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/osrg/gobgp @ e748f43496d74946d14fed85c776452e47b99d64"
+    ]
+  },
+  {
+    "repo_name": "osrg/gobgp",
+    "repo_dir": "gobgp",
+    "cwe_id": "CWE-125",
+    "cve_ids": [
+      "CVE-2025-7464"
+    ],
+    "commit_dataset": "defe9ac1b1f1c854d1941a5b70dee3aaed6fb960",
+    "fix_commit": "e748f43496d74946d14fed85c776452e47b99d64",
+    "fix_source": "osv:CVE-2025-7464",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/osrg/gobgp @ e748f43496d74946d14fed85c776452e47b99d64"
+    ]
+  },
+  {
+    "repo_name": "patrickhener/goshs",
+    "repo_dir": "goshs",
+    "cwe_id": "CWE-284",
+    "cve_ids": [
+      "CVE-2025-46816"
+    ],
+    "commit_dataset": "cd1cbfd36c26025d1609438c45ed062d66c39d7f",
+    "fix_commit": "1eb190b81f7a7d8bbb94387c3d192a0dfa420e87",
+    "fix_source": "osv:CVE-2025-46816",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/patrickhener/goshs @ 1eb190b81f7a7d8bbb94387c3d192a0dfa420e87"
+    ]
+  },
+  {
+    "repo_name": "patrickhener/goshs",
+    "repo_dir": "goshs",
+    "cwe_id": "CWE-77",
+    "cve_ids": [
+      "CVE-2025-46816"
+    ],
+    "commit_dataset": "cd1cbfd36c26025d1609438c45ed062d66c39d7f",
+    "fix_commit": "1eb190b81f7a7d8bbb94387c3d192a0dfa420e87",
+    "fix_source": "osv:CVE-2025-46816",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/patrickhener/goshs @ 1eb190b81f7a7d8bbb94387c3d192a0dfa420e87"
+    ]
+  },
+  {
+    "repo_name": "portainer/portainer",
+    "repo_dir": "portainer",
+    "cwe_id": "CWE-200",
+    "cve_ids": [
+      "CVE-2025-49593"
+    ],
+    "commit_dataset": "731afbee4697ef4eb55c075b6b851f5ab9414fa6",
+    "fix_commit": "384cb53c64af78af8e1ac7ef5b0f91bad530e989",
+    "fix_source": "osv:CVE-2025-49593",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/portainer/portainer @ 384cb53c64af78af8e1ac7ef5b0f91bad530e989",
+      "https://github.com/portainer/portainer @ b767dcb27ed253b423facd2e04ef971985950fd3"
+    ]
+  },
+  {
+    "repo_name": "project-zot/zot",
+    "repo_dir": "zot",
+    "cwe_id": "CWE-532",
+    "cve_ids": [
+      "CVE-2025-48374"
+    ],
+    "commit_dataset": "af4a46b331a408a096f43200a306b0f4378dec4a",
+    "fix_commit": "8a99a3ed231fdcd8467e986182b4705342b6a15e",
+    "fix_source": "osv:CVE-2025-48374",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/project-zot/zot @ 8a99a3ed231fdcd8467e986182b4705342b6a15e"
+    ]
+  },
+  {
+    "repo_name": "project-zot/zot",
+    "repo_dir": "zot",
+    "cwe_id": "CWE-269",
+    "cve_ids": [
+      "CVE-2025-23208"
+    ],
+    "commit_dataset": "fba695adb96dbdfa344b2934b16cd7108524e6e7",
+    "fix_commit": "b8437991cb91fb826d79e95956ebf0cc987e411b",
+    "fix_source": "osv:CVE-2025-23208",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/project-zot/zot @ b8437991cb91fb826d79e95956ebf0cc987e411b"
+    ]
+  },
+  {
+    "repo_name": "quic-go/quic-go",
+    "repo_dir": "quic-go",
+    "cwe_id": "CWE-248",
+    "cve_ids": [
+      "CVE-2025-29785"
+    ],
+    "commit_dataset": "d726a795db8391d29b180f684f74b223d40471a1",
+    "fix_commit": "b90058aba5f65f48e0e150c89bbaa21a72dda4de",
+    "fix_source": "osv:CVE-2025-29785",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/quic-go/quic-go @ b90058aba5f65f48e0e150c89bbaa21a72dda4de"
+    ]
+  },
+  {
+    "repo_name": "siyuan-note/siyuan",
+    "repo_dir": "siyuan",
+    "cwe_id": "CWE-459",
+    "cve_ids": [
+      "CVE-2025-21609"
+    ],
+    "commit_dataset": "98819ca4c780ab0064a255aa1df0c42c065707ef",
+    "fix_commit": "d9887aeec1b27073bec66299a9a4181dc42969f3",
+    "fix_source": "osv:CVE-2025-21609",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/siyuan-note/siyuan @ d9887aeec1b27073bec66299a9a4181dc42969f3"
+    ]
+  },
+  {
+    "repo_name": "siyuan-note/siyuan",
+    "repo_dir": "siyuan",
+    "cwe_id": "CWE-552",
+    "cve_ids": [
+      "CVE-2025-21609"
+    ],
+    "commit_dataset": "98819ca4c780ab0064a255aa1df0c42c065707ef",
+    "fix_commit": "d9887aeec1b27073bec66299a9a4181dc42969f3",
+    "fix_source": "osv:CVE-2025-21609",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/siyuan-note/siyuan @ d9887aeec1b27073bec66299a9a4181dc42969f3"
+    ]
+  },
+  {
+    "repo_name": "sysadminsmedia/homebox",
+    "repo_dir": "homebox",
+    "cwe_id": "CWE-862",
+    "cve_ids": [
+      "CVE-2025-53108"
+    ],
+    "commit_dataset": "b311a5c9ed1225b2fc92a205a8825724ad7f2632",
+    "fix_commit": "0d2a6d6ac8573a620ade0a2b86394f1a1f59e3e4",
+    "fix_source": "osv:CVE-2025-53108",
+    "fix_status": "ok_repo_casou",
+    "fix_candidatos": [
+      "https://github.com/sysadminsmedia/homebox @ 0d2a6d6ac8573a620ade0a2b86394f1a1f59e3e4"
+    ]
+  }
+]
