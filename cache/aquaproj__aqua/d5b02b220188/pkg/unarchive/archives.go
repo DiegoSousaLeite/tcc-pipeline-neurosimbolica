@@ -1,0 +1,185 @@
+package unarchive
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/aquaproj/aqua/v2/pkg/osfile"
+	"github.com/mholt/archives"
+	"github.com/spf13/afero"
+	"github.com/suzuki-shunsuke/slog-error/slogerr"
+)
+
+var (
+	errEscapeDest        = errors.New("the file path escapes the extraction directory")
+	errSymlinkEscapeDest = errors.New("the symlink target escapes the extraction directory")
+)
+
+type handler struct {
+	fs       afero.Fs
+	dest     string
+	filename string
+	logger   *slog.Logger
+}
+
+func (h *handler) HandleFile(_ context.Context, f archives.FileInfo) error {
+	dstPath := filepath.Join(h.dest, h.normalizePath(f.NameInArchive))
+	if !h.withinDest(dstPath) {
+		return fmt.Errorf("%w: %s", errEscapeDest, f.NameInArchive)
+	}
+	parentDir := filepath.Dir(dstPath)
+	if err := osfile.MkdirAll(h.fs, parentDir); err != nil {
+		slogerr.WithError(h.logger, err).Warn("create a directory")
+		return nil
+	}
+
+	if f.IsDir() {
+		if err := h.fs.MkdirAll(dstPath, f.Mode()|0o700); err != nil { //nolint:mnd
+			slogerr.WithError(h.logger, err).Warn("create a directory")
+			return nil
+		}
+		return nil
+	}
+
+	if f.LinkTarget != "" {
+		if f.Mode()&os.ModeSymlink != 0 {
+			return h.handleSymlink(dstPath, f.LinkTarget)
+		}
+		return nil
+	}
+
+	reader, err := f.Open()
+	if err != nil {
+		slogerr.WithError(h.logger, err).Warn("open a file")
+		return nil
+	}
+	defer reader.Close()
+
+	dstFile, err := h.fs.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY, f.Mode())
+	if err != nil {
+		slogerr.WithError(h.logger, err).Warn("create a file")
+		return nil
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, reader); err != nil {
+		slogerr.WithError(h.logger, err).Warn("copy a file")
+		return nil
+	}
+	return nil
+}
+
+func (h *handler) Unarchive(ctx context.Context, _ *slog.Logger, src *File) error {
+	tempFilePath, err := src.Body.Path()
+	if err != nil {
+		return fmt.Errorf("get a temporary file path: %w", err)
+	}
+	if err := h.unarchive(ctx, src.Filename, tempFilePath); err != nil {
+		return slogerr.With(err, "archived_file", tempFilePath, "archived_filename", src.Filename) //nolint:wrapcheck
+	}
+	return nil
+}
+
+// handleSymlink creates a symlink at dstPath pointing to target. It returns an
+// error if the target resolves outside h.dest, because such a symlink could be
+// followed by a later file entry with the same path to write outside the
+// extraction directory. This indicates a malicious or broken archive, so
+// extraction is aborted rather than silently skipping the entry.
+func (h *handler) handleSymlink(dstPath, target string) error {
+	if !h.symlinkTargetWithinDest(dstPath, target) {
+		return fmt.Errorf("%w: %s -> %s", errSymlinkEscapeDest, dstPath, target)
+	}
+	if err := os.Symlink(target, dstPath); err != nil {
+		slogerr.WithError(h.logger, err).Warn("create a symlink", "link_target", target, "link_dest", dstPath)
+	}
+	return nil
+}
+
+// symlinkTargetWithinDest reports whether a symlink created at linkPath with the
+// given target resolves to a path inside h.dest. A relative target is resolved
+// against the directory containing the symlink, matching how the OS dereferences
+// it. This prevents an archive from planting a symlink that points outside the
+// extraction directory, which a later file entry with the same path could
+// otherwise follow to write outside h.dest.
+func (h *handler) symlinkTargetWithinDest(linkPath, target string) bool {
+	resolved := target
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Dir(linkPath), target)
+	}
+	return h.withinDest(resolved)
+}
+
+// withinDest reports whether the cleaned path is h.dest itself or located inside
+// it. It is used to reject archive entries whose destination escapes the
+// extraction directory (e.g. via ".." in the archived path).
+func (h *handler) withinDest(p string) bool {
+	p = filepath.Clean(p)
+	dest := filepath.Clean(h.dest)
+	if p == dest {
+		return true
+	}
+	return strings.HasPrefix(p, dest+string(filepath.Separator))
+}
+
+func (h *handler) normalizePath(nameInArchive string) string {
+	slashCount := strings.Count(nameInArchive, "/")
+	backSlashCount := strings.Count(nameInArchive, "\\")
+	if backSlashCount > slashCount && filepath.Separator != '\\' {
+		return strings.ReplaceAll(nameInArchive, "\\", string(filepath.Separator))
+	}
+	return nameInArchive
+}
+
+func (h *handler) unarchive(ctx context.Context, fileName, file string) error {
+	archiveFile, err := h.fs.Open(file)
+	if err != nil {
+		return fmt.Errorf("open a files: %w", err)
+	}
+	defer archiveFile.Close()
+
+	format, input, err := archives.Identify(ctx, fileName, archiveFile)
+	if err != nil {
+		return fmt.Errorf("identify the format: %w", err)
+	}
+
+	if extractor, ok := format.(archives.Extractor); ok {
+		if err := osfile.MkdirAll(h.fs, h.dest); err != nil {
+			return fmt.Errorf("create a destination directory: %w", err)
+		}
+
+		if err := extractor.Extract(ctx, input, h.HandleFile); err != nil {
+			return fmt.Errorf("extract files: %w", err)
+		}
+		return nil
+	}
+	if decomp, ok := format.(archives.Decompressor); ok {
+		return h.decompress(input, decomp)
+	}
+	return errUnsupportedFileFormat
+}
+
+func (h *handler) decompress(input io.Reader, decomp archives.Decompressor) error {
+	rc, err := decomp.OpenReader(input)
+	if err != nil {
+		return fmt.Errorf("open a decompressed file: %w", err)
+	}
+	defer rc.Close()
+	if err := osfile.MkdirAll(h.fs, h.dest); err != nil {
+		return fmt.Errorf("create a directory (%s): %w", h.dest, err)
+	}
+	dst, err := h.fs.Create(filepath.Join(h.dest, strings.TrimSuffix(h.filename, filepath.Ext(h.filename))))
+	if err != nil {
+		return fmt.Errorf("create a destination file: %w", err)
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, rc); err != nil {
+		return fmt.Errorf("copy decompressed data: %w", err)
+	}
+	return nil
+}

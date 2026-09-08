@@ -47,7 +47,9 @@ apresentacao/
 # tp_pairs*.json NÃO entra aqui de propósito: com repos/ apagado, regenerá-los
 # exige refazer o fetch raso dos ~70 repos (~1 h). São entrada da pipeline.
 
-TCC1___Diego_Sousa_e_João_Artur_Leles
+TCC2___Diego_Sousa_e_João_Artur_Leles
+TCC1___Ana_Luiz_e_Pedro.pdf
+TCC2___Ana_Luiz_e_Pedro.pdf
 
 # Configuração local do Claude Code: caminhos absolutos desta máquina e
 # allowlist de permissões por sessão. Os comandos e skills do OpenSpec em
