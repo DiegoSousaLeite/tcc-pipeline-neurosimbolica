@@ -1,0 +1,619 @@
+package executor
+
+import (
+	config "github.com/OliveTin/OliveTin/internal/config"
+	"github.com/OliveTin/OliveTin/internal/entities"
+	"github.com/OliveTin/OliveTin/internal/tpl"
+	log "github.com/sirupsen/logrus"
+
+	"fmt"
+	"net/mail"
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
+)
+
+var (
+	typecheckRegex = map[string]string{
+		"very_dangerous_raw_string": "",
+		"int":                       `^\d+$`,
+		"unicode_identifier":        `^[\w\-\.\_\d]+$`,
+		"ascii":                     `^[a-zA-Z0-9]+$`,
+		"ascii_identifier":          `^[a-zA-Z0-9\-\._]+$`,
+		"shell_safe_identifier":     `^[a-zA-Z0-9@\.\_\+\-]+$`,
+		"ascii_sentence":            `^[a-zA-Z0-9\-\._, ]+$`,
+	}
+)
+
+// parseExecArray parses all exec arguments in the action.
+func parseExecArray(action *config.Action, values map[string]string, entity *entities.Entity) ([]string, error) {
+	parsed := make([]string, len(action.Exec))
+
+	for i, segment := range action.Exec {
+		out, err := parseExecSegment(segment, values, entity)
+		if err != nil {
+			return nil, err
+		}
+		parsed[i] = out
+	}
+	return parsed, nil
+}
+
+func parseActionExec(values map[string]string, action *config.Action, entity *entities.Entity) ([]string, error) {
+	if action == nil {
+		return nil, fmt.Errorf("action is nil")
+	}
+	if err := validateArguments(values, action); err != nil {
+		return nil, err
+	}
+
+	parsed, err := parseExecArray(action, values, entity)
+
+	if err != nil {
+		return nil, err
+	}
+
+	logParsedExec(action, parsed, values)
+	return parsed, nil
+}
+
+func parseExecSegment(arg string, values map[string]string, entity *entities.Entity) (string, error) {
+	return tpl.ParseTemplateWithActionContext(arg, entity, values)
+}
+
+func validateArguments(values map[string]string, action *config.Action) error {
+	for _, arg := range action.Arguments {
+		if err := typecheckActionArgument(&arg, values[arg.Name], action); err != nil {
+			return err
+		}
+		log.WithFields(log.Fields{"name": arg.Name, "value": values[arg.Name]}).Debugf("Arg assigned")
+	}
+	return nil
+}
+
+func logParsedExec(action *config.Action, parsed []string, values map[string]string) {
+	redacted := redactExecArgs(parsed, action.Arguments, values)
+	log.WithFields(log.Fields{"actionTitle": action.Title, "cmd": redacted}).Infof("Action parse args - After (Exec)")
+}
+
+func parseActionArguments(req *ExecutionRequest) (string, error) {
+	log.WithFields(log.Fields{
+		"actionTitle": req.Binding.Action.Title,
+		"cmd":         req.Binding.Action.Shell,
+	}).Infof("Action parse args - Before")
+
+	for _, arg := range req.Binding.Action.Arguments {
+		argName := arg.Name
+		argValue := req.Arguments[argName]
+
+		err := typecheckActionArgument(&arg, argValue, req.Binding.Action)
+
+		if err != nil {
+			return "", err
+		}
+
+		log.WithFields(log.Fields{
+			"name":  argName,
+			"value": argValue,
+		}).Debugf("Arg assigned")
+	}
+
+	parsedShellCommand, err := tpl.ParseTemplateWithActionContext(req.Binding.Action.Shell, req.Binding.Entity, req.Arguments)
+
+	if err != nil {
+		return "", err
+	}
+
+	redactedShellCommand := redactShellCommand(parsedShellCommand, req.Binding.Action.Arguments, req.Arguments)
+
+	log.WithFields(log.Fields{
+		"actionTitle": req.Binding.Action.Title,
+		"cmd":         redactedShellCommand,
+	}).Infof("Action parse args - After")
+
+	return parsedShellCommand, nil
+}
+
+//gocyclo:ignore
+func redactShellCommand(shellCommand string, arguments []config.ActionArgument, argumentValues map[string]string) string {
+	for _, arg := range arguments {
+		if arg.Type == "password" {
+			argValue, exists := argumentValues[arg.Name]
+
+			if !exists {
+				log.Warnf("Redact shell command: Argument %s not found in values", arg.Name)
+				continue
+			}
+
+			if argValue == "" {
+				continue
+			}
+
+			shellCommand = strings.ReplaceAll(shellCommand, argValue, "<redacted>")
+		}
+	}
+
+	return shellCommand
+}
+
+//gocyclo:ignore
+func redactExecArgs(execArgs []string, arguments []config.ActionArgument, argumentValues map[string]string) []string {
+	redacted := make([]string, len(execArgs))
+	for i, arg := range execArgs {
+		redacted[i] = redactShellCommand(arg, arguments, argumentValues)
+	}
+	return redacted
+}
+
+func argumentSkipsValidation(arg *config.ActionArgument) bool {
+	switch arg.Type {
+	case "confirmation", "html":
+		return true
+	default:
+		return false
+	}
+}
+
+func typecheckActionArgument(arg *config.ActionArgument, value string, action *config.Action) error {
+	if argumentSkipsValidation(arg) {
+		return nil
+	}
+
+	if arg.Name == "" {
+		return fmt.Errorf("argument name cannot be empty")
+	}
+
+	return typecheckActionArgumentFound(value, arg)
+}
+
+// ValidateArgument validates a single argument value using the same logic as the executor.
+// It applies mangling transformations and performs full validation including null checks,
+// choice validation, and type safety checks.
+func ValidateArgument(arg *config.ActionArgument, value string, action *config.Action) error {
+	if arg == nil {
+		return fmt.Errorf("ValidateArgument: arg is nil")
+	}
+
+	if action == nil {
+		return fmt.Errorf("ValidateArgument: action is nil")
+	}
+
+	// Apply mangling transformations
+	mangledValue := MangleArgumentValue(arg, value, action.Title)
+
+	// Use the same validation path as the executor
+	return typecheckActionArgument(arg, mangledValue, action)
+}
+
+func typecheckActionArgumentFound(value string, arg *config.ActionArgument) error {
+	if value == "" {
+		return typecheckNull(arg)
+	}
+
+	if arg.Type == "checklist" {
+		return typecheckChecklist(value, arg)
+	}
+
+	if len(arg.Choices) > 0 {
+		return typecheckChoice(value, arg)
+	}
+
+	return TypeSafetyCheck(arg.Name, value, arg.Type)
+}
+
+// TypeSafetyCheck checks argument values match a specific type. The types are
+// defined in typecheckRegex, and, you guessed it, uses regex to check for allowed
+// characters.
+//
+//gocyclo:ignore
+func TypeSafetyCheck(name string, value string, argumentType string) error {
+	switch argumentType {
+	case "password":
+		return nil
+	case "raw_string_multiline":
+		return nil
+	case "checkbox":
+		return nil
+	case "checklist":
+		return nil
+	case "email":
+		return typeSafetyCheckEmail(value)
+	case "url":
+		return typeSafetyCheckUrl(value)
+	case "datetime":
+		return typeSafetyCheckDatetime(value)
+	}
+
+	return typeSafetyCheckRegex(name, value, argumentType)
+}
+
+func typecheckNull(arg *config.ActionArgument) error {
+	if arg.RejectNull {
+		return fmt.Errorf("null values are not allowed")
+	}
+
+	return nil
+}
+
+func typecheckChecklist(value string, arg *config.ActionArgument) error {
+	if len(arg.Choices) == 0 {
+		return fmt.Errorf("checklist argument %q requires choices", arg.Name)
+	}
+
+	segments, err := config.ParseChecklistValue(value)
+	if err != nil {
+		return err
+	}
+
+	return typecheckChecklistSegments(segments, arg)
+}
+
+func typecheckChecklistSegments(segments []string, arg *config.ActionArgument) error {
+	for _, segment := range segments {
+		if err := typecheckChecklistSegment(segment, arg); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func typecheckChecklistSegment(segment string, arg *config.ActionArgument) error {
+	if segment == "" {
+		return fmt.Errorf("checklist argument %q contains an empty segment", arg.Name)
+	}
+
+	return typecheckChoice(segment, arg)
+}
+
+func typecheckChoice(value string, arg *config.ActionArgument) error {
+	if arg.Entity != "" {
+		return typecheckChoiceEntity(value, arg)
+	}
+
+	for _, choice := range arg.Choices {
+		if value == choice.Value {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("argument value is not one of the predefined choices")
+}
+
+func typecheckChoiceEntity(value string, arg *config.ActionArgument) error {
+	templateChoice := arg.Choices[0].Value
+
+	for _, ent := range entities.GetEntityInstances(arg.Entity) {
+		choice := tpl.ParseTemplateOfActionBeforeExec(templateChoice, ent)
+
+		if value == choice {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("argument value cannot be found in entities")
+}
+
+func typeSafetyCheckEmail(value string) error {
+	_, err := mail.ParseAddress(value)
+	if err != nil {
+		log.WithField("type", "email").Debugf("Email argument type check failed")
+		return err
+	}
+	return nil
+}
+
+func typeSafetyCheckDatetime(value string) error {
+	_, err := time.Parse("2006-01-02T15:04:05", value)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func anchorCustomRegexPattern(pattern string) string {
+	if strings.HasPrefix(pattern, "^") && strings.HasSuffix(pattern, "$") {
+		return pattern
+	}
+
+	return "^(?:" + pattern + ")$"
+}
+
+func typeSafetyCheckRegex(name string, value string, argumentType string) error {
+	pattern := ""
+	isCustomRegex := strings.HasPrefix(argumentType, "regex:")
+
+	if isCustomRegex {
+		pattern = strings.TrimPrefix(argumentType, "regex:")
+		pattern = anchorCustomRegexPattern(pattern)
+	} else {
+		found := false
+		pattern, found = typecheckRegex[argumentType]
+
+		if !found {
+			return fmt.Errorf("argument type not implemented %v for arg: %v", argumentType, name)
+		}
+	}
+
+	matches, _ := regexp.MatchString(pattern, value)
+
+	if !matches {
+		log.WithFields(log.Fields{
+			"name":    name,
+			"value":   value,
+			"type":    argumentType,
+			"pattern": pattern,
+		}).Warn("Arg type check safety failure")
+
+		return fmt.Errorf("invalid argument %v, doesn't match %v", name, argumentType)
+	}
+
+	return nil
+}
+
+func typeSafetyCheckUrl(value string) error {
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil {
+		return err
+	}
+
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("url scheme %q is not allowed; only http and https are permitted", parsed.Scheme)
+	}
+
+	return nil
+}
+
+var shellUnsafeArgumentTypes = map[string]struct{}{
+	"url":                       {},
+	"email":                     {},
+	"raw_string_multiline":      {},
+	"very_dangerous_raw_string": {},
+	"password":                  {},
+	"html":                      {},
+	"confirmation":              {},
+}
+
+func isUnsafeShellArgumentType(arg *config.ActionArgument) bool {
+	if strings.HasPrefix(arg.Type, "regex:") {
+		return true
+	}
+
+	_, inMap := shellUnsafeArgumentTypes[arg.Type]
+	return inMap || (arg.Type == "checkbox" && len(arg.Choices) == 0)
+}
+
+func checkShellArgumentSafety(action *config.Action) error {
+	if action.Shell == "" {
+		return nil
+	}
+
+	for i := range action.Arguments {
+		arg := &action.Arguments[i]
+		if isUnsafeShellArgumentType(arg) {
+			return fmt.Errorf("unsafe argument type '%s' cannot be used with Shell execution. Use 'exec' instead. See https://docs.olivetin.app/action_execution/shellvsexec.html", arg.Type)
+		}
+	}
+
+	return nil
+}
+
+func mangleInvalidArgumentValues(req *ExecutionRequest) {
+	for _, arg := range req.Binding.Action.Arguments {
+		if arg.Type == "datetime" {
+			mangleInvalidDatetimeValues(req, &arg)
+		}
+
+		mangleCheckboxValues(req, &arg)
+		mangleChecklistValues(req, &arg)
+	}
+}
+
+func mangleCheckboxValues(req *ExecutionRequest, arg *config.ActionArgument) {
+	if arg.Type != "checkbox" {
+		return
+	}
+
+	log.Infof("Checking checkbox values for argument %s in action %s", arg.Name, req.Binding.Action.Title)
+
+	for i, v := range arg.Choices {
+		choice := &arg.Choices[i]
+
+		if req.Arguments[arg.Name] == choice.Title {
+			log.WithFields(log.Fields{
+				"arg":         arg.Name,
+				"choice":      v,
+				"oldValue":    req.Arguments[arg.Name],
+				"newValue":    choice.Value,
+				"actionTitle": req.Binding.Action.Title,
+			}).Infof("Mangled checkbox value")
+
+			req.Arguments[arg.Name] = choice.Value
+		}
+	}
+}
+
+func mangleInvalidDatetimeValues(req *ExecutionRequest, arg *config.ActionArgument) {
+	value, exists := req.Arguments[arg.Name]
+
+	if !exists || value == "" {
+		return
+	}
+
+	timestamp, err := time.Parse("2006-01-02T15:04", value)
+
+	if err == nil {
+		log.WithFields(log.Fields{
+			"arg":         arg.Name,
+			"value":       value,
+			"actionTitle": req.Binding.Action.Title,
+		}).Warnf("Mangled invalid datetime value without seconds to :00 seconds, this issue is commonly caused by Android browsers.")
+
+		req.Arguments[arg.Name] = timestamp.Format("2006-01-02T15:04:05")
+	}
+}
+
+// MangleArgumentValue applies mangling transformations to a single argument value.
+// This is used by the validation API to ensure the value matches what would be
+// used during actual execution.
+func MangleArgumentValue(arg *config.ActionArgument, value string, actionTitle string) string {
+	if arg == nil {
+		log.Debugf("MangleArgumentValue called with nil arg, returning value unchanged")
+		return value
+	}
+
+	return mangleArgumentValueByType(arg, value, actionTitle)
+}
+
+func mangleArgumentValueByType(arg *config.ActionArgument, value string, actionTitle string) string {
+	switch arg.Type {
+	case "datetime":
+		return mangleDatetimeValue(arg, value, actionTitle)
+	case "checkbox":
+		return mangleCheckboxValue(arg, value, actionTitle)
+	case "checklist":
+		return mangleChecklistValue(arg, value, actionTitle)
+	default:
+		return value
+	}
+}
+
+func mangleDatetimeValue(arg *config.ActionArgument, value string, actionTitle string) string {
+	if arg == nil {
+		log.Debugf("mangleDatetimeValue called with nil arg, returning value unchanged")
+		return value
+	}
+
+	if value == "" {
+		return value
+	}
+
+	timestamp, err := time.Parse("2006-01-02T15:04", value)
+	if err != nil {
+		return value
+	}
+
+	log.WithFields(log.Fields{
+		"arg":         arg.Name,
+		"value":       value,
+		"actionTitle": actionTitle,
+	}).Warnf("Mangled invalid datetime value without seconds to :00 seconds, this issue is commonly caused by Android browsers.")
+
+	return timestamp.Format("2006-01-02T15:04:05")
+}
+
+func mangleCheckboxValue(arg *config.ActionArgument, value string, actionTitle string) string {
+	if arg == nil {
+		log.Debugf("mangleCheckboxValue called with nil arg, returning value unchanged")
+		return value
+	}
+
+	return mangleChoiceSegment(arg, value, actionTitle)
+}
+
+func mangleChecklistValues(req *ExecutionRequest, arg *config.ActionArgument) {
+	if arg.Type != "checklist" {
+		return
+	}
+
+	value, exists := req.Arguments[arg.Name]
+	if !exists || value == "" {
+		return
+	}
+
+	req.Arguments[arg.Name] = mangleChecklistValue(arg, value, req.Binding.Action.Title)
+}
+
+func mangleChecklistValue(arg *config.ActionArgument, value string, actionTitle string) string {
+	if arg == nil || value == "" {
+		return value
+	}
+
+	segments, err := config.ParseChecklistValue(value)
+	if err != nil {
+		return value
+	}
+
+	return mangleChecklistSegments(arg, segments, value, actionTitle)
+}
+
+func mangleChecklistSegments(arg *config.ActionArgument, segments []string, fallback string, actionTitle string) string {
+	mangled := make([]string, len(segments))
+	for i, segment := range segments {
+		mangled[i] = mangleChecklistSegment(arg, segment, actionTitle)
+	}
+
+	formatted, err := config.FormatChecklistValue(mangled)
+	if err != nil {
+		return fallback
+	}
+
+	return formatted
+}
+
+func mangleChecklistSegment(arg *config.ActionArgument, segment string, actionTitle string) string {
+	trimmed := strings.TrimSpace(segment)
+	if trimmed == "" {
+		return ""
+	}
+
+	return mangleChoiceSegment(arg, trimmed, actionTitle)
+}
+
+func mangleChoiceSegment(arg *config.ActionArgument, value string, actionTitle string) string {
+	if mapped, ok := mangleChoiceSegmentEntity(arg, value, actionTitle); ok {
+		return mapped
+	}
+
+	return mangleChoiceSegmentStatic(arg, value, actionTitle)
+}
+
+func mangleChoiceSegmentEntity(arg *config.ActionArgument, value string, actionTitle string) (string, bool) {
+	if arg.Entity == "" || len(arg.Choices) == 0 {
+		return value, false
+	}
+
+	return mangleEntityTemplateChoiceSegment(arg.Choices[0], arg.Entity, arg.Name, value, actionTitle)
+}
+
+func mangleEntityTemplateChoiceSegment(templateChoice config.ActionArgumentChoice, entityName string, argName string, value string, actionTitle string) (string, bool) {
+	for _, ent := range entities.GetEntityInstancesOrdered(entityName) {
+		expandedTitle := tpl.ParseTemplateOfActionBeforeExec(templateChoice.Title, ent)
+		if value != expandedTitle {
+			continue
+		}
+
+		expandedValue := tpl.ParseTemplateOfActionBeforeExec(templateChoice.Value, ent)
+		log.WithFields(log.Fields{
+			"arg":         argName,
+			"oldValue":    value,
+			"newValue":    expandedValue,
+			"actionTitle": actionTitle,
+		}).Infof("Mangled entity choice segment")
+
+		return expandedValue, true
+	}
+
+	return value, false
+}
+
+func mangleChoiceSegmentStatic(arg *config.ActionArgument, value string, actionTitle string) string {
+	for _, choice := range arg.Choices {
+		if value == choice.Title {
+			log.WithFields(log.Fields{
+				"arg":         arg.Name,
+				"oldValue":    value,
+				"newValue":    choice.Value,
+				"actionTitle": actionTitle,
+			}).Infof("Mangled choice segment")
+
+			return choice.Value
+		}
+	}
+
+	return value
+}

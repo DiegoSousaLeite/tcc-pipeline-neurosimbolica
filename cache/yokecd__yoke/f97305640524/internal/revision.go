@@ -1,0 +1,269 @@
+package internal
+
+import (
+	"cmp"
+	"crypto/rand"
+	"fmt"
+	"net/url"
+	"path"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+type Release struct {
+	Name      string     `json:"release"`
+	Namespace string     `json:"namespace"`
+	History   []Revision `json:"history"`
+}
+
+func (release Release) ActiveRevision() Revision {
+	var active Revision
+	for _, revision := range release.History {
+		if revision.ActiveAt.After(active.ActiveAt) {
+			active = revision
+		}
+	}
+	return active
+}
+
+func (release Release) ActiveIndex() int {
+	var active int
+	for i, revision := range release.History {
+		if revision.ActiveAt.After(release.History[active].ActiveAt) {
+			active = i
+		}
+	}
+	return active
+}
+
+type Source struct {
+	Ref      string `json:"ref"`
+	Checksum string `json:"checksum"`
+}
+
+func SourceFrom(ref string, wasm []byte) (src Source) {
+	if len(wasm) > 0 {
+		src.Checksum = SHA1HexString(wasm)
+	}
+
+	if ref != "" {
+		u, _ := url.Parse(ref)
+		if u.Scheme != "" {
+			src.Ref = u.String()
+		} else {
+			src.Ref = "file://" + path.Clean(ref)
+		}
+	}
+
+	return src
+}
+
+func (release *Release) Add(revision Revision) {
+	idx, _ := slices.BinarySearchFunc(release.History, revision, func(a, b Revision) int {
+		switch {
+		case a.CreatedAt.Before(b.CreatedAt):
+			return -1
+		case a.CreatedAt.After(b.CreatedAt):
+			return 1
+		default:
+			return 0
+		}
+	})
+	release.History = slices.Insert(release.History, idx, revision)
+}
+
+type Revision struct {
+	Name      string    `json:"-"`
+	Namespace string    `json:"-"`
+	Source    Source    `json:"source"`
+	LockedBy  string    `json:"lockedBy"`
+	CreatedAt time.Time `json:"createdAt"`
+	ActiveAt  time.Time `json:"-"`
+	Resources int       `json:"resources"`
+}
+
+const (
+	LabelManagedBy               = "app.kubernetes.io/managed-by"
+	DeprecatedLabelYokeRelease   = "app.kubernetes.io/yoke-release"
+	DeprecatedLabelYokeReleaseNS = "app.kubernetes.io/yoke-release-namespace"
+	AnnotationYokeRelease        = "instance.atc.yoke.cd/release"
+	AnnotationYokeNamespace      = "instance.atc.yoke.cd/namespace"
+)
+
+func AddYokeMetadata(resources []*unstructured.Unstructured, release, ns, manager string) {
+	for _, resource := range resources {
+		labels := resource.GetLabels()
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+		labels[LabelManagedBy] = cmp.Or(manager, "yoke")
+		resource.SetLabels(labels)
+
+		annotations := resource.GetAnnotations()
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		annotations[AnnotationYokeRelease] = release
+		annotations[AnnotationYokeNamespace] = ns
+		resource.SetAnnotations(annotations)
+	}
+}
+
+func RemoveYokeMetadata(resources []*unstructured.Unstructured) {
+	for _, resource := range resources {
+		delete(resource.GetLabels(), LabelManagedBy)
+		delete(resource.GetAnnotations(), AnnotationYokeRelease)
+		delete(resource.GetAnnotations(), AnnotationYokeNamespace)
+	}
+}
+
+func GetAnnotation(resource *unstructured.Unstructured, key string) string {
+	if resource == nil {
+		return ""
+	}
+	annotations := resource.GetAnnotations()
+	if annotations == nil {
+		return ""
+	}
+	return annotations[key]
+}
+
+func GetLabel(resource *unstructured.Unstructured, label string) string {
+	if resource == nil {
+		return ""
+	}
+	labels := resource.GetLabels()
+	if labels == nil {
+		return ""
+	}
+	return labels[label]
+}
+
+func GetOwner(resource *unstructured.Unstructured) string {
+	if resource == nil {
+		return ""
+	}
+
+	// Use deprecated labels for backwards compatiblity as fallback.
+	release := cmp.Or(
+		GetAnnotation(resource, AnnotationYokeRelease),
+		GetLabel(resource, DeprecatedLabelYokeRelease),
+	)
+	namespace := cmp.Or(
+		GetAnnotation(resource, AnnotationYokeNamespace),
+		GetLabel(resource, DeprecatedLabelYokeReleaseNS),
+	)
+
+	if release == "" || namespace == "" {
+		return ""
+	}
+	return namespace + "/" + release
+}
+
+func OwnerFrom(release, ns string) string {
+	return ns + "/" + release
+}
+
+func Canonical(resource *unstructured.Unstructured) string {
+	gvk := resource.GetObjectKind().GroupVersionKind()
+
+	return strings.ToLower(strings.Join(
+		[]string{
+			Namespace(resource),
+			cmp.Or(gvk.Group, "core"),
+			gvk.Version,
+			resource.GetKind(),
+			resource.GetName(),
+		},
+		"/",
+	))
+}
+
+func CanonicalWithoutVersion(resource *unstructured.Unstructured) string {
+	gvk := resource.GetObjectKind().GroupVersionKind()
+
+	return strings.ToLower(strings.Join(
+		[]string{
+			Namespace(resource),
+			cmp.Or(gvk.Group, "core"),
+			resource.GetKind(),
+			resource.GetName(),
+		},
+		"/",
+	))
+}
+
+func Namespace(resource *unstructured.Unstructured) string {
+	return cmp.Or(resource.GetNamespace(), "_")
+}
+
+func CanonicalNameList(resources []*unstructured.Unstructured) []string {
+	result := make([]string, len(resources))
+	for i, resource := range resources {
+		result[i] = Canonical(resource)
+	}
+	return result
+}
+
+func CanonicalMap(resources []*unstructured.Unstructured) map[string]*unstructured.Unstructured {
+	result := make(map[string]*unstructured.Unstructured, len(resources))
+	for _, resource := range resources {
+		result[Canonical(resource)] = resource
+	}
+	return result
+}
+
+func CanonicalObjectMap(resources []*unstructured.Unstructured) map[string]any {
+	result := make(map[string]any, len(resources))
+	for _, resource := range resources {
+		result[Canonical(resource)] = resource.Object
+	}
+	return result
+}
+
+const (
+	LabelKind                = "internal.yoke/kind"
+	LabelRelease             = "internal.yoke/release"
+	AnnotationSourceURL      = "internal.yoke/source-url"
+	AnnotationSourceChecksum = "internal.yoke/source-checksum"
+	AnnotationCreatedAt      = "internal.yoke/created-at"
+	AnnotationActiveAt       = "internal.yoke/active-at"
+	AnnotationResourceCount  = "internal.yoke/resources"
+	AnnotationReleaseName    = "internal.yoke/release-name"
+	KeyResources             = "resources"
+	KeyLockedBy              = "lockedBy"
+)
+
+func MustParseTime(value string) time.Time {
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+func Must(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func Must2[T any](value T, err error) T {
+	Must(err)
+	return value
+}
+
+func MustParseInt(value string) int {
+	i, _ := strconv.Atoi(value)
+	return i
+}
+
+func RandomString() string {
+	buf := make([]byte, 6)
+	rand.Read(buf)
+	return fmt.Sprintf("%x", buf)
+}
