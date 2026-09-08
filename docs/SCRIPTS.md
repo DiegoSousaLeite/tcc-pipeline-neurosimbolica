@@ -45,7 +45,28 @@ Colheita vazia é anunciada e **não** grava arquivo.
 ```bash
 python scripts/osv_harvest_go.py --alvo 100
 python scripts/osv_harvest_go.py --alvo 100 --por-repo 5 --max-scan 600
+python scripts/osv_harvest_go.py --alvo 1200 --por-repo 20 --max-scan 9200
 ```
+
+**Grau de alcançabilidade no relatório.** A distribuição por CWE sai com o grau
+(`alta`/`media`/`baixa`) de `src/ruleset.py`, mais o agregado por grau. É o que
+torna o rendimento previsível **antes** de gastar rede: na rodada
+`20260908T094808Z-9a00cb2` as CWEs de grau baixo consumiram metade do orçamento
+e renderam 1 detecção em 336 pares.
+
+**`--grau-minimo {baixa,media,alta}`** restringe a colheita a CWEs de grau ao
+menos esse. Fica **desligado por padrão**, e não por descuido: restringir troca o
+denominador do recall — passa a medir o motor sobre as fraquezas em que ele
+*afirma* detectar, e não sobre as que *declara cobrir*. O valor usado é impresso
+no resumo.
+
+> **Teto empírico medido (2026-09-08):** varrendo o dump inteiro (9.113 entradas)
+> com `--por-repo 20`, saem **810 candidatas** e só 2 dos 362 repositórios batem
+> o teto. A fonte Go da OSV está esgotada sob o critério de alcançabilidade.
+
+> **Cuidado:** a colheita **sobrescreve** `data/tp_fixes_osv_alcancavel.json` ao
+> final. Rodar com `--alvo` pequeno para testar destrói a colheita anterior —
+> copie o arquivo antes.
 
 ---
 
@@ -521,6 +542,7 @@ chave explícita; duas execuções produzem saída idêntica).
 | `esteira` | linhas e status do Semgrep por braço, taxa de erro, denominador efetivo, e estatísticas de `Tokens_Entrada` e `Tempo_Execucao_s` |
 | `positivos` | um registro por caso de gabarito vulnerável que chegou ao LLM, com a regra que disparou, a CWE que ela declara, e veredito e justificativa de cada braço |
 | `regras` | quais regras do ruleset de fato dispararam sobre o corpus, com a CWE declarada e o pareamento exato contra o pareamento por fallback, separado por classe de gabarito |
+| `grau` | taxa de detecção agregada por grau de alcançabilidade (`alta`/`media`/`baixa`), o ganho de densidade ao recusar o grau mais baixo, e a checagem de robustez removendo a CWE que mais detecta |
 
 **Uso:**
 ```bash
@@ -528,7 +550,15 @@ python scripts/analise_rodada.py results/<run_id>
 python scripts/analise_rodada.py results/<run_id> --secao funil
 python scripts/analise_rodada.py results/<run_id> --secao positivos --justificativa-completa
 python scripts/analise_rodada.py results/<run_id> --secao regras --cache cache_simbolico_pre_estrito
+python scripts/analise_rodada.py results/<run_id> --secao grau
 ```
+
+**Sobre a seção `grau`.** Ela agrega pares e detecções **somados por grupo**,
+nunca a média das taxas por CWE — uma CWE com 3 pares não pode pesar como uma com
+124. A saída imprime, por conta própria, a ressalva de que o critério do grau foi
+derivado *olhando* a rodada `20260908T094808Z-9a00cb2`: a separação é **observada
+naquela amostra**, não prevista. Validá-la exige rodar esta seção sobre uma rodada
+que não a gerou.
 
 **Flags:** `--secao` isola uma seção; `--justificativa-completa` não trunca as
 justificativas do LLM; `--cache` escolhe o diretório de cache simbólico
