@@ -122,3 +122,99 @@ def test_snapshot_expoe_origem_e_data(catalogo):
     assert snap.origem.startswith("https://semgrep.dev/c/")
     assert snap.regras == len(RULESET["rules"])
     assert snap.obtido_em[:2] == "20"
+
+
+# --- Grau ordinal de alcançabilidade ---------------------------------------
+#
+# A consulta binária responde "existe regra?". A Rodada 3 mediu que essa resposta
+# comporta realidades muito diferentes: CWEs cobertas só por regras de auditoria
+# renderam 1 detecção em 336 pares, contra 17 em 354 das demais. O grau vem de
+# campo declarado pela regra — `metadata.subcategory` e `mode` —, nunca de uma
+# lista de CWEs no código, que passaria a mentir em silêncio quando o ruleset
+# mudasse.
+
+RULESET_GRAUS = {
+    "rules": [
+        # CWE-89: regra que afirma vulnerabilidade e não depende de taint.
+        {"id": "go.sqli.direta", "languages": ["go"], "mode": None,
+         "metadata": {"cwe": ["CWE-89: SQL Injection"], "subcategory": ["vuln"]}},
+        # CWE-918: única regra de vulnerabilidade é de taint.
+        {"id": "go.ssrf.taint", "languages": ["go"], "mode": "taint",
+         "metadata": {"cwe": ["CWE-918: SSRF"], "subcategory": ["vuln"]}},
+        # CWE-400: só auditoria.
+        {"id": "go.limite.audit", "languages": ["go"],
+         "metadata": {"cwe": ["CWE-400: Resource Exhaustion"],
+                      "subcategory": ["audit"]}},
+        # CWE-611: metadado ausente — degrada para auditoria, não quebra.
+        {"id": "go.xxe.sem_sub", "languages": ["go"],
+         "metadata": {"cwe": ["CWE-611: XXE"]}},
+        # CWE-352: vocabulário desconhecido — idem.
+        {"id": "go.csrf.estranho", "languages": ["go"],
+         "metadata": {"cwe": ["CWE-352: CSRF"], "subcategory": ["inventado"]}},
+        # CWE-79: alta em Python, baixa em Go — o grau é por linguagem.
+        {"id": "py.xss.vuln", "languages": ["python"],
+         "metadata": {"cwe": ["CWE-79: XSS"], "subcategory": ["vuln"]}},
+        {"id": "go.xss.audit", "languages": ["go"],
+         "metadata": {"cwe": ["CWE-79: XSS"], "subcategory": ["audit"]}},
+        # `subcategory` como string única, como `cwe` já ocorre.
+        {"id": "go.cripto.str", "languages": ["go"],
+         "metadata": {"cwe": "CWE-327: Broken Crypto", "subcategory": "vuln"}},
+    ]
+}
+
+
+@pytest.fixture
+def catalogo_graus(tmp_path):
+    caminho = tmp_path / "_regras_graus.json"
+    caminho.write_text(json.dumps(RULESET_GRAUS), encoding="utf-8")
+    return str(caminho)
+
+
+def test_grau_alto_para_regra_vuln_sem_taint(catalogo_graus):
+    assert ruleset.grau_alcancabilidade("CWE-89", "go", catalogo_graus) == "alta"
+
+
+def test_grau_intermediario_quando_so_ha_vuln_de_taint(catalogo_graus):
+    """Taint exige origem e destino no mesmo arquivo, e o motor não faz fluxo
+    entre arquivos: CWE-918 rendeu 1 detecção em 112 pares na Rodada 3."""
+    assert ruleset.grau_alcancabilidade("CWE-918", "go", catalogo_graus) == "media"
+
+
+def test_grau_baixo_quando_so_ha_auditoria(catalogo_graus):
+    assert ruleset.grau_alcancabilidade("CWE-400", "go", catalogo_graus) == "baixa"
+
+
+def test_metadado_ausente_ou_desconhecido_degrada_para_auditoria(catalogo_graus):
+    """O pior caso precisa ser o comportamento binário de hoje, não uma exceção."""
+    assert ruleset.grau_alcancabilidade("CWE-611", "go", catalogo_graus) == "baixa"
+    assert ruleset.grau_alcancabilidade("CWE-352", "go", catalogo_graus) == "baixa"
+
+
+def test_subcategory_como_string_unica(catalogo_graus):
+    assert ruleset.grau_alcancabilidade("CWE-327", "go", catalogo_graus) == "alta"
+
+
+def test_grau_e_por_linguagem(catalogo_graus):
+    assert ruleset.grau_alcancabilidade("CWE-79", "python", catalogo_graus) == "alta"
+    assert ruleset.grau_alcancabilidade("CWE-79", "go", catalogo_graus) == "baixa"
+
+
+def test_cwe_inalcancavel_nao_tem_grau(catalogo_graus):
+    assert ruleset.grau_alcancabilidade("CWE-22", "go", catalogo_graus) is None
+
+
+def test_graus_por_linguagem_devolve_o_mapa(catalogo_graus):
+    graus = ruleset.graus_alcancabilidade("go", catalogo_graus)
+    assert graus == {89: "alta", 327: "alta", 918: "media",
+                     400: "baixa", 611: "baixa", 352: "baixa", 79: "baixa"}
+
+
+def test_ordem_dos_graus_e_ordinal():
+    assert ruleset.ORDEM_GRAUS == ("baixa", "media", "alta")
+
+
+def test_grau_baixo_continua_alcancavel(catalogo_graus):
+    """REDE DE PROTEÇÃO: o grau não pode estreitar a fronteira que a Fase 1
+    respeita. Grau baixo é diagnóstico, não exclusão."""
+    assert cwe_alcancavel("CWE-400", "go", catalogo_graus)
+    assert 400 in cwes_alcancaveis("go", catalogo_graus)

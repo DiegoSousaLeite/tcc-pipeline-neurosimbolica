@@ -44,6 +44,7 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from src.fase1_semgrep import _numero_cwe  # noqa: E402
 from src.metricas import (  # noqa: E402
     _categoria_llm,
     _tabela,
@@ -51,15 +52,23 @@ from src.metricas import (  # noqa: E402
     contar,
     mcnemar,
 )
+from src.ruleset import (  # noqa: E402
+    GRAU_BAIXA,
+    ORDEM_GRAUS,
+    graus_alcancabilidade,
+)
+
+# Linguagem do corpus. O grau é por linguagem, como a alcançabilidade.
+LINGUAGEM_GRAU = "go"
 
 # Ordem canônica das trilhas de origem, a mesma de `run_pipeline.TRILHAS`.
 # Repetida aqui, e não importada, para que a saída não dependa de o
 # orquestrador ser importável — as seções que só leem CSV precisam rodar mesmo
 # sem `data/`.
-TRILHAS = ("FP", "TP_ouro", "TP_prata", "TP_dataset")
+TRILHAS = ("FP", "TP_ouro", "TP_prata", "TP_dataset", "TP_alcancavel")
 
 SECOES = ("funil", "nao-detectados", "conjuntos", "esteira", "positivos",
-          "regras")
+          "regras", "grau")
 
 EPILOGO = """\
 seções (na ordem em que saem quando --secao é omitido):
@@ -792,6 +801,125 @@ def secao_regras(rodada):
 # CLI
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Seção: grau de alcançabilidade
+# ---------------------------------------------------------------------------
+
+# Trilha cujos casos vêm da colheita filtrada. É a única em que o grau tem o que
+# medir: as demais foram colhidas sem consultar o ruleset.
+TRILHA_FILTRADA = "TP_alcancavel"
+
+
+def _agrega_por_grau(linhas, graus, excluir=None):
+    """`{grau: (cwes, pares, deteccoes)}`, agregando somas — não médias.
+
+    A agregação é por grupo de propósito: uma CWE com 3 pares não pode pesar o
+    mesmo que uma com 124, e a média das taxas por CWE deixaria a escala à mercê
+    das caudas pequenas.
+    """
+    pares, deteccoes, cwes = Counter(), Counter(), {}
+    for linha in linhas:
+        cwe = linha.get("CWE", "")
+        n = _numero_cwe(cwe)
+        if n is None or n == excluir:
+            continue
+        grau = graus.get(n)
+        if grau is None:
+            continue
+        cwes.setdefault(grau, set()).add(n)
+        pares[grau] += 1
+        if linha.get("Status_Semgrep") == "DETECTADO":
+            deteccoes[grau] += 1
+    return {g: (len(cwes.get(g, ())), pares[g], deteccoes[g])
+            for g in reversed(ORDEM_GRAUS)}
+
+
+def _linha_taxa(grau, dados):
+    cwes, pares, det = dados
+    taxa = (100 * det / pares) if pares else 0.0
+    return f"  {grau:<7s} {cwes:>5d} {pares:>7d} {det:>7d} {taxa:>8.2f}%"
+
+
+def secao_grau(rodada):
+    """Separação da taxa de detecção entre os graus de alcançabilidade.
+
+    Sem esta medição o grau seria afirmação não verificada. Com ela, qualquer
+    rodada devolve a separação real — e é o que permite testar o critério FORA
+    da amostra que o gerou, que é a ressalva registrada no design da mudança
+    `alcancabilidade-ponderada`.
+    """
+    _titulo("GRAU — separação da detecção por grau de alcançabilidade")
+
+    linhas = [x for x in rodada.unicas
+              if x.get("Origem") == TRILHA_FILTRADA
+              and x.get("Gabarito") == "vulneravel"]
+    if not linhas:
+        print(f"  (rodada sem casos vulneráveis da trilha {TRILHA_FILTRADA}: "
+              f"seção indisponível)")
+        return
+
+    try:
+        graus = graus_alcancabilidade(LINGUAGEM_GRAU)
+    except Exception as e:                                   # noqa: BLE001
+        print(f"  (ruleset indisponível, seção pulada: {str(e)[:80]})")
+        return
+
+    agregado = _agrega_por_grau(linhas, graus)
+    print(f"  amostra: {len(linhas)} casos vulneráveis da trilha "
+          f"{TRILHA_FILTRADA}")
+    print()
+    print(f"  {'grau':<7s} {'CWEs':>5s} {'pares':>7s} {'detec.':>7s} {'taxa':>9s}")
+    print("  " + "-" * 40)
+    for grau, dados in agregado.items():
+        print(_linha_taxa(grau, dados))
+
+    # Ganho de densidade: quanto se concentra ao recusar o grau mais baixo.
+    _, p_baixa, d_baixa = agregado.get(GRAU_BAIXA, (0, 0, 0))
+    p_acima = sum(v[1] for g, v in agregado.items() if g != GRAU_BAIXA)
+    d_acima = sum(v[2] for g, v in agregado.items() if g != GRAU_BAIXA)
+    t_baixa = (100 * d_baixa / p_baixa) if p_baixa else 0.0
+    t_acima = (100 * d_acima / p_acima) if p_acima else 0.0
+    print()
+    print(f"  acima de {GRAU_BAIXA}: {p_acima} pares, {d_acima} detecções "
+          f"({t_acima:.2f}%)")
+    print(f"  em {GRAU_BAIXA}     : {p_baixa} pares, {d_baixa} detecções "
+          f"({t_baixa:.2f}%)")
+    if t_baixa:
+        print(f"  ganho de densidade: {t_acima / t_baixa:.1f}x  "
+              f"(detecções perdidas se recusasse: {d_baixa})")
+    elif d_baixa == 0:
+        print(f"  ganho de densidade: grau {GRAU_BAIXA} não produziu detecção "
+              f"alguma em {p_baixa} pares")
+
+    # Robustez: a separação depende de uma única CWE?
+    por_cwe = Counter()
+    for linha in linhas:
+        if linha.get("Status_Semgrep") == "DETECTADO":
+            n = _numero_cwe(linha.get("CWE", ""))
+            if n is not None:
+                por_cwe[n] += 1
+    if por_cwe:
+        dominante, quantas = por_cwe.most_common(1)[0]
+        sem = _agrega_por_grau(linhas, graus, excluir=dominante)
+        p2 = sum(v[1] for g, v in sem.items() if g != GRAU_BAIXA)
+        d2 = sum(v[2] for g, v in sem.items() if g != GRAU_BAIXA)
+        _, pb2, db2 = sem.get(GRAU_BAIXA, (0, 0, 0))
+        t2 = (100 * d2 / p2) if p2 else 0.0
+        tb2 = (100 * db2 / pb2) if pb2 else 0.0
+        print()
+        print(f"  robustez — sem CWE-{dominante} (a que mais detecta, "
+              f"{quantas} de {sum(por_cwe.values())}):")
+        print(f"      acima de {GRAU_BAIXA}: {t2:.2f}%  |  em {GRAU_BAIXA}: "
+              f"{tb2:.2f}%"
+              + (f"  |  ganho {t2 / tb2:.1f}x" if tb2 else "  |  ganho: baixa "
+                 "segue sem detecção"))
+
+    print()
+    print("  RESSALVA: o critério do grau foi derivado OLHANDO a taxa desta")
+    print("  rodada. A separação acima é OBSERVADA nesta amostra, não prevista.")
+    print("  Validá-lo exige repetir esta seção sobre uma rodada que não o gerou.")
+
+
 DESPACHO = {
     "funil": secao_funil,
     "nao-detectados": secao_nao_detectados,
@@ -799,6 +927,7 @@ DESPACHO = {
     "esteira": secao_esteira,
     "positivos": secao_positivos,
     "regras": secao_regras,
+    "grau": secao_grau,
 }
 
 

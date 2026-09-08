@@ -44,10 +44,20 @@ class RulesetIndisponivelError(Exception):
 
 
 class Regra(NamedTuple):
-    """Uma regra do ruleset, reduzida ao que decide alcançabilidade."""
+    """Uma regra do ruleset, reduzida ao que decide alcançabilidade.
+
+    `subcategorias` e `taint` são os dois eixos do grau (ver `GRAU_*`). Ambos
+    vêm declarados na própria regra, e não de julgamento nosso sobre a CWE:
+    `subcategory` distingue "isto é uma vulnerabilidade" de "olhe isto", e
+    `mode: taint` marca a regra que precisa de origem e destino no mesmo
+    arquivo. Trazem valor neutro quando ausentes, para que ruleset sem esses
+    metadados degrade ao comportamento binário em vez de quebrar.
+    """
 
     cwes: list
     linguagens: list
+    subcategorias: tuple = ()
+    taint: bool = False
 
 
 class Snapshot(NamedTuple):
@@ -92,6 +102,31 @@ def _lista(cwe):
     return [cwe] if isinstance(cwe, str) else list(cwe)
 
 
+# Graus de alcançabilidade, em ordem crescente.
+#
+# A consulta binária responde "existe regra?". Medido sobre os 690 pares da
+# trilha `TP_alcancavel` da rodada `20260908T094808Z-9a00cb2`, essa resposta
+# comporta realidades muito diferentes:
+#
+#     alta  →  115 pares,  13 detecções  (11,30 %)
+#     media →  239 pares,   4 detecções  ( 1,67 %)
+#     baixa →  336 pares,   1 detecção   ( 0,30 %)
+#
+# A escala é ordinal e não contínua de propósito: 18 detecções não pagam a
+# precisão que um score sugeriria. E a separação foi observada DENTRO da amostra
+# que a gerou — validar fora dela depende de rodada futura
+# (`scripts/analise_rodada.py --secao grau`).
+GRAU_BAIXA = "baixa"
+GRAU_MEDIA = "media"
+GRAU_ALTA = "alta"
+ORDEM_GRAUS = (GRAU_BAIXA, GRAU_MEDIA, GRAU_ALTA)
+
+# Vocabulário do `metadata.subcategory` que afirma detecção de vulnerabilidade.
+# Qualquer outro valor — inclusive ausência — conta como auditoria, que é o lado
+# conservador: erra para o grau baixo, nunca para o alto.
+_SUBCATEGORIA_VULN = "vuln"
+
+
 def _obter_ruleset(url):
     """Busca o ruleset no registry. Isolada para que o teste possa derrubá-la."""
     import requests
@@ -134,8 +169,13 @@ def carregar_regras(destino=None, config=SEMGREP_CONFIG):
     with open(destino, encoding="utf-8") as f:
         dados = json.load(f)
     regras = {
-        r["id"]: Regra(cwes=_lista((r.get("metadata") or {}).get("cwe")),
-                       linguagens=list(r.get("languages") or []))
+        r["id"]: Regra(
+            cwes=_lista((r.get("metadata") or {}).get("cwe")),
+            linguagens=list(r.get("languages") or []),
+            subcategorias=tuple(
+                _lista((r.get("metadata") or {}).get("subcategory"))),
+            taint=(r.get("mode") == "taint"),
+        )
         for r in dados.get("rules", [])
     }
     _MEMORIA.clear()          # só interessa o snapshot corrente
@@ -171,6 +211,59 @@ def cwe_alcancavel(cwe, linguagem, destino=None, config=SEMGREP_CONFIG):
     if alvo is None:
         return False
     return alvo in cwes_alcancaveis(linguagem, destino, config)
+
+
+def _afirma_vulnerabilidade(regra):
+    """A regra declara detectar vulnerabilidade, ou apenas sinalizar auditoria?
+
+    Ausência e vocabulário desconhecido contam como auditoria: `subcategory` é
+    metadado do registry, não contrato, e tratá-lo como ausente-é-vulnerável
+    inflaria o grau justamente onde não há informação.
+    """
+    return any(_SUBCATEGORIA_VULN in str(s).lower()
+               for s in regra.subcategorias)
+
+
+def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG):
+    """`{numero_da_cwe: grau}` para as CWEs alcançáveis naquela linguagem.
+
+    Devolve o mapa inteiro, e não uma consulta por vez, porque o relatório da
+    colheita precisa do grau de todas as CWEs de uma vez e refazer a leitura por
+    CWE percorreria o ruleset uma vez por consulta.
+    """
+    alvo = str(linguagem).lower()
+    melhor = {}
+    for regra in carregar_regras(destino, config).values():
+        if alvo not in {str(x).lower() for x in regra.linguagens}:
+            continue
+        if _afirma_vulnerabilidade(regra):
+            grau = GRAU_MEDIA if regra.taint else GRAU_ALTA
+        else:
+            grau = GRAU_BAIXA
+        for c in regra.cwes:
+            n = _numero_cwe(c)
+            if n is None:
+                continue
+            # O grau da CWE é o da MELHOR regra que a cobre: basta uma regra
+            # capaz para que o motor tenha chance de alcançá-la.
+            atual = melhor.get(n)
+            if atual is None or ORDEM_GRAUS.index(grau) > ORDEM_GRAUS.index(atual):
+                melhor[n] = grau
+    return melhor
+
+
+def grau_alcancabilidade(cwe, linguagem, destino=None, config=SEMGREP_CONFIG):
+    """Grau de uma CWE, ou `None` quando ela não é alcançável de forma alguma.
+
+    `None` e `GRAU_BAIXA` são estados diferentes e não devem ser confundidos:
+    o primeiro é "nenhuma regra declara esta CWE", o segundo é "há regra, mas
+    nenhuma afirma detectar vulnerabilidade". A colheita recusa o primeiro e
+    aceita o segundo.
+    """
+    n = _numero_cwe(cwe)
+    if n is None:
+        return None
+    return graus_alcancabilidade(linguagem, destino, config).get(n)
 
 
 def metadados_snapshot(destino=None, config=SEMGREP_CONFIG):
