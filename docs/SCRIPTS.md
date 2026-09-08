@@ -203,6 +203,49 @@ Subi-la invalida todo o cache simbólico.
 
 ---
 
+### `src/ruleset.py`
+
+**Propósito:** Responde à pergunta *"o motor simbólico tem regra para esta CWE
+nesta linguagem?"*. O conjunto de CWEs alcançáveis é derivado do catálogo de
+regras a cada consulta, nunca de lista embutida no código — o ruleset é
+configurável por `SEMGREP_CONFIG`, e uma lista fixa passaria a mentir em silêncio
+no instante em que ele mudasse.
+
+**Alcançabilidade é por linguagem:** só contam as regras cuja `languages` inclui a
+linguagem consultada. Nenhuma regra de Python dispara sobre um arquivo `.go`, e
+tratar a CWE como alcançável porque o ruleset a cobre "em abstrato" produziria
+população que o motor não tem como detectar. No `p/default`, das 1074 regras, 84
+são de Go e cobrem 34 CWEs distintas.
+
+**Fonte e cache:** busca `https://semgrep.dev/c/<SEMGREP_CONFIG>` e grava em
+`cache_simbolico/_regras_<config>.json` (para `p/default`,
+`_regras_p_default.json`). Com o cache presente, funciona offline. O nome do
+arquivo carrega a configuração para que trocar `SEMGREP_CONFIG` não sirva o
+catálogo antigo sem aviso.
+
+**Comparação de CWE:** importa `_numero_cwe` de `src/fase1_semgrep.py` em vez de
+reimplementá-la. Se a alcançabilidade aceitasse por um critério e o pareamento
+recusasse por outro, a colheita produziria casos que a Fase 1 descartaria —
+`CWE-77` e `CWE-770` são fraquezas distintas, e ambas estão na população.
+`metadata.cwe` é aceito como string única ou como lista, porque as duas formas
+ocorrem no registry (959 listas contra 85 strings).
+
+**API:** `carregar_regras()` → `{check_id: Regra(cwes, linguagens)}`;
+`cwes_alcancaveis(linguagem)` → conjunto de números de CWE;
+`cwe_alcancavel(cwe, linguagem)` → bool; `metadados_snapshot()` →
+`Snapshot(origem, caminho, obtido_em, regras)`.
+
+**Snapshot:** `metadados_snapshot()` expõe a data do cache porque o registry e o
+Semgrep instalado são catálogos diferentes — a divergência já foi observada
+(`docs/ANALISE-RODADA-2.md` §6.1) e a data a torna visível. Fixar o ruleset por
+versão é assunto de outra mudança.
+
+**Exceções:** `RulesetIndisponivelError` quando não há cache nem rede. É erro de
+propósito: conjunto vazio faria toda CWE parecer inalcançável e recusaria a
+população inteira em silêncio.
+
+---
+
 ### `src/fase2_middleware.py`
 
 **Propósito:** Dado o alerta Semgrep e o caminho absoluto do arquivo, lê o
