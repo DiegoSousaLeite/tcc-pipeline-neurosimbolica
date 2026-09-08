@@ -37,6 +37,7 @@ USO
   python run_pipeline.py --trilha TP_dataset --dry-run
 """
 import argparse
+import collections
 import csv
 import glob
 import hashlib
@@ -338,6 +339,17 @@ def construir_casos_tp(tp_pairs_file, origem_label, cwe_meta, prefixo_id=""):
     próprio, porque a colheita pode reencontrar um repo/CWE/função já presente
     num pool antigo e o ID colidido faria dois casos distintos serem tratados
     como o mesmo pela tripla de checkpoint.
+
+    Nos pools com prefixo o ID leva ainda um discriminador do **arquivo**, sem o
+    qual a separação entre trilhas não bastaria: dentro de um mesmo pool, o
+    mesmo nome de método aparece em vários arquivos do pacote e um único fix os
+    altera juntos — `Decode` em `commit.go`, `tag.go` e `tree.go` do `go-git`
+    davam três casos com um ID só. O discriminador sai do caminho do arquivo, e
+    não da posição no pool, para que acrescentar um par nunca mude o ID de um
+    par já existente (`identificador-de-caso-unico`, D1 e D2).
+
+    Os pools sem prefixo ficam de fora da mudança de propósito: alterar o ID
+    deles invalidaria a retomada das rodadas que já os gravaram (D3).
     """
     casos = []
     if not os.path.exists(tp_pairs_file):
@@ -352,6 +364,10 @@ def construir_casos_tp(tp_pairs_file, origem_label, cwe_meta, prefixo_id=""):
         funcao = (par.get("funcao") or "func").replace(" ", "_")
         meta = cwe_meta.get(cwe, {"name": "", "description": ""})
         base_id = f"{prefixo_id}{repo_dir}:{cwe}:{funcao}"
+        if prefixo_id:
+            discriminador = hashlib.sha256(
+                (arquivo or "").encode("utf-8")).hexdigest()[:8]
+            base_id = f"{base_id}:{discriminador}"
         for versao, commit, gabarito in [
             ("vuln", par.get("parent_commit"), "vulneravel"),
             ("fix", par.get("fix_commit"), "seguro"),
@@ -375,6 +391,42 @@ def construir_casos_tp(tp_pairs_file, origem_label, cwe_meta, prefixo_id=""):
                 num_locations=1,
             ))
     return casos
+
+
+class IdentificadorDuplicadoError(Exception):
+    """Dois casos distintos receberam o mesmo `ID_Caso`.
+
+    É erro, e não aviso, porque o dano é silencioso: o checkpoint por tripla
+    `(ID_Caso, Modelo_LLM, Tipo_Prompt)` trata o segundo caso como já gravado e
+    `src/metricas.py` deduplica pela primeira ocorrência, de modo que o caso
+    perdido não deixa rastro no CSV. É o mesmo modo de falha do pareamento por
+    fallback e do ruleset vazio — saída plausível e errada.
+    """
+
+
+def verificar_ids_unicos(casos):
+    """Aborta se a população carrega `ID_Caso` repetido.
+
+    Roda uma vez por execução, antes de qualquer varredura ou chamada de LLM: o
+    custo é desprezível perto de uma rodada de horas que terminaria com casos a
+    menos sem ninguém perceber. A mensagem nomeia os IDs repetidos e as trilhas
+    envolvidas, porque a decisão de o que fazer depende de qual pool colidiu.
+    """
+    contagem = collections.Counter(c.id for c in casos)
+    repetidos = sorted(i for i, n in contagem.items() if n > 1)
+    if not repetidos:
+        return None
+
+    trilhas = collections.defaultdict(set)
+    for c in casos:
+        if c.id in contagem and contagem[c.id] > 1:
+            trilhas[c.id].add(c.origem)
+    amostra = ", ".join(f"{i} ({'/'.join(sorted(trilhas[i]))})"
+                        for i in repetidos[:5])
+    raise IdentificadorDuplicadoError(
+        f"{len(repetidos)} ID_Caso repetido(s) na população, "
+        f"{sum(contagem[i] for i in repetidos)} casos envolvidos: {amostra}"
+        + (" ..." if len(repetidos) > 5 else ""))
 
 
 # ---------------------------------------------------------------------------
@@ -986,6 +1038,10 @@ def main():
 
     if args.trilha:
         casos = [c for c in casos if c.origem in set(args.trilha)]
+
+    # Antes de qualquer varredura ou chamada de LLM: um ID repetido só se
+    # manifestaria como caso a menos no fim de uma rodada de horas.
+    verificar_ids_unicos(casos)
 
     if args.amostra:
         casos = priorizar_locais(casos)[:args.amostra]

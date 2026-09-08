@@ -21,6 +21,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from run_pipeline import (  # noqa: E402
+    TP_PAIRS_ALCANCAVEL,
     TP_PAIRS_OURO,
     TP_PAIRS_PRATA,
     _cwe_lookup,
@@ -41,7 +42,15 @@ from src.fonte import (  # noqa: E402
 
 
 def casos_unicos(so_go=True):
-    """Todos os casos da pipeline, deduplicados por (repo, commit, arquivo)."""
+    """Todos os casos da pipeline, deduplicados por (repo, commit, arquivo).
+
+    A trilha `TP_alcancavel` precisa estar aqui: ela ficou de fora quando foi
+    criada, e sem ela os arquivos dos pares da colheita filtrada não chegam ao
+    cache — a Fase 1 acabaria buscando cada um da rede, que é exatamente o que
+    este script existe para evitar. O prefixo de ID é o mesmo da pipeline
+    porque a chave de deduplicação é `(repo, commit, arquivo)` e o ID entra só
+    na identidade do caso, mas divergir aqui esconderia a diferença.
+    """
     with open(DATASET_PATH, encoding="utf-8") as f:
         dataset = json.load(f)
     meta = _cwe_lookup(dataset)
@@ -49,6 +58,8 @@ def casos_unicos(so_go=True):
         construir_casos_fp(dataset, todas_locations=True, so_go=so_go)
         + construir_casos_tp(TP_PAIRS_OURO, "TP_ouro", meta)
         + construir_casos_tp(TP_PAIRS_PRATA, "TP_prata", meta)
+        + construir_casos_tp(TP_PAIRS_ALCANCAVEL, "TP_alcancavel", meta,
+                             prefixo_id="TPA:")
         + construir_casos_tp_dataset(dataset, todas_locations=True, so_go=so_go)
     )
     vistos, unicos = set(), []

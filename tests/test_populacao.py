@@ -253,3 +253,96 @@ def test_proporcao_de_inalcancaveis_permanece_calculavel(pool, cwe_meta):
 
     assert len(vulneraveis) == 2
     assert len(inalcancaveis) == 1
+
+
+# --- Unicidade do identificador DENTRO da trilha ----------------------------
+#
+# O `prefixo_id` separa o espaço de identificadores ENTRE trilhas. Estes testes
+# cobrem a outra metade, que o esquema antigo não garantia: dois pares do MESMO
+# pool, com mesmo repositório, CWE e nome de função, apontando arquivos
+# diferentes. Em Go isso é o caso comum — o mesmo método em vários arquivos do
+# pacote, todos alterados pelo mesmo fix.
+
+def test_pares_em_arquivos_distintos_nao_colidem(pool, cwe_meta):
+    pares = [_par(arquivo="plumbing/object/commit.go"),
+             _par(arquivo="plumbing/object/tag.go"),
+             _par(arquivo="plumbing/object/tree.go")]
+    casos = construir_casos_tp(pool(pares), "TP_alcancavel", cwe_meta,
+                               prefixo_id=PREFIXO_ALCANCAVEL)
+
+    assert len(casos) == 6            # 3 pares x 2 versões
+    ids = [c.id for c in casos]
+    assert len(ids) == len(set(ids))
+
+
+def test_identificador_nao_depende_dos_vizinhos_no_pool(pool, cwe_meta):
+    """D1: acrescentar um par ao pool não pode mudar o identificador dos que já
+    estavam lá — se dependesse da posição, uma colheita futura quebraria o
+    checkpoint de uma rodada em andamento."""
+    antes = construir_casos_tp(
+        pool([_par(arquivo="a.go")], nome="antes.json"),
+        "TP_alcancavel", cwe_meta, prefixo_id=PREFIXO_ALCANCAVEL)
+    depois = construir_casos_tp(
+        pool([_par(arquivo="a.go"), _par(arquivo="b.go")], nome="depois.json"),
+        "TP_alcancavel", cwe_meta, prefixo_id=PREFIXO_ALCANCAVEL)
+
+    ids_antes = {c.id for c in antes}
+    assert ids_antes <= {c.id for c in depois}
+
+
+def test_montagem_aborta_com_identificador_repetido():
+    """D4: o modo de falha a evitar é o silencioso. O checkpoint por tripla
+    trataria o segundo caso como já gravado e as métricas deduplicam pela
+    primeira ocorrência — nada no CSV denunciaria a perda."""
+    caso = run_pipeline.Caso(
+        id="TPA:acme:CWE-327:Handler:vuln", origem="TP_alcancavel",
+        repo_name="acme/servico", repo_dir="servico",
+        repo_url="https://github.com/acme/servico", commit="a" * 40,
+        arquivo="pkg/cripto.go", cwe="CWE-327", cwe_name="", description="",
+        gabarito="vulneravel", num_locations=1)
+
+    with pytest.raises(run_pipeline.IdentificadorDuplicadoError) as erro:
+        run_pipeline.verificar_ids_unicos([caso, caso])
+
+    assert "TPA:acme:CWE-327:Handler:vuln" in str(erro.value)
+    assert "TP_alcancavel" in str(erro.value)
+
+
+def test_populacao_sem_duplicados_passa_pela_guarda(dataset_real, cwe_meta,
+                                                    pool):
+    casos = montar_populacao(dataset_real, cwe_meta, pool([_par()]))
+    assert run_pipeline.verificar_ids_unicos(casos) is None
+
+
+def test_ids_das_trilhas_ja_executadas_sao_os_dos_csvs(cwe_meta):
+    """Rede de proteção do D3: `TP_ouro` e `TP_prata` estão gravadas nos CSVs e
+    no checkpoint das rodadas anteriores. O esquema novo não pode alcançá-las."""
+    referencia = {}
+    for arq in glob.glob(os.path.join(RODADA_REFERENCIA, "*.csv")):
+        with open(arq, encoding="utf-8", newline="") as f:
+            for linha in csv.DictReader(f):
+                origem = (linha.get("Origem") or "").strip()
+                if origem in {"TP_ouro", "TP_prata"}:
+                    referencia.setdefault(origem, set()).add(linha["ID_Caso"])
+    assert referencia, f"a rodada {RODADA_REFERENCIA} deve estar em disco"
+
+    for pool_file, origem in ((TP_PAIRS_OURO, "TP_ouro"),
+                              (TP_PAIRS_PRATA, "TP_prata")):
+        casos = construir_casos_tp(pool_file, origem, cwe_meta)
+        assert {c.id for c in casos} == referencia[origem]
+
+
+def test_preenchimento_de_cache_cobre_a_trilha_nova(monkeypatch, pool,
+                                                    cwe_meta):
+    """A trilha nova ficou fora de `casos_unicos()` quando foi criada, e a Fase 1
+    acabaria buscando da rede os arquivos dela — justamente o que o cache de
+    fontes existe para evitar."""
+    import scripts.preencher_cache as preencher
+
+    alvo = "pkg/somente-da-trilha-nova.go"
+    monkeypatch.setattr(preencher, "TP_PAIRS_ALCANCAVEL",
+                        pool([_par(arquivo=alvo)]), raising=False)
+    monkeypatch.setattr(preencher, "TP_PAIRS_OURO", "/nao/existe.json")
+    monkeypatch.setattr(preencher, "TP_PAIRS_PRATA", "/nao/existe.json")
+
+    assert alvo in {c["arquivo"] for c in preencher.casos_unicos()}
