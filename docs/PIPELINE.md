@@ -9,12 +9,14 @@ positivo — código seguro).
 
 > **Nomenclatura.** O veredito do LLM usa `VP|FP`, em português, exatamente como
 > o código grava na coluna `Veredito_LLM` do CSV. As siglas `TP`/`TN` aparecem
-> apenas em nomes de trilha herdados (`TP_ouro`, `TP_prata`, `TP_dataset`) e nos
+> apenas em nomes de trilha herdados (`TP_ouro`, `TP_prata`, `TP_dataset`,
+> `TP_alcancavel`) e nos
 > arquivos `tp_pairs*.json`, onde designam a *origem* da amostra, não o veredito.
 
 ```
        DATASET                TP PAIRS (tp_pairs*.json)        DATASET
   791 FP (seguro)      100 amostras vuln/corrigido (ouro+prata)  57 TP_dataset
+                       + TP_alcancavel (colheita filtrada, 0 até o pool existir)
         |                            |                              |
         └────────────────────────────┼──────────────────────────────┘
                                      │ (repo, commit, arquivo, CWE)
@@ -184,11 +186,39 @@ roda normalmente. Amostras vulneráveis que o Semgrep não reproduz viram
 **Semgrep FN** na matriz de cobertura, e não chegam ao LLM — é o custo de o LLM
 ser filtro puro, e é justamente o ponto cego que a matriz 1 existe para medir.
 
-**Dois níveis de qualidade:**
+**Três pools de pares:**
 - `TP_ouro` (`tp_pairs.json`): 32 amostras. CVEs do dataset com função
   explicitamente marcada.
 - `TP_prata` (`tp_pairs_osv.json`): 68 amostras. CVEs da OSV harvest, sem
   filtragem pelo dataset.
+- `TP_alcancavel` (`tp_pairs_osv_alcancavel.json`): a colheita da OSV já
+  filtrada pelas CWEs que o ruleset alcança. Fica vazia enquanto o pool não
+  existe em disco, e a contagem 0 aparece no cabeçalho da execução — trilha
+  vazia não pode passar despercebida antes de uma rodada.
+
+**Por que trilha própria, e não sobrescrita do pool da `TP_prata`.** Sobrescrever
+`tp_pairs_osv.json` apagaria os pares inalcançáveis que sustentam o achado dos
+70,1 %, e `tp_pairs.json` é irrecuperável — só `scripts/tp_reconstruct.py` o
+regenera, e ele exige o histórico git completo dos repositórios, que não está
+mais em disco. Separar as duas trilhas é também o que permite dizer, depois da
+rodada, se o ganho de amostra veio da colheita filtrada ou apenas do
+reaproveitamento de pares antigos: sem essa distinção não há como avaliar se o
+filtro funcionou. A coluna `Origem` do CSV já carrega o rótulo da trilha, então a
+contagem por procedência é um agrupamento, sem código de auditoria novo.
+
+Os 17 pares já alcançáveis dos pools antigos **continuam contando como `TP_ouro`
+e `TP_prata`**: aproveitá-los significa não descartá-los, não movê-los de trilha.
+Os IDs da trilha nova levam o prefixo `TPA:` para que, se a colheita reencontrar
+um par já presente num pool antigo, o identificador colidido não faça dois casos
+distintos virarem o mesmo na tripla de checkpoint.
+
+**Por que os casos de CWE inalcançável permanecem na população.** Eles são
+resultado, não ruído: sustentam a afirmação de que 70,1 % das fraquezas do corpus
+estão fora do alcance da análise sintática. E não contaminam a matriz de acerto
+do LLM, porque nunca chegam a ela — sem emparelhamento na Fase 1 não há chamada
+de LLM. Entram na matriz de **cobertura**, onde são ponto cego, que é o que de
+fato são. O custo aceito é que o recall do Semgrep continua baixo, porque o
+denominador inclui os inalcançáveis: é a realidade sendo medida.
 
 CVEs cujo advisory da OSV não traz CWE são descartados na geração
 (`tp_reconstruct.py`): sem tag de CWE a Fase 1 não tem como casar o alerta, e o
@@ -253,7 +283,14 @@ manual, fora de escopo):
 | TP_ouro (`tp_pairs.json`) | 32 | 16 vuln + 16 seguro |
 | TP_prata (`tp_pairs_osv.json`) | 68 | 34 vuln + 34 seguro |
 | TP_dataset (dataset) | 57 | vulnerável |
+| TP_alcancavel (`tp_pairs_osv_alcancavel.json`) | 0 | metade vuln + metade seguro |
 | **Total** | **948** | **107 vulneráveis / 841 seguros** |
+
+A `TP_alcancavel` entra com 0 enquanto o pool da colheita filtrada não existe em
+disco; os totais acima são os das rodadas anteriores e continuam valendo. Quando
+o pool existir, a população cresce e deixa de ser comparável **caso a caso** com
+as rodadas antigas — a comparação legítima passa a ser entre braços dentro da
+rodada nova. As rodadas anteriores permanecem em disco, comparáveis entre si.
 
 ---
 
@@ -753,10 +790,11 @@ custo é acompanhável desde o piloto.
 
 ```
 ID_Caso            → identificador único (finding_id[#i] para FP; TPD:<id>[#i] para
-                     TP_dataset; repo:cwe:func:vuln|fix para os pares TP)
+                     TP_dataset; repo:cwe:func:vuln|fix para os pares TP, com o
+                     prefixo TPA: nos da TP_alcancavel)
 Repositorio        → nome do repo (ex: argoproj/argo-cd)
 CWE                → ex: CWE-89
-Origem             → FP | TP_ouro | TP_prata | TP_dataset
+Origem             → FP | TP_ouro | TP_prata | TP_dataset | TP_alcancavel
 Modelo_LLM         → ex: gemini-2.5-flash-lite
 Tipo_Prompt        → baseline | especialista
 Gabarito           → vulneravel | seguro

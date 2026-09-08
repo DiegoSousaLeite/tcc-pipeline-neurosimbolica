@@ -7,6 +7,11 @@ Semgrep)
   TP_ouro     (tp_pairs.json)      → par vuln/corrigido, gabarito vulneravel/seguro
   TP_prata    (tp_pairs_osv.json)  → idem, da OSV harvest
   TP_dataset  (dataset, ground_truth=true_positive)  → gabarito=vulneravel
+  TP_alcancavel (tp_pairs_osv_alcancavel.json) → idem, da OSV harvest já
+                filtrada pelas CWEs que o ruleset alcança. Trilha própria e não
+                sobrescrita da TP_prata: os pares inalcançáveis dela são a
+                evidência do achado dos 70,1%, e separar as duas é o que permite
+                dizer, depois da rodada, se o ganho veio da colheita filtrada.
 
   Em todas, o LLM só é consultado se o Semgrep detectar (DETECTADO). As vulns
   reais que o Semgrep não reproduz viram Semgrep FN (ponto cego simbólico).
@@ -89,6 +94,12 @@ log = logging.getLogger("pipeline")
 BASE = os.path.dirname(os.path.abspath(__file__))
 TP_PAIRS_OURO = os.path.join(BASE, "tp_pairs.json")
 TP_PAIRS_PRATA = os.path.join(BASE, "tp_pairs_osv.json")
+# Pool da colheita filtrada por alcançabilidade: saída de
+# `scripts/tp_reconstruct.py --input data/tp_fixes_osv_alcancavel.json`.
+# Arquivo próprio, e não sobrescrita do pool da TP_prata: sobrescrever apagaria
+# os pares inalcançáveis que sustentam o achado dos 70,1%, e impediria saber
+# depois se o ganho de amostra veio da colheita nova ou do pool antigo.
+TP_PAIRS_ALCANCAVEL = os.path.join(BASE, "tp_pairs_osv_alcancavel.json")
 # CSVs da Parte 1, arquivados. Continuam sendo lidos pelo checkpoint — só não
 # ficam mais soltos na raiz nem são misturados aos resultados da Parte 2.
 LEGADO_PARTE1 = os.path.join(BASE, "legacy", "resultados_parte1")
@@ -123,7 +134,8 @@ class Caso:
     """
 
     id: str
-    origem: str                 # FP | TP_ouro | TP_prata | TP_dataset
+    origem: str                 # FP | TP_ouro | TP_prata | TP_dataset |
+                                # TP_alcancavel
     repo_name: str
     repo_dir: str
     repo_url: str
@@ -285,7 +297,7 @@ def construir_casos_tp_dataset(dataset, todas_locations=True, so_go=True):
     return casos
 
 
-TRILHAS = ("FP", "TP_ouro", "TP_prata", "TP_dataset")
+TRILHAS = ("FP", "TP_ouro", "TP_prata", "TP_dataset", "TP_alcancavel")
 
 
 def contar_por_trilha(casos):
@@ -313,12 +325,19 @@ def priorizar_locais(casos):
     return sorted(casos, key=lambda c: not ja_local(c))
 
 
-def construir_casos_tp(tp_pairs_file, origem_label, cwe_meta):
+def construir_casos_tp(tp_pairs_file, origem_label, cwe_meta, prefixo_id=""):
     """Constrói casos TP no MESMO formato dos casos FP: cada par vira duas
     amostras (o commit vulnerável e o commit corrigido), que passam pela
     Fase 1 (Semgrep) como qualquer outra amostra. Não há bypass — o LLM só
     roda se o Semgrep detectar (filtro puro). As amostras vulneráveis que o
     Semgrep não reproduz viram Semgrep FN (ponto cego) na matriz de cobertura.
+
+    `prefixo_id` separa o espaço de identificadores de uma trilha das demais.
+    Fica vazio para `TP_ouro` e `TP_prata`, cujos IDs já estão gravados nos CSVs
+    e no checkpoint das rodadas anteriores; pools colhidos depois usam prefixo
+    próprio, porque a colheita pode reencontrar um repo/CWE/função já presente
+    num pool antigo e o ID colidido faria dois casos distintos serem tratados
+    como o mesmo pela tripla de checkpoint.
     """
     casos = []
     if not os.path.exists(tp_pairs_file):
@@ -332,7 +351,7 @@ def construir_casos_tp(tp_pairs_file, origem_label, cwe_meta):
         arquivo = par.get("arquivo")
         funcao = (par.get("funcao") or "func").replace(" ", "_")
         meta = cwe_meta.get(cwe, {"name": "", "description": ""})
-        base_id = f"{repo_dir}:{cwe}:{funcao}"
+        base_id = f"{prefixo_id}{repo_dir}:{cwe}:{funcao}"
         for versao, commit, gabarito in [
             ("vuln", par.get("parent_commit"), "vulneravel"),
             ("fix", par.get("fix_commit"), "seguro"),
@@ -951,6 +970,8 @@ def main():
     casos_tp = (
         construir_casos_tp(TP_PAIRS_OURO, "TP_ouro", cwe_meta) +
         construir_casos_tp(TP_PAIRS_PRATA, "TP_prata", cwe_meta) +
+        construir_casos_tp(TP_PAIRS_ALCANCAVEL, "TP_alcancavel", cwe_meta,
+                           prefixo_id="TPA:") +
         construir_casos_tp_dataset(dataset,
                                    todas_locations=not args.uma_location,
                                    so_go=not args.todas_extensoes)

@@ -120,11 +120,12 @@ def test_num_locations_nas_tres_trilhas(dataset_real):
 
 # --- 2.4 Ligação ao runner --------------------------------------------------
 
-def test_contagem_por_trilha_lista_as_quatro(dataset_real):
+def test_contagem_por_trilha_lista_todas(dataset_real):
     casos = (construir_casos_fp(dataset_real)
              + construir_casos_tp_dataset(dataset_real))
     contagem = contar_por_trilha(casos)
-    assert list(contagem) == ["FP", "TP_ouro", "TP_prata", "TP_dataset"]
+    assert list(contagem) == ["FP", "TP_ouro", "TP_prata", "TP_dataset",
+                              "TP_alcancavel"]
     assert contagem["FP"] == 791
     assert contagem["TP_dataset"] == 57
     assert contagem["TP_ouro"] == 0   # trilha vazia continua listada
