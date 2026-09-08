@@ -430,7 +430,8 @@ Executada manualmente antes da pipeline principal. Ordem:
 osv_harvest_go.py  →  tp_fetch_fixes.py  →  fetch_raso.py  →  tp_reconstruct.py
 ```
 
-1. `osv_harvest_go.py` — coleta CVEs Go na OSV, gera `data/tp_fixes_osv.json`.
+1. `osv_harvest_go.py` — coleta CVEs Go na OSV, gera
+   `data/tp_fixes_osv_alcancavel.json`.
 2. `tp_fetch_fixes.py` — preenche `fix_commit` em `data/tp_fixes.json` via OSV API.
 3. `fetch_raso.py` — cria esqueletos git em `repos/` e faz `git fetch --depth 2`
    só dos commits de fix (fix + pai). Um clone de histórico inteiro custaria
@@ -439,6 +440,32 @@ osv_harvest_go.py  →  tp_fetch_fixes.py  →  fetch_raso.py  →  tp_reconstru
 
 Depois de rodar o `preencher_cache.py`, `repos/` pode ser apagado: os
 arquivos-alvo já estão no cache e a pipeline não toca mais em git.
+
+### Por que a colheita filtra por alcançabilidade
+
+A colheita da etapa 1 aceitava qualquer CWE. O efeito só apareceu na Rodada 2:
+**70,1 % dos 107 casos vulneráveis** da rodada `20260731T140000Z-af9bc32` têm CWE
+que nenhuma regra Go do `p/default` declara (`docs/ANALISE-RODADA-2.md` §3.1, que
+mede o mesmo do lado do resultado: o recall sobre a CWE rotulada é 0,0093).
+Esses casos são **indetectáveis por construção** — o motor não pode falhar em
+achar o que não sabe procurar, e o recall medido sobre eles mede a lacuna do
+catálogo de regras, não a capacidade do motor.
+
+A causa é viés de seleção em relação ao instrumento medido. As duas classes
+foram montadas por caminhos opostos: a segura veio **de achados do Semgrep**
+(SastBench), então sua CWE é a CWE de alguma regra por construção — 95,8 % dela é
+alcançável; a positiva veio de CVEs via OSV, sem nunca consultar o ruleset —
+29,9 % alcançável.
+
+Desde então `osv_harvest_go.py` consulta `src/ruleset.py` e recusa a candidata
+cuja CWE nenhuma regra da linguagem declara, contabilizando cada recusa sob a CWE
+que a causou. `scripts/pares_alcancaveis.py` aponta os 17 pares já colhidos que
+são aproveitáveis sem recolheita. Os pools antigos são **preservados**: os pares
+inalcançáveis são a evidência do achado, não lixo a limpar.
+
+Alcançável não é o mesmo que detectável — a regra existir não garante que dispare
+naquele código, porque ela procura um padrão sintático específico. A restrição
+remove o que é impossível por construção, não o que é difícil.
 
 **`tp_reconstruct.py` é o único componente que precisa de histórico git.** Por
 isso `tp_pairs*.json` são versionados, e não gitignorados como os demais

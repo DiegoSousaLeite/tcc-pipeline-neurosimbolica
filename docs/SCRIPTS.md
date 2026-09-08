@@ -8,15 +8,70 @@ Produzem os manifestos de fix commits e os pares vuln/corrigido.
 ### `scripts/osv_harvest_go.py`
 
 **Propósito:** Coleta CVEs do ecossistema Go na OSV.dev e gera o manifesto
-de fix commits para a trilha prata.
+de fix commits para a trilha prata, **restrito às CWEs que o motor simbólico
+alcança em Go**.
 
-**Entradas:** API pública `api.osv.dev`
+**Entradas:** API pública `api.osv.dev`, catálogo de regras via `src/ruleset.py`
 
-**Saídas:** `data/tp_fixes_osv.json` — lista de CVEs com `fix_commit` e `repo_url`.
+**Saídas:** `data/tp_fixes_osv_alcancavel.json` — lista de CVEs com `fix_commit`
+e `repo_url`. Arquivo **próprio**: não sobrescreve `data/tp_fixes_osv.json` (a
+colheita sem filtro) nem os pools `tp_pairs*.json`, que são a evidência do
+achado dos 70% e, no caso de `tp_pairs.json`, irrecuperáveis.
+
+**Filtros:** CWE alcançável em Go + commit de fix + repo GitHub. Limita por repo
+(diversidade) e para ao atingir o alvo.
+
+**Por que o filtro existe:** a colheita antiga aceitava qualquer CWE, e 70,1 %
+dos 107 casos vulneráveis da rodada `20260731T140000Z-af9bc32` acabaram com CWE
+que nenhuma regra Go do `p/default` declara — indetectáveis por construção. O
+recall medido sobre essa população mede a lacuna do catálogo de regras, não a
+capacidade do motor (`docs/ANALISE-RODADA-2.md` §3.1).
+
+**Todas as CWEs declaradas são avaliadas**, não só `cwe_ids[0]`: a ordem dessa
+lista é arbitrária, e ficar com a primeira recusaria candidata legítima por
+acidente de listagem. **A CWE registrada é a que casou** com o ruleset — é ela
+que a Fase 1 vai procurar no arquivo e contra a qual o gabarito é pontuado.
+Vulnerabilidade que não declara CWE alguma é recusada, em vez de virar
+`CWE-desconhecida` como antes.
+
+**Relatório:** o bloco `=== RESUMO ===` traz a distribuição das CWEs aceitas, a
+contagem de recusadas por inalcançabilidade discriminada por CWE, e a data do
+snapshot do ruleset. A discriminação por CWE é o que distingue "a OSV tem pouca
+coisa nestas fraquezas" de "o filtro está recusando tudo por defeito"; a data
+torna visível a divergência possível entre o registry e o Semgrep instalado.
+Colheita vazia é anunciada e **não** grava arquivo.
 
 **Uso:**
 ```bash
-python scripts/osv_harvest_go.py
+python scripts/osv_harvest_go.py --alvo 100
+python scripts/osv_harvest_go.py --alvo 100 --por-repo 5 --max-scan 600
+```
+
+---
+
+### `scripts/pares_alcancaveis.py`
+
+**Propósito:** Identifica, entre os pares de TP **já colhidos**, aqueles cuja CWE
+o motor simbólico alcança em Go — para que entrem na população sem recolheita.
+
+**Entradas:** `tp_pairs.json`, `tp_pairs_osv.json` (ou os passados em `--pools`),
+catálogo de regras via `src/ruleset.py`
+
+**Saídas:** apenas texto (ou JSON com `--json`). **Somente leitura:** não escreve
+nos pools nem monta população. Separar identificação de mutação torna a operação
+repetível e segura — `tp_pairs.json` é irrecuperável, só `tp_reconstruct.py` o
+regenera e ele exige o histórico git completo dos repositórios.
+
+**Resultado atual:** 17 dos 50 pares são aproveitáveis — 4 de 16 em
+`tp_pairs.json` (CWE-200, CWE-352, CWE-918) e 13 de 34 em `tp_pairs_osv.json`
+(CWE-400, CWE-79, CWE-200, CWE-22). Cada par é listado com a CWE que o torna
+alcançável.
+
+**Uso:**
+```bash
+python scripts/pares_alcancaveis.py
+python scripts/pares_alcancaveis.py --pools tp_pairs.json
+python scripts/pares_alcancaveis.py --json
 ```
 
 ---
