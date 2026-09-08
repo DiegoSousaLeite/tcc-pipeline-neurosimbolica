@@ -283,12 +283,16 @@ manual, fora de escopo):
 | TP_ouro (`tp_pairs.json`) | 32 | 16 vuln + 16 seguro |
 | TP_prata (`tp_pairs_osv.json`) | 68 | 34 vuln + 34 seguro |
 | TP_dataset (dataset) | 57 | vulnerável |
-| TP_alcancavel (`tp_pairs_osv_alcancavel.json`) | 0 | metade vuln + metade seguro |
-| **Total** | **948** | **107 vulneráveis / 841 seguros** |
+| TP_alcancavel (`tp_pairs_osv_alcancavel.json`) | **1380** | 690 vuln + 690 seguro |
+| **Total** | **2328** | **797 vulneráveis / 1531 seguros** |
 
-A `TP_alcancavel` entra com 0 enquanto o pool da colheita filtrada não existe em
-disco; os totais acima são os das rodadas anteriores e continuam valendo. Quando
-o pool existir, a população cresce e deixa de ser comparável **caso a caso** com
+> **Atualizado em 2026-09-08.** O pool da colheita filtrada existe: 810
+> candidatas → **690 pares** → 1380 casos, e a população foi de 948 para **2328**
+> (rodada `20260908T094808Z-9a00cb2`, ver `docs/ANALISE-RODADA-3.md`). Sem o pool
+> em disco a trilha entra com 0 e o total volta a 948, que é o das rodadas
+> anteriores.
+
+Com a trilha nova a população cresce e deixa de ser comparável **caso a caso** com
 as rodadas antigas — a comparação legítima passa a ser entre braços dentro da
 rodada nova. As rodadas anteriores permanecem em disco, comparáveis entre si.
 
