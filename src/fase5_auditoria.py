@@ -13,7 +13,8 @@ log = logging.getLogger(__name__)
 # ID_Caso faria o segundo braço sair vazio.
 CABECALHO = [
     "ID_Caso", "Repositorio", "CWE",
-    "Origem",                  # FP | TP_ouro | TP_prata | TP_dataset
+    "Origem",                  # FP | TP_ouro | TP_prata | TP_dataset |
+                               # TP_alcancavel
     "Modelo_LLM", "Tipo_Prompt",
     "Gabarito",                # vulneravel | seguro
     "Status_Semgrep",          # DETECTADO | NAO_DETECTADO | <categoria de erro>
