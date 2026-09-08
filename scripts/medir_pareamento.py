@@ -31,46 +31,26 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.fase1_semgrep import SEMGREP_CONFIG, _cwe_nas_tags  # noqa: E402
+from src.fase1_semgrep import _cwe_nas_tags  # noqa: E402
+from src.ruleset import carregar_regras, metadados_snapshot  # noqa: E402
 
 # O registry entrega o ruleset com `metadata.cwe` por regra — as mesmas strings
 # que viram tags no SARIF. É a única fonte de tags para um alerta já cacheado:
 # o payload guarda o alerta normalizado (check_id, linha, mensagem), não a regra.
-URL_REGISTRY = f"https://semgrep.dev/c/{SEMGREP_CONFIG}"
-REGRAS_CACHE = os.path.join("cache_simbolico", "_regras_p_default.json")
-
-
-def carregar_regras(destino=REGRAS_CACHE):
-    """`check_id` -> lista de CWEs declaradas, baixada uma vez e cacheada."""
-    if not os.path.exists(destino):
-        import requests
-        print(f"[+] baixando {URL_REGISTRY} ...", file=sys.stderr)
-        resp = requests.get(URL_REGISTRY, timeout=120,
-                            headers={"User-Agent": "semgrep"})
-        resp.raise_for_status()
-        os.makedirs(os.path.dirname(destino), exist_ok=True)
-        with open(destino, "wb") as f:
-            f.write(resp.content)
-
-    with open(destino, encoding="utf-8") as f:
-        dados = json.load(f)
-    return {r["id"]: _lista(( r.get("metadata") or {}).get("cwe"))
-            for r in dados.get("rules", [])}
-
-
-def _lista(cwe):
-    """`metadata.cwe` vem ora como lista, ora como string única no registry.
-
-    Tratar a string como iterável percorreria CARACTERES e nenhuma regra
-    casaria — a medição sairia inteira na coluna errada.
-    """
-    if cwe is None:
-        return []
-    return [cwe] if isinstance(cwe, str) else list(cwe)
+# Quem busca e cacheia o ruleset é `src/ruleset.py`.
 
 
 def _casava_por_substring(cwes, cwe):
-    """A regra ANTIGA: `cwe_id` procurado como substring dentro da tag."""
+    """A regra ANTIGA: `cwe_id` procurado como substring dentro da tag.
+
+    Descreve o pareamento da VERSAO_PAREAMENTO 1, aquele em que `CWE-77` casava
+    com `CWE-770`. Existe só para reproduzir as medições já registradas em
+    `docs/ANALISE-RODADA-1.md` §7.1 e `docs/ANALISE-RODADA-2.md`: sem ela, aquela
+    coluna some e os números documentados ficam irreproduzíveis.
+
+    NÃO é para ser exportada nem reaproveitada — a comparação corrente vive em
+    `src/fase1_semgrep._cwe_nas_tags`, e é dela que `src/ruleset.py` depende.
+    """
     alvo = cwe.upper()
     return any(alvo in str(t).upper() for t in cwes)
 
@@ -96,7 +76,8 @@ def medir(dir_cache, regras):
         contagem["detectado_antes"] += 1
         cwe = p["cwe"]
         check_id = (p.get("alerta") or {}).get("check_id", "")
-        cwes_da_regra = regras.get(check_id)
+        regra = regras.get(check_id)
+        cwes_da_regra = None if regra is None else regra.cwes
 
         if cwes_da_regra is None:
             # Regra fora do ruleset baixado (versão diferente, regra removida):
@@ -132,7 +113,9 @@ def main():
     print("=" * 70)
     print(f"EFEITO DO PAREAMENTO ESTRITO SOBRE O CACHE ANTIGO ({args.cache})")
     print("=" * 70)
+    snapshot = metadados_snapshot()
     print(f"  regras no ruleset baixado : {len(regras)}")
+    print(f"  snapshot                  : {snapshot.origem} ({snapshot.obtido_em})")
     print(f"  entradas de cache         : {contagem['entradas']}")
     print(f"  DETECTADO sob a regra antiga: {contagem['detectado_antes']}")
     print(f"  NAO_DETECTADO             : {contagem['NAO_DETECTADO']}")
