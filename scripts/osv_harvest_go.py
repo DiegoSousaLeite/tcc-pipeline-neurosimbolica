@@ -40,7 +40,14 @@ from typing import NamedTuple
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.config import DATA_DIR  # noqa: E402
-from src.ruleset import cwe_alcancavel, metadados_snapshot  # noqa: E402
+from src.fase1_semgrep import _numero_cwe  # noqa: E402
+from src.ruleset import (  # noqa: E402
+    ORDEM_GRAUS,
+    cwe_alcancavel,
+    grau_alcancabilidade,
+    graus_alcancabilidade,
+    metadados_snapshot,
+)
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Arquivo próprio: `data/tp_fixes_osv.json` é a colheita sem filtro, e os pares
@@ -53,6 +60,24 @@ OSV_VULN = "https://api.osv.dev/v1/vulns/"
 
 LINGUAGEM = "go"
 SEM_CWE = "(sem CWE declarada)"
+
+
+def _aceita(cwe, linguagem, catalogo, grau_minimo):
+    """A CWE passa no filtro de alcançabilidade — e, se pedido, no de grau.
+
+    Sem `grau_minimo` o critério é exatamente o de antes: alcançável basta. O
+    grau só estreita a aceitação quando a linha de comando pede, porque
+    restringi-lo troca o denominador do recall — passa a medir o motor sobre as
+    fraquezas em que ele AFIRMA detectar, e não sobre as que declara cobrir.
+    """
+    if not cwe_alcancavel(cwe, linguagem, catalogo):
+        return False
+    if not grau_minimo:
+        return True
+    grau = grau_alcancabilidade(cwe, linguagem, catalogo)
+    if grau is None:
+        return False
+    return ORDEM_GRAUS.index(grau) >= ORDEM_GRAUS.index(grau_minimo)
 
 
 class Extracao(NamedTuple):
@@ -86,7 +111,7 @@ def osv_por_id(idv):
         return None
 
 
-def extrai(vuln, linguagem=LINGUAGEM, catalogo=None):
+def extrai(vuln, linguagem=LINGUAGEM, catalogo=None, grau_minimo=None):
     """Extrai repo, commit de fix e a CWE alcançável de uma vulnerabilidade.
 
     A alcançabilidade é decidida aqui, junto da leitura da CWE: este é o único
@@ -104,7 +129,7 @@ def extrai(vuln, linguagem=LINGUAGEM, catalogo=None):
         return Extracao(None, None, None, (SEM_CWE,))
 
     cwe = next((c for c in declaradas
-                if cwe_alcancavel(c, linguagem, catalogo)), None)
+                if _aceita(c, linguagem, catalogo, grau_minimo)), None)
     if cwe is None:
         return Extracao(None, None, None, tuple(declaradas))
 
@@ -127,6 +152,10 @@ def main():
     ap.add_argument("--alvo", type=int, default=100, help="Quantos candidatos colher (default 100).")
     ap.add_argument("--por-repo", type=int, default=5, help="Máx. de vulns por repo (diversidade).")
     ap.add_argument("--max-scan", type=int, default=800, help="Teto de entradas a varrer.")
+    ap.add_argument("--grau-minimo", choices=ORDEM_GRAUS, default=None,
+                    help="Só aceita CWE cujo grau de alcançabilidade seja ao "
+                         "menos este (default: sem restrição). ATENÇÃO: "
+                         "restringir troca o denominador do recall.")
     args = ap.parse_args()
 
     # Antes do dump de dezenas de MB: sem ruleset não há filtro, e colheita sem
@@ -156,7 +185,7 @@ def main():
         for idv in ids[:2]:
             vuln = osv_por_id(idv)
             time.sleep(0.15)
-            ext = extrai(vuln)
+            ext = extrai(vuln, grau_minimo=args.grau_minimo)
             # Conjunto, e não contador: os dois aliases descrevem a MESMA
             # vulnerabilidade e contariam a recusa duas vezes.
             inalcancaveis.update(ext.inalcancaveis)
@@ -188,11 +217,25 @@ def main():
         if len(candidatos) % 20 == 0:
             print(f"    coletados {len(candidatos)}/{args.alvo} (varridos {scan})...")
 
+    graus = graus_alcancabilidade(LINGUAGEM)
+    aceitas = Counter(c["cwe_id"] for c in candidatos)
+
     print("\n=== RESUMO ===")
     print(f"  varridos: {scan} | candidatos colhidos: {len(candidatos)}")
     print(f"  repos distintos: {len(por_repo)}")
     print(f"  ruleset: {snap.origem} | obtido em: {snap.obtido_em}")
-    print(f"  CWEs aceitas: {Counter(c['cwe_id'] for c in candidatos).most_common()}")
+    print(f"  grau mínimo exigido: {args.grau_minimo or '(sem restrição)'}")
+    # O grau ao lado da contagem é o que torna o rendimento previsível ANTES de
+    # gastar rede e disco: na rodada 20260908T094808Z-9a00cb2 as CWEs de grau
+    # baixo consumiram 336 pares e renderam 1 detecção.
+    print("  CWEs aceitas (com grau de alcançabilidade):")
+    for cwe, n in aceitas.most_common():
+        g = graus.get(_numero_cwe(cwe)) or "?"
+        print(f"      {cwe:<12s} {n:>5d}  grau={g}")
+    por_grau = Counter(graus.get(_numero_cwe(c["cwe_id"])) or "?"
+                       for c in candidatos)
+    print("  candidatas por grau: "
+          + ", ".join(f"{g}={por_grau.get(g, 0)}" for g in reversed(ORDEM_GRAUS)))
     print(f"  recusadas por inalcançabilidade: {sum(recusas_cwe.values())}")
     print(f"  recusadas por CWE: {recusas_cwe.most_common()}")
 

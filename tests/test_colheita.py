@@ -136,3 +136,58 @@ def test_sufixo_git_e_barra_final_saem_da_url(catalogo):
     ext = extrai(_vuln(["CWE-327"], repo=REPO + ".git/"), catalogo=catalogo)
     assert ext.repo_url == REPO
     assert ext.cwe == "CWE-327"
+
+
+# --- Grau de alcançabilidade na colheita ------------------------------------
+#
+# O grau é diagnóstico por padrão. Restringir por ele muda o denominador do
+# recall — passa a medir o motor sobre as fraquezas em que ele AFIRMA detectar,
+# e não sobre as que declara cobrir — então precisa ser pedido explicitamente.
+
+# Mesmo conjunto do RULESET acima, agora com os metadados que definem o grau:
+# CWE-338 vira `alta` (afirma vulnerabilidade, sem taint) e CWE-327 vira
+# `baixa` (só auditoria).
+RULESET_GRAUS = {
+    "rules": [
+        {"id": "go.rand", "languages": ["go"],
+         "metadata": {"cwe": ["CWE-338: Weak PRNG"], "subcategory": ["vuln"]}},
+        {"id": "go.md5", "languages": ["go"],
+         "metadata": {"cwe": "CWE-327: Broken Crypto", "subcategory": ["audit"]}},
+    ]
+}
+
+
+@pytest.fixture
+def catalogo_graus(tmp_path):
+    caminho = tmp_path / "_regras_graus_colheita.json"
+    caminho.write_text(json.dumps(RULESET_GRAUS), encoding="utf-8")
+    return str(caminho)
+
+
+def test_sem_grau_minimo_aceita_o_mesmo_de_antes(catalogo_graus):
+    """GARANTIA DO PADRÃO: sem a opção, a colheita aceita exatamente o que
+    aceitava antes desta mudança — inclusive CWE de grau baixo."""
+    for cwe in ("CWE-338", "CWE-327"):
+        ext = extrai(_vuln([cwe]), catalogo=catalogo_graus)
+        assert ext.fix_commit == FIX, cwe
+        assert ext.cwe.startswith(cwe)
+
+
+def test_grau_minimo_recusa_cwe_abaixo_do_limiar(catalogo_graus):
+    ext = extrai(_vuln(["CWE-327"]), catalogo=catalogo_graus, grau_minimo="alta")
+    assert ext.fix_commit is None
+    assert ext.inalcancaveis == ("CWE-327",)
+
+
+def test_grau_minimo_aceita_cwe_no_limiar(catalogo_graus):
+    ext = extrai(_vuln(["CWE-338"]), catalogo=catalogo_graus, grau_minimo="alta")
+    assert ext.fix_commit == FIX
+    assert ext.cwe.startswith("CWE-338")
+
+
+def test_grau_minimo_escolhe_a_cwe_que_atende(catalogo_graus):
+    """A ordem de `cwe_ids` é arbitrária: a CWE registrada tem de ser a que
+    sobreviveu ao critério, não a primeira declarada."""
+    ext = extrai(_vuln(["CWE-327", "CWE-338"]), catalogo=catalogo_graus,
+                 grau_minimo="alta")
+    assert ext.cwe.startswith("CWE-338")
