@@ -355,6 +355,28 @@ local**:
   (`Fprintf` no `http.ResponseWriter`, `text/template` no lugar de `html/template`),
   enquanto XSS real passa por framework (`c.HTML` do gin) ou por API JSON.
 
+> **Adendo de 2026-09-11 — as duas hipóteses acima foram testadas, e só uma
+> sobrevive.** Uma sonda executou o CodeQL — que tem fluxo interprocedural e entre
+> arquivos, exatamente a capacidade apontada como faltante — sobre 81 casos
+> vulneráveis que o Semgrep não detectou, em 14 repositórios. Metodologia e
+> resultados completos em `docs/SONDA-MOTORES.md`.
+>
+> | CWE | Semgrep, esta rodada | CodeQL medido | hipótese |
+> |---|---|---|---|
+> | **CWE-22** | 0 de 114 — 0,0 % | 10 de 23 casos — **43,5 %** | ✅ confirmada |
+> | **CWE-918** | 1 de 112 — 0,9 % | 1 de 43 casos — **2,3 %** | ❌ refutada |
+>
+> Para o CWE-22 o diagnóstico acima está certo: dar fluxo de dados tira a detecção
+> de zero. Para o CWE-918 está incompleto — a capacidade foi fornecida, sobre 29
+> arquivos de 6 repositórios distintos, e o SSRF continuou invisível.
+>
+> A explicação provável é a mesma dada aqui ao CWE-22 e não estendida ao CWE-918:
+> uma URL montada a partir de configuração ou de campo de struct é
+> **sintaticamente indistinguível** de uma URL controlada pelo atacante. A pergunta
+> que decide o caso não é *"este dado flui até aqui?"* — que o taint responde —
+> mas *"esta entrada é do usuário?"*, que nenhum analisador responde sem
+> especificação externa.
+
 ### Sobre trocar para `p/golang`
 
 **Seria estritamente pior.** `p/golang` tem 42 regras, contra as 84 de Go dentro do
@@ -457,6 +479,30 @@ Nenhum caminho é gratuito, e todos mudam o objeto medido:
 | Semgrep Pro (taint entre arquivos) | atacaria CWE-918 e CWE-22 | ferramenta paga; muda a variável medida |
 | regras próprias para CWE-22 | atacaria o maior balde | mede as regras do autor, não a ferramenta |
 | aceitar `n` = 19 | reporta TRA e McNemar; omite Recall/F1/MCC | **é o estado atual** |
+
+> **Adendo de 2026-09-11 — a linha do taint entre arquivos foi medida, e vale pela
+> metade.** A sonda de `docs/SONDA-MOTORES.md` executou o CodeQL, que já tem a
+> capacidade atribuída ao Semgrep Pro, sobre 81 casos perdidos:
+>
+> | caminho | efeito estimado | efeito medido |
+> |---|---|---|
+> | taint entre arquivos, **CWE-22** | atacaria o balde | ✅ 0,0 % → **43,5 %** dos casos |
+> | taint entre arquivos, **CWE-918** | atacaria o balde | ❌ 0,9 % → **2,3 %** — não ataca |
+> | **trocar de motor (CodeQL)** | *não estava na tabela* | **3 de 47 arquivos — 6,4 %** |
+> | **trocar de motor (SonarQube CE)** | *não estava na tabela* | **0 de 81** — zero regras de segurança para Go |
+>
+> Como CWE-22 e CWE-918 têm peso quase igual no corpus (114 e 112 pares), quem
+> investisse na ferramenta paga esperando os dois baldes compraria metade do que
+> imagina.
+>
+> Extrapolando os 6,4 % para os 778 casos perdidos, os 19 vulneráveis iriam para
+> algo entre 60 e 70 — e isso **superestima**, porque a amostra foi escolhida no
+> melhor cenário do concorrente (só CWEs de taint, repositórios pequenos). Dos 47
+> arquivos testados, **44 são invisíveis aos três motores**.
+>
+> A conclusão do §9 sai reforçada: o gargalo não é do Semgrep, é da análise
+> sintática. Ver `docs/PESQUISA-GARGALO-ADENDO-MEDICOES.md` para o cruzamento com
+> o relatório de pesquisa.
 
 ## 10. Como reproduzir
 
