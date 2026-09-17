@@ -222,6 +222,308 @@ métrica que dependa da célula VP repousa sobre 19 casos.
 
 ---
 
+## 4b. MUDANÇA DE DESENHO: o braço de triagem (change `braco-triagem-classe-positiva`)
+
+> **A redação correspondente do `.tex` acontece em BRANCH SEPARADA, e não nesta
+> change.** Vale a decisão vigente de não mexer na monografia antes de fechar o
+> experimento. Esta seção é o registro de acumulação; a branch do LaTeX a
+> consome. **Nenhum arquivo `.tex` foi tocado.**
+
+A pipeline ganhou um eixo: **o modo de montagem do candidato**, com dois valores,
+`filtro` (padrão, o desenho de sempre) e `triagem`. No modo `triagem`, caso de
+gabarito vulnerável que o Semgrep não detectou passa a ser submetido ao LLM, com
+o candidato montado a partir da localização declarada no gabarito. O negativo
+continua vindo só do Semgrep, e `Status_Semgrep` não muda.
+
+Isso obriga quatro alterações no texto.
+
+### 4b.1 A arquitetura deixa de ser descrita como "o LLM é filtro puro"
+
+A redação atual descreve uma arquitetura em que o componente neural só opina
+sobre o que o motor simbólico emitiu. **Isso deixa de ser a descrição completa** e
+passa a ser propriedade do braço `filtro`. O texto precisa descrever **dois
+braços**, com o mesmo componente neural e formas diferentes de montar o
+candidato — e dizer qual dos dois produziu cada número.
+
+As Rodadas 1-3 são rodadas do braço `filtro` e continuam válidas e citáveis como
+tal. O braço novo produz uma série nova; nenhum resultado foi invalidado.
+
+### 4b.2 Os números da triagem NÃO são desempenho do sistema em operação
+
+**É o risco principal desta mudança, e é de redação, não de código.** Num uso
+real os positivos não seriam injetados: viriam do Semgrep, que perde 97,4 %
+deles. O Recall, o F1 e o MCC do braço de triagem medem **o componente neural
+isolado**, não a pipeline implantada.
+
+A declaração é obrigatória em qualquer lugar onde esses números aparecerem. A
+coluna `Procedencia` no CSV torna o recálculo possível para quem quiser conferir.
+
+### 4b.3 A distância entre os dois braços é a medida do teto de filtro puro
+
+O roteiro da apresentação hoje anuncia esse teto **sem quantificar**. Com as duas
+rodadas ele passa a ter número: a diferença de recall (e de taxa de redução de
+alertas) entre o braço de filtro e o de triagem é exatamente quanto o desenho de
+filtro puro deixa na mesa. Ver a tarefa 5b.5 da change — a tabela lado a lado.
+
+Cuidado ao redigir: essa distância **mistura dois efeitos** — quais casos chegam
+ao LLM, e quanto contexto cada um traz (ver 4b.4). Atribuí-la inteira ao primeiro
+seria exagerar.
+
+### 4b.4 Ameaça à validade: a natureza das localizações, e o que responde a ela
+
+Os positivos injetados e os alertas do Semgrep podem diferir **sistematicamente
+na natureza da localização apontada**. O alerta aponta a linha que casou com a
+regra; o injetado aponta o início da função declarada vulnerável pela CVE. A
+hidratação recorta a função que contém a linha, então os dois recebem uma função
+Go recortada pelo mesmo algoritmo — mas não necessariamente funções de mesma
+natureza.
+
+**O que responde a isso é o grupo de controle**, não uma afirmação: os casos
+vulneráveis que o Semgrep *achou* rodam na mesma rodada de triagem, com
+procedência `alerta`, sob o mesmo prompt e o mesmo modelo. Se o acerto divergir
+muito entre procedências, o número da triagem não pode ser reportado como está.
+
+Duas ressalvas a declarar junto:
+
+- **O controle é pequeno.** São os mesmos 19 casos. Um controle fraco que acusa
+  diferença grande ainda é informativo; a ausência de diferença nele não
+  demonstra ausência de artefato. As métricas emitem esse aviso sozinhas.
+- **O contexto do braço de triagem é mais pobre.** Para que a procedência não
+  vazasse para o prompt, o modo `triagem` remove do contexto o identificador da
+  regra, a mensagem do motor e a linha apontada — para as duas procedências. O
+  braço de triagem entrega ao LLM estritamente menos que o de filtro, e isso é
+  parte da diferença medida em 4b.3.
+- **O enquadramento do prompt continua o de sempre.** Os dois templates abrem com
+  "abaixo está um alerta emitido por uma ferramenta de análise estática". No
+  braço de triagem a frase é falsa para o candidato injetado — e, por uniforme,
+  o grupo de controle **não** a detecta. Não foi alterada de propósito: mexer no
+  template muda `Versao_Prompt` e o eixo experimental do prompt. Ou se declara a
+  limitação, ou se decide trocar o texto — decisão do autor, ainda em aberto em
+  `openspec/changes/braco-triagem-classe-positiva/design.md`.
+
+### 4b.5 ACHADO NOVO: o baseline das Rodadas 1-3 nunca foi um controle limpo
+
+**Este é o achado mais forte da Rodada 4, e ele não estava previsto.**
+
+O grupo de controle permite um experimento que nenhuma rodada anterior permitia:
+os positivos que o Semgrep detectou aparecem nas **duas** rodadas — no braço de
+filtro porque o alerta existia, no de triagem porque o emparelhamento tem
+precedência sobre a injeção. São os mesmos `ID_Caso`, o mesmo modelo
+(`qwen2.5-coder:7b`, digest `dae161e27b0e`), o mesmo template (hashes
+`baseline:597fcfa9` e `especialista:d1145f8b`), `num_ctx` 8192, **semente 42 e
+temperatura 0**. A única variável entre as duas é o contexto.
+
+| braço | n | VP com contexto do alerta (Rodada 3) | VP com contexto só de código (Rodada 4) | delta |
+|---|---|---|---|---|
+| baseline | 19 | **8** | **0** | **−8** |
+| especialista | 19 | 3 | 3 | 0 |
+
+Oito VPs viraram zero; nenhum caso foi ganho. O especialista não se move.
+
+**A leitura é direta.** O prompt baseline não recebe CWE, nem definição, nem
+heurística — por desenho, ele é a condição de controle. Mas no modo filtro o
+contexto hidratado começava com `Alerta Semgrep: go.lang.security.audit.<nome>`
+e `Mensagem: <texto do Semgrep>`, e esse texto **nomeia a fraqueza**. O baseline
+estava lendo a resposta no enunciado. Removida essa parte — que é o que a
+normalização do modo triagem faz, para que a procedência não vaze —, o baseline
+vai a zero. O especialista não muda porque o sinal dele vem do catálogo, que
+continua lá.
+
+**O que isso obriga a escrever:**
+
+1. A comparação baseline × especialista das Rodadas 1-3 **não mede só a
+   contribuição da engenharia de prompt**. Parte do que o baseline acertava vinha
+   do identificador da regra e da mensagem do motor, não da análise do código. A
+   diferença medida entre os dois braços é, nessa medida, um limite inferior
+   subestimado — e precisa ser declarada como tal, não corrigida em silêncio.
+2. O braço `baseline × triagem` da Rodada 4 **não é comparável** com o
+   `baseline × filtro` das Rodadas 1-3. Não é "o mesmo componente sobre mais
+   casos": é um tratamento mais pobre. Reportá-los lado a lado sem essa ressalva
+   seria erro. O braço `especialista` não sofre disso.
+3. Isto é uma **ameaça à validade que se resolveu sozinha ao ser medida**: o
+   desenho do braço de triagem, criado para outro fim, produziu o controle que a
+   expõe. Vale como resultado metodológico do trabalho.
+
+### 4b.5b Enquadramento do prompt — decisão REVOGADA pela Rodada 5
+
+> ⚠️ **A decisão anterior ("manter o template") está revogada.** Ela foi tomada
+> com os dados da Rodada 4, que não permitiam enxergar o efeito. A Rodada 5
+> mediu, e o efeito é grande. O que segue é a decisão vigente.
+
+A questão era se manter o "abaixo está um alerta emitido por uma ferramenta de
+análise estática" nos templates, já que no braço de triagem a frase é falsa para
+os 759 injetados. Em 2026-09-16 rodou-se a Rodada 5 — **mesmo modelo, mesma
+população, semente 42, temperatura 0, só o enquadramento muda** — com templates
+novos que perguntam pelo código em vez de pelo alerta.
+
+| especialista | R4 (pergunta pelo alerta) | R5 (pergunta pelo código) |
+|---|---|---|
+| Recall | 1,29 % | **5,13 %** |
+| Precisão | 0,476 | **0,533** |
+| MCC | −0,0033 | **+0,0189** |
+| VP | 10 | **40** |
+
+**O recall quadruplicou, e a precisão subiu junto** — não foi troca de um pelo
+outro. A pergunta incoerente estava suprimindo vereditos positivos.
+
+E a régua de controle confirma que a penalidade era específica dos injetados: o
+enquadramento direto ajuda os casos **com alerta** em 2,0× e os **injetados** em
+4,8×.
+
+**O que o texto precisa registrar:**
+
+1. **O número do braço de triagem é 5,13 %, não 1,29 %.** A Rodada 4 mediu o
+   braço sob uma pergunta que não se aplicava a metade dos seus casos.
+2. **O baseline direto vai a MCC −0,0834** — pior que chute. Sem CWE-alvo,
+   "este código contém alguma vulnerabilidade?" produz ruído: +7 VP contra
+   +30 FP. O baseline só funcionava porque lia a fraqueza na mensagem do Semgrep
+   (§4b.5); tirada a mensagem e a pergunta fechada, ele não tem em que se apoiar.
+3. **O eixo do prompt volta a ser detectável:** McNemar entre os dois prompts vai
+   de p = 0,8445 (R4) para **p = 0,0090** (R5). A conclusão da Rodada 4 de que
+   "os dois prompts convergiram por degeneração" era parcial — o baseline é
+   degenerado, o especialista estava sendo suprimido pela pergunta.
+4. **A conclusão qualitativa sobrevive:** MCC +0,0189 continua sendo ausência de
+   poder discriminativo, e a TFN é de 94,87 %. Quadruplicar 1,29 % dá 5,13 %, que
+   segue inutilizável. **O achado ficou mais forte por ter sobrevivido à
+   tentativa de derrubá-lo.**
+
+Os templates originais **não foram alterados** — `baseline:597fcfa9` e
+`especialista:d1145f8b` continuam idênticos, com teste travando os hashes, e as
+Rodadas 1 a 4 seguem reproduzíveis. Os novos são tipos próprios
+(`baseline_direto`, `especialista_direto`). Detalhes em
+`docs/ANALISE-RODADA-5.md`.
+
+### 4b.5d O oráculo da CWE, e onde ele é forte
+
+O `especialista` recebe a CWE do gabarito. **Isso não é uniforme entre os braços,
+e a distinção importa:**
+
+- **Braço de filtro:** quando há alerta, a CWE do gabarito é a que a regra do
+  Semgrep declarou (é o que o pareamento exige). Um sistema implantado teria essa
+  CWE, vinda do próprio alerta. **Não é oráculo — é o que a ferramenta entrega.**
+- **Braço de triagem, casos injetados:** não há alerta. A CWE vem só da CVE, e em
+  produção não haveria nada para preencher aquele campo. **Oráculo forte.**
+
+Portanto os 5,13 % são um **limite superior generoso**: o modelo é informado de
+qual fraqueza procurar e em qual função olhar, e ainda assim recupera 5,13 %.
+
+Resta um oráculo fraco no braço de filtro, a declarar: quando várias regras
+disparam com CWEs diferentes no mesmo arquivo, o experimento usa o gabarito para
+escolher **qual** alerta avaliar; em produção se triaria todos, e a carga real de
+falsos positivos seria maior que a medida.
+
+### 4b.5c O que a Rodada 4 responde da Q2, e o que ela responde mal
+
+A metade *"sem introduzir falsos negativos"* passa a ter número: o braço
+`especialista × triagem` avalia **778 vulneráveis** (contra 19), e Recall, F1,
+MCC e TFN ficam calculáveis. **A resposta é ruim, e é resultado:** recall do
+componente de **1,29 %**, TFN de **98,71 %**, **MCC de −0,0033**. O sistema em
+modo triagem recobra 10 dos 797 positivos (recall de sistema 1,25 %) contra 3 no
+modo filtro (0,38 %).
+
+**Dois números da rodada fechada que o texto vai precisar, e que mudam a §4:**
+
+1. **O MCC dos dois braços é ≈ 0** (`baseline` +0,0121, `especialista` −0,0033).
+   Zero é o valor de quem não discrimina nada. Ambos dizem "não é
+   vulnerabilidade" para quase tudo: 5 vereditos positivos em 1.585 casos no
+   baseline, 21 em 1.586 no especialista.
+2. **O McNemar entre os prompts deixa de ser significativo dentro do braço de
+   triagem**: 14 × 12 discordâncias, p = **0,8445**, contra 104 × 5 e p < 0,0001
+   na Rodada 3. Isso **não** é "os prompts são equivalentes" — é que, sem os
+   campos do alerta, os dois convergem para o mesmo comportamento quase
+   constante, e dois classificadores degenerados concordam trivialmente. Escrever
+   "não houve diferença entre os prompts" inverteria o sentido do achado.
+
+E uma armadilha de leitura a declarar: **a TRA do baseline SOBE** de 0,8497 para
+0,9976 na pilha de alertas. Não é ganho — é o sintoma da degeneração acima, e é o
+caso didático de por que a TRA só pode ser lida junto da TFN.
+
+O teto do desenho de filtro puro, portanto, existe mas é **pequeno em valor
+absoluto**: +0,88 ponto percentual de recall de sistema no especialista. No
+baseline ele é **negativo** (−0,63 p.p.), pelo motivo da §4b.5 — a perda de
+contexto supera o ganho de casos. Nenhum dos dois sustenta a leitura de que
+"bastaria deixar o LLM ver tudo".
+
+### 4b.5e CORREÇÃO DE LEITURA: o MCC agregado do braço de triagem é artefato de composição
+
+> **Isto revisa como os MCC das Rodadas 4 e 5 devem ser lidos, e é favorável à
+> arquitetura.** Descoberto na Rodada 6, ao separar as métricas por procedência.
+
+O braço de triagem mistura dois conjuntos de naturezas opostas:
+
+| conjunto | n | vulneráveis | o que é |
+|---|---|---|---|
+| procedência `alerta` | ~823 | 18 (**2,2 %**) | a pilha de alertas real — a tarefa de **filtro** |
+| procedência `gabarito` | ~760 | 760 (**100 %**) | os injetados — **sem nenhum negativo** |
+
+Somados, produzem uma taxa-base artificial de ~49 % que **não corresponde a
+cenário algum**: em produção os injetados não existem. O MCC agregado descreve
+uma população impossível — mesma família de erro já pega na TRA.
+
+**Separando por procedência, na tarefa de filtro (taxa-base 2,2 %):**
+
+| braço | recall | precisão | MCC |
+|---|---|---|---|
+| qwen + `especialista_direto` | 27,78 % | 12,50 % | **+0,1593** |
+| gemma + `especialista_direto` | 38,89 % | 6,14 % | +0,1083 |
+| qwen + `baseline_direto` | 11,11 % | 5,88 % | +0,0524 |
+| gemma + `baseline_direto` | 44,44 % | 2,30 % | +0,0065 |
+
+**Os quatro braços são positivamente informativos na tarefa para a qual o sistema
+foi desenhado.** E o melhor deles replica a Rodada 3 do braço de filtro, que deu
+MCC +0,1606 sobre os mesmos casos e o mesmo modelo — dois caminhos independentes,
+mesmo número.
+
+**Sobre os injetados o MCC é INDEFINIDO**, e não por falha de cálculo: o conjunto
+não tem um único negativo, as células VN e FP são estruturalmente vazias e o
+denominador zera. Ali só existe recall — 4,31 % (qwen) e 7,41 % (gemma) com o
+especialista.
+
+**O que o texto precisa dizer:**
+
+1. Nunca reportar o MCC agregado do braço de triagem como desempenho. Reportar
+   por procedência.
+2. **Na tarefa de filtro o componente neural É informativo** (MCC ~+0,16,
+   replicado). Isso é mais favorável à arquitetura do que as §4b.5c e 4b.5b
+   sugeriam isoladamente.
+3. **Sobre o que o SAST perde, não é** — 4 a 7 % de recall, e o único jeito de
+   subir isso foi deslocar o viés de resposta inundando a pilha de FP.
+4. A frase "o LLM não discrimina nada" era **forte demais**. Ele discrimina na
+   tarefa para a qual foi desenhado; não discrimina na que o braço de triagem
+   inventou para testá-lo. O achado central — **pontos cegos majoritariamente
+   compartilhados** — sobrevive intacto.
+
+### 4b.5f O eixo do modelo: escalar o modelo local não levantou o teto
+
+Rodada 6 (`gemma2:9b`, mesmo enquadramento e mesmos casos da Rodada 5, semente
+42, temperatura 0 — só o modelo muda):
+
+| braço | recall | precisão | taxa-base | MCC |
+|---|---|---|---|---|
+| R5 `especialista_direto` (qwen 7b) | 5,13 % | **51,4 %** | 48,6 % | **+0,0189** |
+| R6 `especialista_direto` (gemma 9b) | 8,16 % | 36,7 % | 48,6 % | −0,0832 |
+| R5 `baseline_direto` (qwen 7b) | 1,28 % | 23,8 % | 49,1 % | −0,0834 |
+| R6 `baseline_direto` (gemma 9b) | **24,68 %** | 36,1 % | 49,1 % | **−0,1858** |
+
+O recall do baseline salta 19×, e o MCC **piora nos dois braços**. A precisão do
+gemma fica abaixo da taxa-base nas duas configurações: ele deslocou o **viés de
+resposta**, não a capacidade — 340 falsos positivos contra 32 do qwen.
+
+**Ressalva obrigatória:** `gemma2:9b` não é "o qwen maior". Outra família,
+generalista em vez de especializada em código, Q4_0 em vez de Q4_K_M. Demonstra
+*"este modelo maior não ajudou, e ajudou menos que um menor especializado"* —
+**não** *"modelo maior não ajuda"*.
+
+### 4b.6 O que isso muda na §4 acima
+
+A metade não respondida da Q2 — *"sem introduzir falsos negativos"* — passa a ter
+caminho: Recall, F1, MCC e TFN ficam calculáveis no braço de triagem. **Mas a
+resposta é sobre o componente neural, não sobre o sistema**, e a §4 precisa
+passar a distinguir as duas coisas em vez de tratar "não respondida" como estado
+único.
+
+---
+
 ## 5. Estrutura: falta um capítulo
 
 `tcc.tex` não tem capítulo de resultados. `provadeconceito.tex` é o piloto da

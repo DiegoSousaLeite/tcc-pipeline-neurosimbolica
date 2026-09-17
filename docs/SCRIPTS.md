@@ -1,5 +1,82 @@
 # Referência de Scripts e Módulos
 
+## Operação
+
+### `scripts/gatilho_rodada_triagem.py`
+
+**Propósito:** esperar a máquina ficar ociosa e então executar a esteira inteira
+da rodada de triagem, sem supervisão. Existe porque a rodada leva ~7,3 h no
+provedor local (8,23 s/chamada, medido) e porque Semgrep e modelo local disputam
+RAM — rodar junto de outra esteira degrada os dois.
+
+**Entradas:** o estado dos processos da máquina (via `Get-CimInstance`), o cache
+simbólico e o provedor Ollama.
+
+**Saídas:** `results/rodada-4-triagem/` (CSVs, manifesto, `.tex`),
+`results/pre-fase1-simbolica/` (a passada de cobertura) e o log
+`results/gatilho-triagem.log`.
+
+**O que faz, em ordem:**
+
+1. Espera **`--quiet-min` minutos SEGUIDOS** sem nenhum processo concorrente
+   (Semgrep em qualquer forma, `run_pipeline.py`, `verificar_pro.py`, colheita) e
+   com RAM livre acima de `--ram-livre-gb`. Uma única amostra suja zera o
+   relógio: a Fase 1 chama o Semgrep uma vez por caso, e uma janela curta demais
+   dispararia na fresta entre dois casos.
+2. **Descarrega** o modelo do Ollama (`keep_alive: 0`).
+3. Roda `--tudo --sem-llm` para garantir a Fase 1 em cache para a população
+   inteira. É o único ponto em que o Semgrep pode rodar sem disputar RAM com o
+   modelo — por isso vem antes do passo 4, e não depois.
+4. **Aquece** o modelo (`keep_alive: 24h`) e o mantém residente.
+5. Piloto: `--tp-only --modo-montagem triagem`, dois braços locais. É o recorte
+   que alcança os 19 positivos detectados, sem os quais não há grupo de controle.
+6. Emite as métricas e aplica o **portão da tarefa 5.5**, que é **direcional**:
+   ele fecha quando o LLM acerta *mais* nos **injetados** que nos detectados por
+   mais que `--limiar-portao` (padrão 0,25) — é esse sentido que indica artefato
+   de montagem inflando o resultado, e é o que a spec nomeia. Fecha também com
+   grupo de controle vazio: sem controle não há o que concluir. O sentido
+   contrário — o modelo indo *pior* nos injetados — **não** interrompe: é
+   consistente com o Semgrep detectar as vulnerabilidades mais fáceis, e
+   bloquear ali gastaria o portão na direção errada. Esse caso sai como
+   `WARNING` no log, porque é a ameaça da "natureza das localizações" se
+   manifestando e precisa ir para a análise da rodada. `--sem-portao` desliga
+   o bloqueio.
+7. Reconfere que a máquina continua livre e roda `--tudo` no mesmo `--run-id`; o
+   checkpoint reaproveita o piloto.
+8. Emite as métricas finais.
+
+**Uso:**
+
+```bash
+# Estado da máquina agora, sem esperar nem rodar:
+python scripts/gatilho_rodada_triagem.py --agora
+
+# Armar (fica esperando; padrão: 10 min de silêncio, piloto + rodada completa):
+python scripts/gatilho_rodada_triagem.py
+
+# Só o piloto:
+python scripts/gatilho_rodada_triagem.py --so-piloto
+```
+
+Destacado do terminal, para sobreviver ao fim da sessão (PowerShell):
+
+```powershell
+Start-Process -WindowStyle Hidden python \
+  -ArgumentList 'scripts/gatilho_rodada_triagem.py' \
+  -WorkingDirectory (Get-Location)
+
+Get-Content results/gatilho-triagem.log -Wait     # acompanhar
+```
+
+**Trava de instância única:** `results/gatilho-triagem.lock` guarda o PID. Um
+segundo gatilho recusa subir enquanto o primeiro estiver vivo; lock órfão (PID
+morto) é assumido sem reclamar.
+
+**Para cancelar:** matar o processo. O que já rodou fica no checkpoint da
+rodada — reexecutar com o mesmo `--run-id` retoma de onde parou.
+
+---
+
 ## Fase 0 — Preparação de Dados TP (`scripts/`)
 
 Estes scripts são executados **uma única vez** antes da pipeline principal.
