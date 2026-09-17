@@ -4,7 +4,10 @@ import pytest
 from src.catalogo import Catalogo
 from src.prompts import (
     BASELINE,
+    BASELINE_DIRETO,
     ESPECIALISTA,
+    ESPECIALISTA_DIRETO,
+    TIPOS,
     PromptInvalido,
     carregar_template,
     montar_prompt,
@@ -163,3 +166,61 @@ def test_contrato_renderizado_e_json_valido_como_exemplo():
 def test_templates_sao_lidos_de_arquivo():
     for tipo in (BASELINE, ESPECIALISTA):
         assert carregar_template(tipo).strip()
+
+
+# --- Variantes diretas (braço de triagem) -----------------------------------
+
+def test_variantes_diretas_nao_pressupoem_alerta():
+    """É a razão de existirem: no braço de triagem o candidato injetado não tem
+    alerta nenhum, e mandar o modelo "decidir se o alerta é VP ou FP" é uma
+    pergunta com pressuposição falsa."""
+    for tipo in (BASELINE_DIRETO, ESPECIALISTA_DIRETO):
+        texto = carregar_template(tipo)
+        assert "alerta emitido" not in texto
+        assert "ALERTA E CÓDIGO FONTE" not in texto
+        assert "CÓDIGO FONTE:" in texto
+
+
+def test_originais_continuam_pressupondo_alerta():
+    """O modo filtro não muda: é o que mantém as Rodadas 1-4 reproduzíveis."""
+    for tipo in (BASELINE, ESPECIALISTA):
+        assert "alerta emitido" in carregar_template(tipo)
+
+
+def test_baseline_direto_continua_sem_ver_a_cwe():
+    """Se a variante direta vazasse a CWE para o controle, a comparação
+    baseline × especialista passaria a medir outra coisa."""
+    prompt = montar_prompt(BASELINE_DIRETO, contexto="código", cwe_id="CWE-918",
+                           cwe_name="Server-Side Request Forgery")
+    assert "CWE-918" not in prompt
+    assert "Server-Side Request Forgery" not in prompt
+    assert "CAMADA" not in prompt
+
+
+def test_especialista_direto_mantem_as_tres_camadas():
+    """A variante direta muda o ENQUADRAMENTO, não a evidência: o especialista
+    já recebia a CWE do gabarito, e continua recebendo."""
+    prompt = montar_prompt(ESPECIALISTA_DIRETO, contexto="código",
+                           cwe_id="CWE-327", cwe_name="Broken Crypto")
+    assert "CWE-327" in prompt
+    for camada in ("CAMADA 1", "CAMADA 2", "CAMADA 3"):
+        assert camada in prompt
+
+
+def test_contrato_identico_em_todos_os_tipos():
+    """A diferença entre os braços tem que estar no CONTEÚDO, nunca no formato
+    de saída exigido."""
+    assert len({secao_contrato(t) for t in TIPOS}) == 1
+
+
+def test_versao_de_prompt_distingue_as_variantes():
+    """Sem isso, um CSV não saberia dizer sob qual enquadramento foi produzido."""
+    assert len({versao_prompt(t) for t in TIPOS}) == len(TIPOS)
+
+
+def test_templates_originais_nao_mudaram():
+    """Trava de reprodutibilidade: estes dois hashes estão nos manifestos das
+    Rodadas 1 a 4. Se este teste falhar, aqueles resultados deixaram de ser
+    reproduzíveis — e o certo é criar um tipo NOVO, não editar estes."""
+    assert versao_prompt(BASELINE) == "baseline:597fcfa9"
+    assert versao_prompt(ESPECIALISTA) == "especialista:d1145f8b"
