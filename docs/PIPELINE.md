@@ -77,7 +77,64 @@ O `p/golang` é enxuto e perdia ~97 dos 261 alertas do dataset por simples falta
 de regra (CWE-665/79/470/400/…), que virariam `NAO_DETECTADO` artificiais. O
 `p/default` é o recorte amplo do registry e reproduz as CWEs do gabarito. O
 ruleset em uso entra no cache simbólico e no manifesto da rodada
-(`SEMGREP_CONFIG`, padrão `p/default`).
+(`SEMGREP_CONFIG`, padrão `p/default`). Ele não precisa ser o único: ver *Mais de
+um ruleset por execução*, logo abaixo.
+
+### Mais de um ruleset por execução
+
+`SEMGREP_CONFIG` aceita uma lista separada por vírgula
+(`SEMGREP_CONFIG=p/default,regras/go`), materializada como `--config` repetido. O
+padrão continua **`p/default` sozinho**, e a invocação unitária monta exatamente
+a mesma linha de comando de antes.
+
+Acrescentar cobertura não pode custar a cobertura existente: trocar de ruleset já
+foi avaliado e recusado — o `p/golang` perdia 97 casos —, então a união é a única
+forma de somar sem subtrair.
+
+O **conjunto** tem identidade própria (`p/default+regras/go`), que entra no cache
+simbólico e no manifesto. Sem ela, uma rodada composta seria servida do disco com
+os alertas da rodada unitária, e o experimento reportaria como resultado do
+conjunto novo aquilo que o conjunto antigo produziu. A identidade é insensível à
+ordem, e a do conjunto unitário é o próprio nome do ruleset — por isso as
+entradas de cache anteriores continuam válidas.
+
+Achados equivalentes de rulesets diferentes — mesmo arquivo, mesma posição, mesma
+CWE — contam como um só. A deduplicação não altera o emparelhamento: se qualquer
+um dos equivalentes casava com a CWE do gabarito, o sobrevivente casa.
+
+#### A taxa de redução de alertas NÃO é comparável entre conjuntos de rulesets
+
+O denominador dela é o número de alertas que a camada simbólica emite, e esse
+número muda com o conjunto de rulesets. Uma rodada com `p/default+regras/go`
+produz mais alertas por arquivo que uma com `p/default` sozinho — as regras
+locais são sintáticas e ruidosas de propósito —, então a mesma capacidade de
+triagem apareceria como taxa diferente.
+
+Reportar as duas séries juntas, ou comparar a taxa desta rodada com a das
+Rodadas 1–3, mediria a configuração e não o braço neural. **A taxa é reportada
+por conjunto de rulesets, sempre nomeado.** O manifesto registra a identidade do
+conjunto e a procedência de cada ruleset justamente para que esse pareamento seja
+possível meses depois.
+
+#### O ruleset local é o único imune à deriva do lado do servidor
+
+`p/default` é buscado no registry e pode mudar sem que nada no código perceba: a
+ameaça "ruleset não fixado" está mapeada, e o snapshot em
+`cache_simbolico/_regras_p_default.json` diz apenas *"não mais velho que isto"*.
+
+`regras/go/` muda apenas por commit. O manifesto registra o commit corrente junto
+das regras usadas, e quem ler a monografia pode recuperar exatamente o texto das
+regras que produziram cada número. É a única parte do ruleset sobre a qual essa
+afirmação pode ser feita.
+
+Em troca, regra nossa levanta uma objeção que regra de terceiros não levanta —
+ela **pode** ter sido escrita olhando a população em que é medida. Por isso cada
+regra declara sob qual protocolo foi escrita, a partição precede a primeira regra
+no histórico do Git, e o relatório recusa fundir as duas partições. Ver
+`docs/SCRIPTS.md`, `scripts/particionar_avaliacao.py` e
+`scripts/medir_regras_locais.py`.
+
+---
 
 ### Modo entre-arquivos (`--entre-arquivos`) — desligado por padrão
 

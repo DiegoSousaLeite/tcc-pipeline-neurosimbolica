@@ -247,6 +247,98 @@ python scripts/verificar_pro.py                    # as duas, na ordem
 
 ---
 
+### `scripts/particionar_avaliacao.py`
+
+**Propósito:** Separa, **antes de qualquer regra local existir**, os casos que
+podem ser olhados para escrever regra dos casos que só servem para medir. Grava
+`data/particao_avaliacao.json`.
+
+**Por que existe:** escrever regra do Semgrep olhando os casos em que ela vai ser
+medida é ajustar ao conjunto de teste — o número resultante mede a nossa
+capacidade de descrever arquivos que já vimos, não a capacidade da análise
+sintática. A separação precisa ser **estrutural, não disciplinar**: não basta
+pretender não olhar.
+
+**Unidade de partição:** o grupo `(CWE, repositório)` inteiro, nunca o par
+isolado. Pares da mesma CWE no mesmo repositório compartilham idioma de código e
+às vezes o mesmo helper de validação; separá-los faria uma regra escrita no
+desenvolvimento detectar de graça um caso da avaliação. As versões vulnerável e
+corrigida do mesmo par também não se separam — são o mesmo arquivo em dois
+commits.
+
+**Derivação determinística, sem semente:** os grupos de cada CWE são percorridos
+na ordem do digest SHA-256 da chave e cada um vai para a partição que estiver
+menor. Não há semente para trocar até o número melhorar, e quem tiver a população
+reproduz a partição sem confiar em nada nosso. A alternativa mais simples —
+paridade do digest — desequilibrava por causa dos repositórios de cabeça (CWE-22
+ficava em 126 contra 102 casos).
+
+**Recusa reparticionar.** A segunda invocação falha com erro explícito. A ordem
+— partição antes de regra — é auditável no histórico do Git, e só vale enquanto
+o arquivo não for reescrito. `--forcar` existe, e só pode ser usado antes de a
+primeira regra existir.
+
+**Entradas:** `tp_pairs_osv_alcancavel.json`, com os `ID_Caso` derivados por
+`run_pipeline.construir_casos_tp` — importado, não reimplementado: uma partição
+indexada por IDs de outra regra não casaria com CSV nenhum.
+
+**Saídas:** `data/particao_avaliacao.json` — protocolo, data, CWEs alvo, resumo
+por CWE e o mapa `ID_Caso -> partição`.
+
+**Resultado de 2026-09-17:** CWE-22 com 108 casos no desenvolvimento e 120 na
+avaliação; CWE-918 com 110 e 114. Em pares, a avaliação ficou com 60 e 57 —
+acima do limiar de 30 que o projeto adota.
+
+**Uso:**
+```bash
+python scripts/particionar_avaliacao.py --selftest
+python scripts/particionar_avaliacao.py --cwe CWE-22 --cwe CWE-918
+```
+
+---
+
+### `scripts/medir_regras_locais.py`
+
+**Propósito:** Mede quanto as regras de `regras/go/` detectam, **discriminado por
+partição**, e recusa emitir o número agregado quando houver regra de proveniência
+`desenvolvimento` carregada.
+
+**Por que a recusa é falha e não aviso:** aviso não impede citação. O número mais
+fácil de copiar é o que acaba no texto, e um agregado que mistura a partição em
+que as regras foram escritas com a partição em que elas são medidas é exatamente
+o número indefensável. Recusar produzi-lo é a única mitigação que ainda funciona
+meses depois, quando o contexto tiver se perdido.
+
+**A exceção é deliberada:** se **todas** as regras carregadas forem de
+proveniência `definicao`, o agregado sai. Nenhum caso da população informou a
+escrita delas, então não há o que contaminar — e preservar os 114 casos de CWE-22
+como denominador é o que torna o protocolo `definicao` preferível.
+
+**Cada número sai rotulado** com a partição e o protocolo na mesma linha, para
+que copiá-lo sem a ressalva seja desconfortável.
+
+**O ruleset medido é só o local.** Medir com `p/default` junto responderia outra
+pergunta — quanto o conjunto detecta —, e a lacuna que as regras locais existem
+para preencher já está medida: zero, nas duas CWEs alvo.
+
+**Critério de detecção:** o mesmo da Fase 1 — a regra que emitiu o alerta declara
+a CWE do gabarito. Reaproveitá-lo não é economia: é o que impede que este número
+signifique algo diferente do número da pipeline.
+
+**Entradas:** `data/particao_avaliacao.json`, `regras/go/`, `cache/`
+
+**Saídas:** relatório em texto (e `--json`). Grava no cache simbólico sob a
+identidade do conjunto unitário `regras/go`, então reexecutar é barato.
+
+**Uso:**
+```bash
+python scripts/medir_regras_locais.py --selftest
+python scripts/medir_regras_locais.py                # por partição
+python scripts/medir_regras_locais.py --agregado     # só se tudo for `definicao`
+```
+
+---
+
 ### `scripts/medir_prompts.py`
 
 **Propósito:** Mede a distribuição de tamanho de prompt (em tokens estimados)
@@ -291,7 +383,7 @@ Não monta URL de API: a chave vai em header, nos provedores.
 | `LLM_MODEL_VERSION` | `gemini-2.5-flash-lite` | Modelo do braço padrão (o tier grátis do 2.5-flash é só 20 req/dia) |
 | `PROMPT_TYPE` | `especialista` | Tipo de prompt do braço padrão |
 | `SEMGREP_BIN` | path padrão Windows | Executável do Semgrep |
-| `SEMGREP_CONFIG` | `p/default` | Ruleset do Semgrep (entra no cache simbólico e no manifesto) |
+| `SEMGREP_CONFIG` | `p/default` | Ruleset(s) do Semgrep, separados por vírgula. A identidade do **conjunto** entra no cache simbólico e no manifesto |
 | `SEMGREP_TIMEOUT` | `240` | Timeout do Semgrep, em segundos |
 | `GEMINI_MIN_INTERVALO` | `7` | Intervalo mín. entre chamadas ao Gemini (s); 0 desativa |
 | `OPENAI_MIN_INTERVALO` | `0` | Idem para a OpenAI |
@@ -377,6 +469,74 @@ versão é assunto de outra mudança.
 **Exceções:** `RulesetIndisponivelError` quando não há cache nem rede. É erro de
 propósito: conjunto vazio faria toda CWE parecer inalcançável e recusaria a
 população inteira em silêncio.
+
+---
+
+### `src/regras_locais.py`
+
+**Propósito:** Carrega e valida o ruleset mantido neste repositório
+(`regras/go/`), e o descreve para o manifesto da rodada.
+
+**Por que o ruleset é local:** é o único do projeto imune à ameaça de mudança do
+lado do servidor. Qualquer ruleset do registry — o `p/default` inclusive — pode
+mudar sem que nada no código perceba; este muda apenas por commit, e o manifesto
+permite dizer, meses depois, exatamente quais regras produziram cada número.
+
+**Três metadados obrigatórios, e o carregamento derruba sem qualquer um deles:**
+
+| metadado | o que a ausência causaria |
+|---|---|
+| `proveniencia` | o relatório não saberia qual número pode sair de qual partição, e o caminho de menor resistência seria reportar tudo junto |
+| `cwe` (formato casável) | a regra dispara, o alerta não emparelha, a Fase 1 registra `ALERTA_OUTRA_CWE` e o esforço se perde com a regra *funcionando* |
+| `subcategory` | a regra é tratada como auditoria pelo grau de alcançabilidade, e a CWE não sobe de grau ainda que a detecção melhore |
+
+**É o oposto do que `src/ruleset.py` faz com ruleset de terceiros**, e de
+propósito. Lá, metadado ausente degrada para o comportamento conservador e a
+execução segue: não temos controle sobre o que o registry publica, e derrubar a
+rodada por isso seria recusar a ferramenta inteira. Aqui, ausência é defeito
+nosso, e descobri-lo depois de a rodada varrer a população custa horas.
+
+**Vocabulário de `proveniencia`:**
+
+- `definicao` — derivada da definição da CWE e do idioma de Go, sem que nenhum
+  caso da população tenha sido inspecionado. Pode ser medida sobre a população
+  inteira.
+- `desenvolvimento` — derivada da inspeção da partição de desenvolvimento. Só
+  pode ser medida sobre a partição de avaliação.
+
+Vocabulário fora desses dois **não** é tratado como o mais parecido: adivinhar
+escolheria por nós qual número é reportável.
+
+**API:** `carregar(diretorio)` → `{id: RegraLocal}`; `proveniencias(diretorio)` →
+conjunto de protocolos carregados; `para_manifesto(diretorio, commit)` → o bloco
+`semgrep.regras_locais` do manifesto.
+
+**Exceções:** `RegraLocalInvalidaError`
+
+---
+
+### `regras/go/` — o ruleset próprio
+
+Regras do Semgrep escritas neste projeto para CWEs que **nenhum ruleset público
+alcança em Go**. Medido em 2026-09-16: nem `p/gosec`, nem `p/trailofbits`, nem
+`p/security-audit` acrescentam regra Go para CWE-22 ou CWE-918
+(`docs/MAPA-TCC-O-QUE-REESCREVER.md` §3.6).
+
+Entram por configuração explícita (`SEMGREP_CONFIG=p/default,regras/go`); o
+padrão continua sem elas.
+
+Cada `.yaml` tem ao lado um `.go` de teste no formato que `semgrep --test`
+consome, com as anotações `// ruleid:` e `// ok:`. Os arquivos de teste foram
+escritos à mão a partir do idioma de Go — nenhum trecho veio da população.
+
+```bash
+semgrep --test regras/go        # as regras disparam no exemplo e calam no seguro
+```
+
+**São sintáticas, não de taint**, por decisão registrada: o motor CE só rastreia
+fluxo dentro de um arquivo, e é essa limitação que deixou CWE-22 e CWE-918 secas.
+Regra de taint rodando sob o motor que não a alcança repetiria o defeito. O custo
+é ruído — que é precisamente o que o braço neural existe para filtrar.
 
 ---
 

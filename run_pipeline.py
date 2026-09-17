@@ -51,6 +51,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
+from src import regras_locais
 from src.cache_simbolico import CacheSimbolico
 from src.catalogo import catalogo_padrao
 from src.config import (
@@ -62,6 +63,7 @@ from src.config import (
 )
 from src.fase1_semgrep import (
     MOTIVO_NA,
+    PROCEDENCIA_PROPRIA,
     SEMGREP,
     ModoIndisponivelError,
     SemgrepError,
@@ -599,6 +601,19 @@ def novo_run_id() -> str:
     return f"{agora}-{commit_atual()}"
 
 
+def regras_locais_do_manifesto():
+    """As regras de `regras/go/`, se e somente se o ruleset local está em uso.
+
+    Condicionado à configuração de propósito: registrar regras que não entraram
+    na invocação faria o manifesto afirmar que elas produziram os alertas da
+    rodada, e é justamente esse tipo de afirmação que ele existe para sustentar.
+    """
+    if not any(p["procedencia"] == PROCEDENCIA_PROPRIA
+               for p in rulesets_configurados()):
+        return {}
+    return regras_locais.para_manifesto(commit=commit_atual())
+
+
 def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
                      inicio, fim, catalogo, sem_llm, cache_ativo, argv,
                      sondagens=None, entre_arquivos=False):
@@ -631,6 +646,11 @@ def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
             "ruleset": identidade_conjunto(),
             "rulesets": rulesets_configurados(),
             "motor": motor_corrente(entre_arquivos).como_dict(),
+            # Regra nossa não basta constar do conjunto: ela muda por commit, e
+            # o texto precisa poder dizer quais regras, sob qual protocolo,
+            # produziram cada número. Vazio quando `regras/go/` não está
+            # configurado — que é o padrão.
+            "regras_locais": regras_locais_do_manifesto(),
         },
         "catalogo_cwe": {
             "caminho": os.path.relpath(catalogo.caminho, BASE),
