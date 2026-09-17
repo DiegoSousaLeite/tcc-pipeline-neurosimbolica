@@ -57,8 +57,10 @@ não basta pretender não olhar; a esteira tem que impedir.
   metadados obrigatórios, e o relatório que preserva a separação.
 - `ruleset-composto`: configuração de mais de um ruleset simultâneo, união dos
   catálogos, deduplicação de achados e identidade composta do conjunto. **Delta
-  recuperada de `ruleset-gosec`**, que a especificou mas não a implementou; as
-  deltas estão em `openspec/changes/archive/2026-09-17-ruleset-gosec/specs/`.
+  recuperada de `ruleset-gosec`**, que a especificou mas não a implementou, e
+  ampliada com o que a implementação resolveu: a identidade do conjunto unitário
+  é o nome do ruleset (o que preserva o cache já em disco), e ruleset de
+  procedência própria é carregado do repositório, nunca do registry.
 
 ### Modified Capabilities
 
@@ -67,11 +69,16 @@ não basta pretender não olhar; a esteira tem que impedir.
 - `ruleset-alcancabilidade`: o conjunto alcançável passa a ser derivado da união
   dos catálogos configurados.
 
-As duas deltas também vêm do arquivo de `ruleset-gosec`. **Elas precisam ser
-fundidas com o que `semgrep-pro-entre-arquivos` já aplicou nessas capabilities
-— identidade do motor —, não substituí-lo.** Os eixos são independentes e o
-requisito final registra os três: conjunto de rulesets, regra de pareamento e
-identidade do motor.
+As duas deltas também vêm do arquivo de `ruleset-gosec`, e foram **fundidas** com
+o que `semgrep-pro-entre-arquivos` já aplicou nessas capabilities — identidade do
+motor —, não substituindo-o. Os eixos são independentes e o requisito final
+registra os três: conjunto de rulesets, regra de pareamento e identidade do
+motor.
+
+`cache-simbolico` ganha ainda um requisito que só a implementação revelou: a
+identidade do conjunto entra no payload da entrada, não no caminho dela, de modo
+que medições sob conjunto distinto precisam de armazenamento próprio para não
+apagar o cache da rodada.
 
 ## Impact
 
