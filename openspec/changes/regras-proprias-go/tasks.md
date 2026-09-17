@@ -101,24 +101,37 @@ revisado; o que falta é implementação.
 - [x] 5.3 Escrever `scripts/medir_regras_locais.py`, que mede a detecção por
       partição e recusa o agregado quando houver regra `desenvolvimento`
       carregada. Verificar: `--selftest` cobre as duas situações.
-- [ ] 5.4 Medir as regras `definicao` sobre a **população inteira** — permitido,
+- [x] 5.4 Medir as regras `definicao` sobre a **população inteira** — permitido,
       porque nenhum caso as informou. Verificar: relatório emitido com o número e
-      a ressalva de protocolo na mesma linha.
-- [ ] 5.5 Decidir: o número é satisfatório? Se sim, pular a seção 6 e ir para a 7.
-      Registrar a decisão.
+      a ressalva de protocolo na mesma linha. **Medido em 2026-09-17**, 452 casos,
+      zero falhas de esteira: **CWE-22 2/114 (1,8 %)**, **CWE-918 1/112 (0,9 %)**.
+      O agregado saiu porque todas as regras são `definicao`.
+- [x] 5.5 Decidir: o número é satisfatório? **NÃO.** 1,8 % e 0,9 % são
+      indistinguíveis do zero que o `p/default` já entregava, e as duas
+      detecções de CWE-22 vêm acompanhadas de disparo na versão **corrigida** dos
+      mesmos casos — a regra não separa vulnerável de corrigido ali. A seção 6
+      abre. Decisão registrada em `design.md` (D8).
 
 ## 6. Regras derivadas da partição de desenvolvimento — só se a seção 5 não bastou
 
-- [ ] 6.1 Abrir **apenas** a partição de desenvolvimento e analisar por que as
-      regras `definicao` não dispararam. Verificar: a análise fica registrada, e
-      nenhum caso da partição de avaliação foi aberto.
-- [ ] 6.2 Escrever ou ajustar regras com proveniência `desenvolvimento`.
-      Verificar: cada uma declara a proveniência correta.
-- [ ] 6.3 Medir na partição de avaliação e confirmar que o agregado é recusado.
-      Verificar: o relatório traz os dois números rotulados e a tentativa de
-      agregado falha.
-- [ ] 6.4 Registrar o critério que separa "corrigir sintaxe de padrão" de
+- [x] 6.1 Abrir **apenas** a partição de desenvolvimento e analisar por que as
+      regras `definicao` não dispararam. **Feito**, com barreira de acesso que
+      recusa caminho de caso fora do desenvolvimento. Análise em `design.md`
+      (D9): ~30 % dos arquivos rotulados não contêm a operação perigosa, e só
+      5,6 % (CWE-22) e 14,5 % (CWE-918) têm fonte e sumidouro no mesmo arquivo.
+- [x] 6.2 Escrever ou ajustar regras com proveniência `desenvolvimento`.
+      **Duas regras novas**, não ajuste das antigas (ver D10): zip-slip para
+      CWE-22 e URL de campo de struct para CWE-918. Ambas declaram
+      `desenvolvimento`, ambas passam `semgrep --test`.
+- [x] 6.3 Medir na partição de avaliação e confirmar que o agregado é recusado.
+      **Medido em 2026-09-17**: CWE-22 **4/60 (6,7 %)** e CWE-918 **1/57
+      (1,8 %)** na avaliação; 4/54 e 3/55 no desenvolvimento, rotulados como
+      diagnóstico. O agregado falhou com mensagem explícita e código de saída 1.
+      Registrado em `design.md` (D11).
+- [x] 6.4 Registrar o critério que separa "corrigir sintaxe de padrão" de
       "ajustar a casos vistos", resolvendo a questão em aberto de `design.md`.
+      Registrado em `design.md` (D10), com teste operacional, regra de contato e
+      desempate assimétrico.
 
 ## 7. Documentação e mapa do LaTeX
 
