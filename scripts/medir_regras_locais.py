@@ -41,6 +41,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import run_pipeline as rp  # noqa: E402
 from src import regras_locais  # noqa: E402
 from src.cache_simbolico import CacheSimbolico  # noqa: E402
+from src.config import CACHE_SIMBOLICO_DIR  # noqa: E402
 from src.fase1_semgrep import (  # noqa: E402
     SemgrepError,
     SemgrepFileNotFoundError,
@@ -63,6 +64,18 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # pergunta — quanto o conjunto detecta —, e a lacuna que esta change existe para
 # preencher já está medida: zero, nas duas CWEs alvo.
 RULESET_LOCAL = "regras/go"
+
+# Cache PRÓPRIO, e não o compartilhado. O caminho de uma entrada de cache não
+# carrega a identidade do ruleset — só o motor entra no nome —, então gravar a
+# medição no cache comum SOBRESCREVE, no mesmo caminho, a entrada de
+# `p/default` daquele caso. A entrada sobrescrita não seria servida por engano
+# (a identidade diverge e ela é recomputada), mas se perderia, e recompor as
+# ~1.900 entradas da população custa horas de Semgrep.
+#
+# Diretório próprio em vez de identidade no caminho: pôr o ruleset no nome do
+# arquivo invalidaria por caminho todas as entradas já em disco, que é
+# exatamente o que a identidade do conjunto unitário foi desenhada para evitar.
+CACHE_MEDICAO = os.path.join(CACHE_SIMBOLICO_DIR, "_regras_locais")
 
 VULNERAVEL = "vulneravel"
 SEGURO = "seguro"
@@ -172,7 +185,7 @@ def medir(casos, diretorio_regras=None, cache=None, verboso=False):
     """
     configs = (diretorio_regras or RULESET_LOCAL,)
     cache = cache if cache is not None else CacheSimbolico(
-        versao_ruleset=identidade_conjunto(configs))
+        diretorio=CACHE_MEDICAO, versao_ruleset=identidade_conjunto(configs))
     resultados, falhas = [], []
     for i, caso in enumerate(casos, 1):
         payload = cache.ler(caso.repo_name, caso.commit, caso.arquivo, caso.cwe)
