@@ -84,5 +84,34 @@
 - [ ] 6.3 Confirmar que nenhuma rodada existente foi invalidada. Verificar:
       nenhum CSV em `results/` foi alterado, e nenhum número de
       `docs/ANALISE-RODADA-*.md` muda.
-- [ ] 6.4 Confirmar que nenhum arquivo `.tex` foi tocado. Verificar:
-      `git status --porcelain` não lista nenhum `.tex`.
+- [ ] 6.4 Confirmar que nenhum arquivo `.tex` foi tocado **por esta change**.
+      Verificar: `git status --porcelain` não lista nenhum `.tex`.
+      A justificativa mudou em 17/09/2026 e o registro importa: a regra antiga era
+      não mexer na monografia antes de fechar o experimento, porque não havia
+      histórico para desfazer um erro. A monografia passou a ser versionada, então
+      a guarda hoje vale por outro motivo — esta change é infraestrutura e não
+      produz número algum para reportar. Não é mais proibição geral; é escopo.
+
+## 7. Encerramento — abrir a sucessora
+
+- [ ] 7.1 Criar a change `rodada-comercial` **antes de arquivar esta**, ainda que
+      ela fique parada aguardando decisão de orçamento. Verificar:
+      `openspec/changes/rodada-comercial/` existe e `openspec validate
+      rodada-comercial --strict` passa.
+      O andaime existe para uma parede; sem a sucessora registrada, a capacidade
+      construída aqui fica sem consumidor e o esforço se perde por esquecimento.
+- [ ] 7.2 Registrar na sucessora, como tarefas dela e não desta, os dois pontos
+      de `editaveis/resultados.tex` que só ela pode fechar: as linhas dos modelos
+      de fronteira na Tabela `tab:modelos`, e o item "Escopo de modelos" da seção
+      de limitações. Verificar: as duas tarefas constam do `tasks.md` da
+      sucessora, nomeando o arquivo e o rótulo da tabela.
+- [ ] 7.3 Registrar na sucessora a ordem de prioridade entre os braços: **o braço
+      de filtro primeiro**, porque é onde moram Q1, Q2 e Q3 e é a metade mais
+      barata (~1.654 chamadas contra ~3.200); o braço de triagem é extensão
+      opcional. Verificar: a decisão e a justificativa constam do `design.md` da
+      sucessora.
+- [ ] 7.4 Verificar que a chave da OpenAI está disponível, ou registrar na
+      sucessora que a matriz comercial fica restrita ao Gemini. Verificar: o
+      `.env` traz `OPENAI_API_KEY`, ou o `design.md` da sucessora declara que a
+      conclusão passa a ser "três modelos, um comercial" em vez de "quatro, dois
+      comerciais".
