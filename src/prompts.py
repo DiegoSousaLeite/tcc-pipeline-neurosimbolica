@@ -20,7 +20,36 @@ from .config import PROMPTS_DIR
 
 BASELINE = "baseline"
 ESPECIALISTA = "especialista"
-TIPOS = (BASELINE, ESPECIALISTA)
+
+# Variantes DIRETAS, para o braço de triagem.
+#
+# Os dois templates originais abrem com "abaixo está um alerta emitido por uma
+# ferramenta de análise estática... decida se o alerta é VP ou FP". No braço de
+# triagem isso é uma pressuposição FALSA para o candidato injetado: não houve
+# alerta nenhum. Pedir para validar um alerta inexistente e receber "falso
+# positivo" é uma resposta coerente com a pergunta feita — e isso contamina a
+# medição de recall sem que o grupo de controle consiga acusar, porque o
+# enquadramento é uniforme nas duas procedências.
+#
+# As variantes diretas perguntam pelo CÓDIGO em vez de pelo alerta. Elas NÃO
+# acrescentam informação: o `especialista` já recebia a CWE do gabarito nas três
+# camadas, e o `baseline_direto` continua sem ver CWE alguma, como o controle
+# exige. Muda a forma da pergunta, não a evidência.
+#
+# São ARQUIVOS NOVOS, e não edição dos originais, porque `Versao_Prompt` é o que
+# torna uma alteração de prompt detectável nos resultados já gravados: mexer nos
+# originais tornaria as Rodadas 1-4 irreproduzíveis em silêncio.
+BASELINE_DIRETO = "baseline_direto"
+ESPECIALISTA_DIRETO = "especialista_direto"
+
+TIPOS = (BASELINE, ESPECIALISTA, BASELINE_DIRETO, ESPECIALISTA_DIRETO)
+
+# Tipos que NÃO recebem a ficha do catálogo: são as condições de controle, e ver
+# qualquer camada da metodologia — inclusive o nome da CWE — as descaracteriza.
+TIPOS_SEM_FICHA = (BASELINE, BASELINE_DIRETO)
+
+# Tipos que perguntam pelo código em vez de pelo alerta.
+TIPOS_DIRETOS = (BASELINE_DIRETO, ESPECIALISTA_DIRETO)
 
 # Trecho que define o contrato de saída. Tem que ser idêntico nos dois
 # templates: a diferença entre os braços precisa estar no CONTEÚDO, não no
@@ -78,9 +107,13 @@ def montar_prompt(tipo: str, contexto: str, cwe_id: str, cwe_name: str = "",
                   description: str = "", ficha: Ficha = None) -> str:
     """Renderiza o prompt do tipo pedido.
 
-    `baseline` recebe apenas o contexto — é a condição de controle e não pode
-    ver nenhuma camada da metodologia, nem mesmo o nome da CWE. `especialista`
-    recebe as três camadas, todas vindas da mesma ficha do catálogo.
+    Os tipos de `TIPOS_SEM_FICHA` recebem apenas o contexto — são as condições
+    de controle e não podem ver nenhuma camada da metodologia, nem mesmo o nome
+    da CWE. Os demais recebem as três camadas, todas vindas da mesma ficha do
+    catálogo.
+
+    As variantes `_direto` diferem das originais só no ENQUADRAMENTO da pergunta
+    (pelo código, não pelo alerta); os placeholders são os mesmos.
 
     `description` (a descrição da CWE que vem do dataset) NÃO entra em nenhum
     dos dois: no baseline contaminaria o controle, e no especialista competiria
@@ -88,7 +121,7 @@ def montar_prompt(tipo: str, contexto: str, cwe_id: str, cwe_name: str = "",
     """
     template = carregar_template(tipo)
 
-    if tipo == BASELINE:
+    if tipo in TIPOS_SEM_FICHA:
         return template.format(contexto=contexto)
 
     ficha = ficha or catalogo_padrao().ficha(cwe_id, cwe_name)
