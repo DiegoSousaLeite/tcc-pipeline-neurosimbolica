@@ -281,24 +281,26 @@ def test_identificador_repetido_entre_rulesets_nao_descarta_regra(tmp_path,
     from src import ruleset
     from src.ruleset import GRAU_ALTA
 
+    # Nomes de registry: um caminho local seria lido do disco, não do catálogo
+    # em cache, e o teste passaria a medir outra coisa.
     catalogos = {
-        "a": {"rules": [{"id": "mesmo.id", "languages": ["go"], "mode": "taint",
-                         "metadata": {"cwe": ["CWE-22: Path"],
-                                      "subcategory": "vuln"}}]},
-        "b": {"rules": [{"id": "mesmo.id", "languages": ["go"],
-                         "metadata": {"cwe": ["CWE-22: Path"],
-                                      "subcategory": "vuln"}}]},
+        "p/a": {"rules": [{"id": "mesmo.id", "languages": ["go"], "mode": "taint",
+                           "metadata": {"cwe": ["CWE-22: Path"],
+                                        "subcategory": "vuln"}}]},
+        "p/b": {"rules": [{"id": "mesmo.id", "languages": ["go"],
+                           "metadata": {"cwe": ["CWE-22: Path"],
+                                        "subcategory": "vuln"}}]},
     }
     caminhos = {}
     for nome, dados in catalogos.items():
-        destino = tmp_path / f"_regras_{nome}.json"
+        destino = tmp_path / f"_regras_{nome.replace('/', '_')}.json"
         destino.write_text(json.dumps(dados), encoding="utf-8")
         caminhos[nome] = str(destino)
     monkeypatch.setattr(ruleset, "caminho_cache", lambda c: caminhos[c])
     ruleset._MEMORIA.clear()
 
     assert ruleset.grau_alcancabilidade("CWE-22", "go",
-                                        configs=("a", "b")) == GRAU_ALTA
+                                        configs=("p/a", "p/b")) == GRAU_ALTA
     ruleset._MEMORIA.clear()
 
 
@@ -361,3 +363,48 @@ def test_identidade_do_motor_continua_sendo_eixo_separado(tmp_path):
                           motor=pro).ler(*CHAVE) is None
     assert CacheSimbolico(diretorio=dir_cache, versao_ruleset=identidade,
                           motor=ce).ler(*CHAVE) is not None
+
+
+# -- ruleset próprio entra na alcançabilidade, lido do disco --------------
+
+def test_ruleset_local_e_lido_do_disco_sem_tocar_o_registry(monkeypatch,
+                                                            tmp_path):
+    """Buscar `semgrep.dev/c/regras/go` daria 404 e a CWE ficaria de fora."""
+    import yaml
+
+    from src import ruleset
+
+    (tmp_path / "regra.yaml").write_text(yaml.safe_dump({"rules": [
+        {"id": "local.path", "languages": ["go"],
+         "metadata": {"cwe": ["CWE-22: Path Traversal"],
+                      "subcategory": ["vuln"], "proveniencia": "definicao"}},
+    ]}), encoding="utf-8")
+    monkeypatch.setattr(ruleset, "_obter_ruleset",
+                        lambda url: pytest.fail(f"buscou {url} no registry"))
+    ruleset._MEMORIA.clear()
+    try:
+        assert 22 in ruleset.cwes_alcancaveis("go", configs=(str(tmp_path),))
+    finally:
+        ruleset._MEMORIA.clear()
+
+
+def test_ruleset_local_vazio_e_erro_e_nao_conjunto_vazio(tmp_path):
+    """Conjunto vazio recusaria a população inteira em silêncio."""
+    from src.ruleset import RulesetIndisponivelError, cwes_alcancaveis
+
+    with pytest.raises(RulesetIndisponivelError):
+        cwes_alcancaveis("go", configs=(str(tmp_path),))
+
+
+def test_regra_local_eleva_o_grau_das_cwes_alvo():
+    """Vale para `regras/go/` e `p/default` como estão no repositório.
+
+    É a consequência intencional do grau pela melhor regra de qualquer ruleset:
+    CWE-22 e CWE-918 estavam em grau intermediário por só terem regra de taint.
+    """
+    from src.ruleset import GRAU_ALTA, GRAU_MEDIA, grau_alcancabilidade
+
+    for cwe in ("CWE-22", "CWE-918"):
+        assert grau_alcancabilidade(cwe, "go", configs=("p/default",)) == GRAU_MEDIA
+        assert grau_alcancabilidade(
+            cwe, "go", configs=("p/default", "regras/go")) == GRAU_ALTA

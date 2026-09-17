@@ -34,7 +34,13 @@ from datetime import datetime
 from typing import NamedTuple
 
 from .config import CACHE_SIMBOLICO_DIR
-from .fase1_semgrep import SEMGREP_CONFIG, SEMGREP_CONFIGS, _numero_cwe
+from .fase1_semgrep import (
+    PROCEDENCIA_PROPRIA,
+    SEMGREP_CONFIG,
+    SEMGREP_CONFIGS,
+    _numero_cwe,
+    procedencia,
+)
 
 
 class RulesetIndisponivelError(Exception):
@@ -166,9 +172,62 @@ def _garantir_cache(destino, url):
 _MEMORIA = {}
 
 
+def _regra_de_dict(r) -> Regra:
+    return Regra(
+        cwes=_lista((r.get("metadata") or {}).get("cwe")),
+        linguagens=list(r.get("languages") or []),
+        subcategorias=tuple(_lista((r.get("metadata") or {}).get("subcategory"))),
+        taint=(r.get("mode") == "taint"),
+    )
+
+
+def _catalogo_local(config):
+    """Catálogo de um ruleset que sai de arquivo nosso, lido do disco.
+
+    Sem isto, a alcançabilidade de uma configuração com `regras/go` tentaria
+    buscar `https://semgrep.dev/c/regras/go` no registry e falharia com 404 — e
+    a CWE que a regra local cobre ficaria de fora do conjunto alcançável, que é
+    exatamente o contrário do motivo de a regra existir.
+
+    A memória é a mesma do catálogo remoto, mas com a chave derivada do conteúdo
+    dos arquivos: um ruleset local é um diretório, não um arquivo só, e o mtime
+    do diretório não muda quando uma regra dentro dele é editada.
+    """
+    from . import regras_locais
+
+    caminho = (config if os.path.isabs(config)
+               else os.path.join(os.path.dirname(os.path.dirname(
+                   os.path.abspath(__file__))), config))
+    arquivos = regras_locais.arquivos_de_regra(caminho)
+    if not arquivos:
+        raise RulesetIndisponivelError(
+            f"ruleset local '{config}' não tem regra alguma em {caminho}. "
+            "Conjunto vazio faria toda CWE parecer inalcançável e recusaria a "
+            "população inteira em silêncio.")
+
+    chave = tuple((a, os.stat(a).st_mtime_ns, os.stat(a).st_size)
+                  for a in arquivos)
+    memorizado = _MEMORIA.get(caminho)
+    if memorizado is not None and memorizado[0] == chave:
+        return memorizado[1]
+
+    import yaml
+
+    regras = {}
+    for arquivo in arquivos:
+        with open(arquivo, encoding="utf-8") as f:
+            documento = yaml.safe_load(f) or {}
+        for r in documento.get("rules") or []:
+            regras[r["id"]] = _regra_de_dict(r)
+    _MEMORIA[caminho] = (chave, regras)
+    return regras
+
+
 def carregar_regras(destino=None, config=None):
-    """`check_id` -> `Regra(cwes, linguagens)` de UM ruleset, do cache ou do registry."""
+    """`check_id` -> `Regra(cwes, linguagens)` de UM ruleset, do disco ou do registry."""
     config = SEMGREP_CONFIG if config is None else config
+    if destino is None and procedencia(config) == PROCEDENCIA_PROPRIA:
+        return _catalogo_local(config)
     destino = os.path.abspath(destino or caminho_cache(config))
     _garantir_cache(destino, url_registry(config))
 
@@ -180,16 +239,7 @@ def carregar_regras(destino=None, config=None):
 
     with open(destino, encoding="utf-8") as f:
         dados = json.load(f)
-    regras = {
-        r["id"]: Regra(
-            cwes=_lista((r.get("metadata") or {}).get("cwe")),
-            linguagens=list(r.get("languages") or []),
-            subcategorias=tuple(
-                _lista((r.get("metadata") or {}).get("subcategory"))),
-            taint=(r.get("mode") == "taint"),
-        )
-        for r in dados.get("rules", [])
-    }
+    regras = {r["id"]: _regra_de_dict(r) for r in dados.get("rules", [])}
     _MEMORIA[destino] = (chave, regras)
     return regras
 
@@ -405,5 +455,11 @@ def metadados_snapshot(destino=None, config=None):
 
 
 def metadados_snapshots(configs=None):
-    """Um `Snapshot` por ruleset configurado, na ordem da configuração."""
-    return [metadados_snapshot(config=c) for c in _configs_alvo(configs=configs)]
+    """Um `Snapshot` por ruleset configurado, na ordem da configuração.
+
+    Ruleset próprio fica de fora: ele não tem snapshot do registry a descrever, e
+    a data que importa nele é o commit — que o manifesto registra por outro
+    caminho (`src/regras_locais.para_manifesto`).
+    """
+    return [metadados_snapshot(config=c) for c in _configs_alvo(configs=configs)
+            if procedencia(c) != PROCEDENCIA_PROPRIA]
