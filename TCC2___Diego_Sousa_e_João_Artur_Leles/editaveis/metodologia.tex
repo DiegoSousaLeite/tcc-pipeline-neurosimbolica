@@ -1,0 +1,381 @@
+\chapter{Metodologia}
+\label{cap:metodologia}
+
+Este capítulo detalha os procedimentos metodológicos adotados para a construção, execução e validação da arquitetura neuro-simbólica proposta. A metodologia foi desenhada para descrever o artefato tecnológico desenvolvido --- um \textit{pipeline} automatizado de triagem ---, como também para estruturar o experimento controlado que visa avaliar a sua eficácia empírica. Dessa forma, o capítulo descreve o plano metodológico, a arquitetura do sistema, o ambiente de simulação integrado à base de dados, as métricas de avaliação e as limitações do estudo.
+
+\section{Plano Metodológico}
+
+A pesquisa adota uma abordagem empírica e quantitativa, estruturada sob a forma de um experimento controlado. O objetivo deste experimento é avaliar de forma sistemática como a injeção de contexto semântico em \textit{prompts} influencia a capacidade de LLMs na filtragem de falsos positivos gerados por ferramentas de SAST.
+
+Para garantir a reprodutibilidade e o rigor científico da análise, o experimento foi delineado a partir do isolamento e da manipulação de variáveis específicas. Foram definidos como fatores experimentais desta pesquisa:
+
+\begin{itemize}
+    \item \textbf{Linguagem de programação alvo:} Go, selecionada por representar um dos principais padrões modernos para arquiteturas \textit{cloud-native};
+   \item \textbf{Modelos de inferência:} \texttt{gemini-3.1-pro-preview} (Google) e \texttt{gpt-5.4} (OpenAI), atuando como motores de avaliação. Os LLMs representam o estado da arte na compreensão de código \cite{hou2024large}, e as versões selecionadas oferecem as janelas de contexto massivas exigidas para processar integralmente o código na Fase 2 \cite{googleaistudio2026, openaidocs2026}. A adoção de provedores distintos mitiga vieses de ecossistema, enquanto a fixação das versões assegura a reprodutibilidade do experimento;
+    \item \textbf{Tipos de \textit{prompt}:} \textit{Prompts} genéricos (atuando como \textit{baseline}) em contraste com \textit{prompts} especialistas (enriquecidos com abstrações específicas da linguagem, como o uso de \textit{goroutines} e \textit{channels});
+    \item \textbf{Base de Dados (\textit{Ground Truth}):} a base de validação, construída a partir de duas fontes complementares --- o \textit{dataset} SastBench \cite{feiglin2026sastbench} e a base pública de vulnerabilidades OSV.dev ---, utilizada como oráculo para fornecer o gabarito das amostras e simular um ambiente real de repositórios históricos.
+\end{itemize}
+
+A combinação desses fatores permite a execução de testes comparativos rigorosos. Em vez de depender de análises manuais e subjetivas, o experimento utiliza o SastBench para automatizar a validação: o \textit{pipeline} consome os alertas de vulnerabilidade do \textit{dataset}, processa a triagem neuro-simbólica e tem os seus vereditos cruzados com o gabarito oficial da base, extraindo evidências de sucesso ou falha.
+
+O processo metodológico completo é dividido nas seguintes etapas, que serão detalhadas nas seções subsequentes:
+
+\begin{enumerate}
+    \item \textbf{Arquitetura do \textit{Pipeline} Proposto:} detalhamento das fases de extração, enriquecimento de contexto e inferência neural;
+    \item \textbf{Projeto e Estruturação dos \textit{Prompts}:} definição das abordagens de \textit{prompting} --- de controle (\textit{baseline}) e especialista --- e das camadas de contexto semântico injetadas;
+    \item \textbf{Ambiente de Simulação:} integração do fluxo automatizado com o \textit{dataset} SastBench;
+    \item \textbf{Análise de Dados e Métricas:} definição matemática dos indicadores (como Matriz de Confusão, \textit{F1-Score} e \textit{Recall}) aplicados à avaliação dos resultados;
+    \item \textbf{Limitações do Estudo:} identificação das restrições técnicas, de escopo e ameaças à validade;
+    \item \textbf{Cronograma:} planejamento estruturado das atividades futuras de pesquisa.
+\end{enumerate}
+
+\section{Arquitetura do \textit{Pipeline} Proposto}
+\label{sec:arquitetura}
+
+Para operacionalizar a integração neuro-simbólica em um cenário real de desenvolvimento, será desenvolvida uma arquitetura automatizada baseada em um \textit{pipeline} de quatro fases independentes e sequenciais. O artefato é projetado estruturalmente para operar de forma aderente aos paradigmas de Integração Contínua (CI/CD), possuindo a capacidade de ser disparado por eventos do ciclo de desenvolvimento (\textit{push} ou \textit{Pull Request}). O objetivo principal desta infraestrutura lógica é garantir que o modelo de linguagem receba evidências objetivas e contextos semânticos precisos, minimizando a ocorrência de alucinações durante a inferência.
+
+A Figura~\ref{fig:arquitetura} sintetiza o fluxo da arquitetura em um cenário real de uso:
+disparada por um evento de Integração Contínua, a esteira percorre as quatro fases
+sequenciais e devolve um veredito que subsidia a decisão de bloquear ou aprovar a
+integração do código.
+
+\begin{figure}[htpb]
+    \centering
+    \caption{Arquitetura da pipeline neuro-simbólica em um cenário de Integração Contínua}
+    \label{fig:arquitetura}
+    \begin{tikzpicture}[
+        node distance=6mm,
+        cx/.style={draw, rounded corners, align=center, font=\footnotesize,
+                   text width=66mm, minimum height=8mm, inner sep=3pt},
+        fase/.style={cx, fill=blue!8},
+        io/.style={cx, fill=black!8},
+        dec/.style={cx, fill=orange!15},
+        arr/.style={-{Latex[length=2mm]}, thick}
+    ]
+        \node[io] (trig) {\textbf{Evento de CI/CD} \scriptsize(\textit{push} ou \textit{Pull Request})};
+        \node[fase, below=of trig] (f1) {\textbf{Fase 1 --- Semgrep} \scriptsize(análise simbólica $\rightarrow$ alerta)};
+        \node[fase, below=of f1] (f2) {\textbf{Fase 2 --- Middleware} \scriptsize(hidratação de contexto)};
+        \node[fase, below=of f2] (f34) {\textbf{Fases 3/4 --- LLM} \scriptsize(triagem do alerta)};
+        \node[fase, below=of f34] (ver) {\textbf{Veredito} \scriptsize(VP ou FP + justificativa)};
+        \node[dec, below=of ver] (dec) {\textbf{Decisão} \scriptsize(bloquear ou aprovar a integração)};
+        \draw[arr] (trig) -- (f1);
+        \draw[arr] (f1) -- (f2);
+        \draw[arr] (f2) -- (f34);
+        \draw[arr] (f34) -- (ver);
+        \draw[arr] (ver) -- (dec);
+    \end{tikzpicture}
+    \fonteautores
+\end{figure}
+
+As fases que comporão a arquitetura do artefato estão detalhadas a seguir:
+
+\subsection{Fase 1: Análise Simbólica e Geração de Dados}
+A primeira fase consistirá na execução do motor de SAST. Uma vez acionado, o analisador --- neste estudo, a ferramenta Semgrep --- receberá o código-fonte do repositório em Go e, sem a necessidade de compilá-lo, aplicará o seu conjunto de regras de segurança diretamente sobre a estrutura sintática do código em busca de vulnerabilidades mapeadas. O principal artefato de saída desta fase será um relatório estruturado no formato SARIF (\textit{Static Analysis Results Interchange Format}), que conterá a localização do alerta, a categoria da fraqueza associada (CWE), além do rastreio do fluxo de dados desde a sua origem (\textit{source}) até a sua utilização em um ponto crítico (\textit{sink}), por meio do modo de rastreamento de dados corrompidos (\textit{taint mode}).
+
+\subsection{Fase 2: \textit{Middleware} de Enriquecimento e Hidratação}
+Tendo em vista que os relatórios brutos de SAST podem omitir o contexto envolvente do código ao mapearem apenas as linhas estritas do fluxo, será implementado um \textit{middleware} em Python para atuar como um componente de preparação de dados. Este \textit{script} analisará o arquivo SARIF gerado na Fase 1 e mapeará todos os alertas emitidos pelo motor simbólico. Em seguida, será executado o processo de ``hidratação de contexto'': o sistema acessará os arquivos fonte originais e extrairá um bloco de código adjacente ao redor de cada ponto do rastreio. Esta extração será fundamental para capturar importações, estruturas de dados envolventes e potenciais funções de sanitização que o analisador estático possa não ter interpretado corretamente. 
+
+\subsection{Fase 3: Motor de \textit{Prompt} Específico}
+Nesta etapa, os dados hidratados serão transformados em uma requisição estruturada. O sistema injetará o bloco de código enriquecido em um modelo de \textit{prompt} desenhado para guiar a validação neural. O \textit{payload} final será composto pelas diretrizes de comportamento do sistema, o contexto teórico da CWE reportada e o contexto semântico da linguagem Go, como o uso de \textit{goroutines} e \textit{channels}. O detalhamento exato do \textit{design} estrutural, das engenharias de instrução aplicadas e das variações de \textit{baseline} destes modelos será aprofundado na Seção~\ref{sec:prompts}.
+
+\subsection{Fase 4: Inferência Neural e Decisão}
+A fase final da arquitetura executará a chamada via API HTTP REST para os dois modelos de linguagem de fronteira definidos no plano metodológico. A inteligência artificial processará o contexto construído na Fase 3, avaliando as mitigações semânticas presentes no código que possam invalidar o alerta emitido pelo Semgrep. O processamento resultará em uma saída formatada em JSON, contendo obrigatoriamente dois elementos: o veredito final, classificado como Verdadeiro Positivo (VP) ou Falso Positivo (FP), e a justificativa técnica detalhada (\textit{reasoning}) que fundamenta a decisão tomada. Em um ambiente corporativo real, este veredito seria utilizado para bloquear ou aprovar a integração do código.
+
+\section{Projeto e Estruturação dos \textit{Prompts}}
+\label{sec:prompts}
+Considerando o objetivo de avaliar a eficácia da arquitetura neuro-simbólica na triagem de alertas de segurança, o experimento foi estruturado para isolar e medir o impacto do contexto semântico na tomada de decisão do modelo de linguagem. Para isso, a etapa de inferência neural empregará duas abordagens distintas de \textit{prompting} (um modelo de controle e um experimental). Ambas as abordagens herdam os fundamentos de \textit{prompt programming} descritos na fundamentação teórica, mas diferem na quantidade e na qualidade do contexto injetado.
+
+Para garantir o determinismo estrutural necessário em um \textit{pipeline} automatizado, ambas as requisições compartilham uma arquitetura base focada na extração de um raciocínio estruturado (\textit{Chain-of-Thought}). O modelo é forçado, via parâmetros de API (com temperatura zero) e instruções de sistema, a retornar exclusivamente um objeto JSON contendo dois campos: a justificativa técnica detalhada (\texttt{reasoning}) e o veredito final binário (\texttt{veredito}: ``VP'' ou ``FP''). Nesta etapa, o modelo é explicitamente instruído a atuar apenas como um classificador para a triagem do alerta, sendo vetada qualquer tentativa de reescrita ou sugestão de correção do código-fonte. A exigência do campo \texttt{reasoning} antes do veredito obriga o modelo a materializar a sua cadeia de raciocínio lógico antes de classificar a vulnerabilidade, reduzindo a estocasticidade da resposta.
+
+As duas abordagens de \textit{prompt} concebidas para o experimento estão detalhadas a
+seguir; a Figura~\ref{fig:prompt} contrasta a sua anatomia, evidenciando as camadas de
+enriquecimento que distinguem o \textit{prompt} especialista do controle.
+
+\begin{figure}[htpb]
+    \centering
+    \caption{Anatomia das duas abordagens de \textit{prompt}: controle (\textit{baseline}) e especialista}
+    \label{fig:prompt}
+    \begin{tikzpicture}[
+        font=\scriptsize,
+        title/.style={font=\footnotesize\bfseries, align=center, text width=42mm},
+        layer/.style={draw, rounded corners, align=center, text width=42mm,
+                      minimum height=6.5mm, inner sep=2pt}
+    ]
+        \node[title] (bt) {Baseline (\textit{Zero-Shot})};
+        \node[layer, fill=black!6, below=2mm of bt] (b1) {\textit{System}: assistente genérico de segurança};
+        \node[layer, fill=black!6, below=2mm of b1] (b2) {\textit{User}: trecho de código + alerta do Semgrep};
+
+        \node[title, right=12mm of bt] (et) {Especialista (Neuro-Simbólico)};
+        \node[layer, fill=blue!8, below=2mm of et] (e1) {\textit{System}: arquiteto de segurança sênior em Go};
+        \node[layer, fill=blue!8, below=2mm of e1] (e2) {\textit{User}: trecho de código + alerta do Semgrep};
+        \node[layer, fill=blue!8, below=2mm of e2] (e3) {{}+ Ancoragem teórica da CWE};
+        \node[layer, fill=blue!8, below=2mm of e3] (e4) {{}+ Heurísticas semânticas de Go};
+        \node[layer, fill=blue!8, below=2mm of e4] (e5) {{}+ Demonstração por contraste (\textit{few-shot})};
+    \end{tikzpicture}
+    \fonteautores
+\end{figure}
+
+\subsection{O \textit{Prompt} de Controle (\textit{Baseline})}
+O \textit{prompt} de controle opera sob o paradigma \textit{Zero-Shot}, representando a abordagem mais ingênua de integração de um LLM a uma ferramenta de SAST. O seu objetivo é estabelecer a linha de base (\textit{baseline}) do desempenho do modelo ao analisar a linguagem Go, sem o benefício do direcionamento neuro-simbólico especializado.
+
+Nesta estrutura, o \textit{System Prompt} define o modelo genericamente como um assistente de segurança. O \textit{User Prompt} injeta apenas os dados brutos extraídos da Fase 1: o trecho de código apontado e a mensagem de alerta original do Semgrep. Não são fornecidas definições teóricas sobre a CWE, exemplos de resolução ou heurísticas específicas da linguagem. Avalia-se, assim, a capacidade latente e intrínseca do LLM em validar o código valendo-se unicamente do seu treinamento original.
+
+\subsection{O \textit{Prompt} Especialista (Neuro-Simbólico)}
+Em contraste com o controle, o \textit{prompt} especialista representa a aplicação integral da arquitetura neuro-simbólica proposta e da engenharia de contexto. Esta abordagem atua como uma âncora factual para a rede neural, substituindo a busca exploratória cega por uma verificação guiada por evidências. A sua estrutura é dividida em três camadas de enriquecimento cognitivo:
+
+\begin{enumerate}
+    \item \textbf{Ancoragem Teórica da CWE:} Injeção da definição formal e dos critérios de exploração da fraqueza reportada, garantindo que o modelo compreenda a natureza exata da ameaça (por exemplo, os requisitos para que uma falha CWE-1004 realmente ocorra no gerenciamento de \textit{cookies}).
+    \item \textbf{Heurísticas Semânticas da Linguagem Go:} A principal variável independente deste \textit{prompt}. São injetadas regras determinísticas sobre o comportamento nativo da linguagem em relação à vulnerabilidade analisada. Isso inclui instruções sobre como a biblioteca padrão de Go lida com sanitização, a inicialização padrão de \textit{flags} de segurança, ou o comportamento de primitivas de concorrência (\textit{goroutines} e \textit{channels}) em alertas de \textit{Data Race}.
+    \item \textbf{Demonstração por Contraste (\textit{Few-Shot Prompting}):} Aplicação da técnica de aprendizado com poucos exemplos, fornecendo ao modelo pares prévios de códigos em Go que representam um Verdadeiro Positivo e um Falso Positivo para a mesma CWE. Esses exemplos auxiliam o modelo a calibrar o seu padrão de reconhecimento e a compreender os limites da intenção semântica antes de avaliar a amostra real retida pelo \textit{pipeline}.
+\end{enumerate}
+
+A comparação direta do desempenho (taxa de falsos positivos filtrados e ocorrência de falsos negativos) entre estas duas estruturas de \textit{prompt} sobre o mesmo conjunto de amostras do SastBench formará a base empírica para responder às questões de pesquisa deste estudo.
+
+
+\section{Ambiente de Simulação e Integração}
+\label{sec:simulacao}
+
+Para viabilizar a execução do experimento empírico de forma controlada e extrair métricas de avaliação do artefato proposto (Seção~\ref{sec:arquitetura}), será construído um ambiente de simulação metodológica. Em vez de depender da observação em um ambiente de produção --- aguardando que desenvolvedores reais introduzam vulnerabilidades ---, o experimento utilizará uma base de validação como oráculo (\textit{ground truth}) para orquestrar a execução automatizada de testes retrospectivos em repositórios históricos.
+
+\subsection{Construção da Base de Validação}
+\label{subsec:base}
+
+A base de validação é composta por duas trilhas complementares, ambas ancoradas em repositórios reais de código aberto em Go, porém com origens e gabaritos distintos.
+
+A primeira trilha reúne os falsos positivos catalogados pelo SastBench \cite{feiglin2026sastbench} --- um \textit{benchmark} público para a triagem automatizada (agêntica) de alertas de SAST, que combina falsos positivos gerados pelo Semgrep com verdadeiros positivos validados a partir de CVEs, em uma proporção aproximada de oito alertas falsos para cada verdadeiro, cobrindo dezenas de linguagens e mais de uma centena de categorias de CWE. Como o SastBench é multilíngue, a base foi previamente filtrada e limpa para reter exclusivamente as amostras cujas vulnerabilidades ocorrem em código Go, mantendo a aderência ao escopo deste estudo. Cada amostra resultante fornece o repositório, o \textit{commit} e o arquivo, com gabarito \textit{seguro}, e tem como função medir a capacidade do \textit{pipeline} de filtrar o ruído do motor simbólico.
+
+A segunda trilha reúne os verdadeiros positivos, isto é, vulnerabilidades reais derivadas de \textit{Common Vulnerabilities and Exposures} (CVEs) de projetos Go, organizadas em dois níveis de confiança. A trilha ouro parte dos verdadeiros positivos ancorados no próprio SastBench: o \textit{dataset} fornece o repositório, a CWE, o identificador do CVE e o \textit{commit} vulnerável, e o \textit{commit} de correção correspondente é localizado por consulta à base pública OSV.dev. Já a trilha prata é coletada de forma independente, diretamente da OSV.dev, sem a curadoria do \textit{dataset} --- o que amplia a cobertura, mas a um nível de confiança menor, por estar mais suscetível a ruído de rótulo. Em ambas as trilhas, para cada CVE identifica-se o \textit{commit} de correção e o seu \textit{commit} imediatamente anterior; a função alterada pela correção é então extraída em duas versões: a vulnerável (anterior à correção, gabarito vulnerável) e a corrigida (gabarito seguro). Essa estratégia de mineração de correções de CVEs para derivar pares vulnerável/corrigido é consolidada na literatura de segurança de software, sendo a base de conjuntos de dados como o CVEfixes \cite{bhandari2021cvefixes} e o BigVul \cite{fan2020bigvul}. O \textit{commit} de correção atua como localizador da falha --- indica exatamente qual função foi alterada para saná-la ---, enquanto o identificador do CVE assegura que se trata de uma vulnerabilidade documentada, e não de uma suposição. As ameaças à validade inerentes a essa técnica são discutidas na Seção~\ref{sec:limitacoes}.
+
+\subsection{Orquestração da Simulação}
+
+O processo de integração ocorrerá por meio de um \textit{script} orquestrador, que emulará o comportamento de um servidor de CI/CD e atuará como o laboratório de coleta de dados do experimento, realizando as seguintes etapas iterativas para cada amostra da base:
+
+\begin{enumerate}
+    \item \textbf{Simulação de Evento (\textit{Checkout} Histórico):} O orquestrador clonará o repositório \textit{open-source} listado no SastBench e reverterá o código da aplicação para o \textit{hash} exato do \textit{commit} onde a vulnerabilidade (ou o falso positivo) foi catalogada. Esse procedimento simulará o instante em que um \textit{push} teria sido executado.
+    \item \textbf{Disparo Isolado do \textit{Pipeline}:} Com o ambiente estabilizado, o orquestrador acionará a Fase 1 da arquitetura, forçando o Semgrep a analisar o respectivo \textit{commit} e a iniciar a cadeia neuro-simbólica automatizada.
+    \item \textbf{Análise de Ponto Cego Simbólico (\textit{Missed Alerts}):} Durante o experimento, é possível que o Semgrep conclua sua análise e não identifique nenhuma vulnerabilidade no arquivo, não emitindo qualquer alerta. Nesses casos, o orquestrador interceptará a ausência de dados antes da Fase 4. Essa dinâmica é crucial para o estudo, pois revelará os Falsos Negativos nativos da ferramenta de SAST, demonstrando cenários onde a própria análise estática falha em detectar vulnerabilidades reais validadas pelo SastBench.
+    \item \textbf{Coleta de Dados e Auditoria Laboratorial:} Ao final do fluxo de cada alerta, o orquestrador agirá como um módulo de persistência científica. Ele capturará o veredito da IA (ou a falha de detecção do Semgrep) e emparelhará essa informação com o gabarito oficial contido no manifesto do SastBench.
+    \item \textbf{Consolidação:} Ambas as classificações, juntamente com o tempo de execução e a justificativa técnica da IA, serão consolidadas estruturalmente em um relatório tabular (formato CSV). Será este arquivo que fornecerá a base determinística para a extração estatística de métricas de desempenho e da Matriz de Confusão apresentada nos resultados.
+\end{enumerate}
+
+Vale destacar a diferença entre a esteira operacional e o ambiente experimental. A pipeline operacional descrita na Seção~\ref{sec:arquitetura} (Figura~\ref{fig:arquitetura}) compreende quatro fases e encerra-se no veredito do LLM, que, em um cenário real de CI/CD, subsidiaria a decisão de bloquear ou aprovar o \textit{push}. O ambiente experimental, por sua vez, acrescenta uma quinta fase --- a Auditoria ---, inexistente em produção: é ela que cruza cada veredito (ou a ausência de alerta do Semgrep) com o gabarito do SastBench e consolida as duas matrizes de classificação, viabilizando a extração das métricas.
+
+A Figura~\ref{fig:simulacao} resume esse arcabouço de simulação: os dois fluxos de entrada
+--- os falsos positivos do \textit{dataset} e os pares de vulnerabilidade real
+reconstruídos de CVEs --- alimentam a mesma esteira, cujos resultados alimentam as duas
+matrizes de classificação. Observa-se que o LLM opera como filtro puro: só é acionado
+quando o motor simbólico emite alerta, de modo que as amostras não detectadas alimentam
+apenas a matriz de cobertura.
+
+\begin{figure}[htpb]
+    \centering
+    \caption{Ambiente de simulação: o \textit{dataset} SastBench exercitando a pipeline para a coleta de métricas}
+    \label{fig:simulacao}
+    \begin{tikzpicture}[
+        node distance=7mm and 10mm,
+        base/.style={draw, rounded corners, align=center, font=\footnotesize,
+                     text width=38mm, minimum height=9mm, inner sep=3pt},
+        fase/.style={base, fill=blue!8},
+        io/.style={base, fill=black!8, text width=32mm},
+        dec/.style={draw, diamond, aspect=2.2, align=center, font=\scriptsize,
+                    fill=orange!15, inner sep=1pt},
+        mat/.style={base, fill=green!12},
+        arr/.style={-{Latex[length=2mm]}, thick}
+    ]
+        \node[fase] (f1) {\textbf{Fase 1 --- Semgrep}\\\scriptsize clone + checkout + análise (SARIF)};
+        \node[io, above left=8mm and 1mm of f1] (fp) {\textbf{Dataset (FP)}\\\scriptsize gabarito = seguro};
+        \node[io, above right=8mm and 1mm of f1] (tp) {\textbf{Pares de CVEs}\\\scriptsize vulnerável / corrigido};
+        \node[dec, below=of f1] (dec) {detectou\\a CWE?};
+        \node[mat, right=22mm of dec] (cob) {\scriptsize NAO\_DETECTADO\\(ponto cego: FN/VN)};
+        \node[fase, below=of dec] (f2) {\textbf{Fase 2 --- Middleware}\\\scriptsize hidratação de contexto};
+        \node[fase, below=of f2] (f34) {\textbf{Fases 3/4 --- LLM}\\\scriptsize veredito + \textit{reasoning} (JSON)};
+        \node[fase, below=of f34] (f5) {\textbf{Fase 5 --- Auditoria}\\\scriptsize registro determinístico (CSV)};
+        \node[mat, below=of f5] (mats) {\textbf{Duas matrizes + métricas}\\\scriptsize Cobertura (Semgrep) e Acerto (LLM)};
+
+        \draw[arr] (fp) -- (f1);
+        \draw[arr] (tp) -- (f1);
+        \draw[arr] (f1) -- (dec);
+        \draw[arr] (dec) -- node[above, font=\scriptsize] {não} (cob);
+        \draw[arr] (dec) -- node[right, font=\scriptsize] {sim} (f2);
+        \draw[arr] (f2) -- (f34);
+        \draw[arr] (f34) -- (f5);
+        \draw[arr] (f5) -- (mats);
+        \draw[arr] (cob) |- (mats);
+    \end{tikzpicture}
+    \fonteautores
+\end{figure}
+
+
+\section{Análise de Dados e Métricas}
+\label{sec:metricas}
+Esta seção detalha o plano de análise de dados, etapa fundamental para responder às perguntas de pesquisa propostas. A análise visa mensurar quantitativamente e qualitativamente o impacto da injeção de contexto semântico e do uso da arquitetura neuro-simbólica na triagem de alertas gerados pelo Semgrep, especificamente para a linguagem Go.
+
+\subsection{Definição do Espaço de Classificação}
+\label{subsec:classificacao}
+A validação proposta apoia-se em uma escolha metodológica deliberada: o motor simbólico empregado na Fase 1 é o Semgrep, a mesma ferramenta que originou os falsos positivos catalogados no SastBench --- uma das duas trilhas da base de validação (Seção~\ref{subsec:base}). Essa coerência é intencional e visa assegurar a fidelidade da reprodução: ao reexecutar o Semgrep sobre o arquivo e o \textit{commit} exatos apontados pela base, busca-se recuperar o mesmo alerta que deu origem ao gabarito, isolando a avaliação do LLM de divergências que seriam introduzidas por ferramentas distintas. Ainda assim, a reprodução não é garantida: diferenças de versão, de conjunto de regras ou de configuração podem fazer com que um achado catalogado não seja reemitido, expondo um ponto cego do próprio motor simbólico \cite{bennett2024semgrep}. Por essa razão, a avaliação é estruturada em duas matrizes de classificação distintas, que não devem ser confundidas.
+
+Ambas compartilham a mesma chave de leitura, o que permite compará-las sem sobrepô-las: as \textbf{linhas} representam a verdade do caso --- o gabarito fornecido pela base de validação, que informa se o código é de fato vulnerável ou de fato seguro ---, enquanto as \textbf{colunas} representam a decisão do motor que está sendo avaliado naquela matriz. O que muda de uma matriz para a outra é apenas o objeto das colunas: na primeira, a decisão é do Semgrep --- emitir o alerta ou silenciar; na segunda, é do LLM --- confirmar o alerta ou descartá-lo. Dessa chave decorre a dependência entre as duas, detalhada adiante: como o modelo só é consultado quando existe um alerta a triar, a segunda matriz é construída sobre uma única coluna da primeira.
+
+\subsubsection{Matriz de Cobertura do Motor Simbólico}
+A primeira matriz avalia exclusivamente a capacidade do Semgrep de reproduzir o achado catalogado pelo SastBench, mensurando a fidelidade da reprodução. Ela não avalia o LLM. Suas colunas registram se a ferramenta emitiu ou não o alerta:
+\begin{itemize}
+\item \textbf{Semgrep VP:} o Semgrep emite o alerta sobre uma amostra cujo gabarito é uma vulnerabilidade real. É a reprodução fiel do achado catalogado, o desfecho desejado nesta matriz.
+\item \textbf{Semgrep FN (Ponto Cego Simbólico):} o Semgrep não reemite o alerta sobre uma vulnerabilidade real catalogada, revelando uma falha nativa de detecção da análise estática. É o pior desfecho desta matriz, pois a amostra sequer chega à camada neural.
+\item \textbf{Semgrep FP:} o Semgrep emite um alerta sobre uma amostra catalogada como falso positivo. É o ruído que origina a fadiga de alertas --- e, precisamente, o insumo que a triagem neural deve filtrar.
+\item \textbf{Semgrep VN:} o Semgrep permanece em silêncio sobre uma amostra cujo gabarito é um falso positivo, concordando corretamente com a ausência de risco.
+\end{itemize}
+
+\subsubsection{Matriz de Acerto do LLM}
+A segunda matriz avalia o objeto central desta pesquisa: o acerto do LLM como motor de triagem secundário. A sua população não é a base inteira, e sim um recorte dela --- \textbf{ela é calculada exclusivamente sobre a coluna ``detectou'' da matriz de cobertura}, isto é, sobre o subconjunto de amostras em que o Semgrep efetivamente emitiu um alerta. Trata-se de consequência direta da regra de filtro puro (Seção~\ref{sec:simulacao}): sem alerta não há o que triar, e o modelo nem chega a ser consultado. As amostras da coluna ``silenciou'' encerram-se na matriz de cobertura e jamais são atribuídas como decisão do modelo neural. Aqui, as colunas registram o veredito do LLM:
+\begin{itemize}
+\item \textbf{Verdadeiro Positivo (VP):} o caso era vulnerável e o modelo confirmou o alerta, preservando a ameaça real.
+\item \textbf{Falso Negativo (FN):} o caso era vulnerável, mas o modelo o classificou como seguro e o descartou. Este é o cenário de maior risco de todo o estudo, pois uma falha de segurança genuína seria eliminada da triagem.
+\item \textbf{Falso Positivo (FP):} o caso era seguro e o modelo manteve o alerta. O ruído emitido pelo Semgrep sobreviveu à triagem, e o LLM falhou em filtrá-lo.
+\item \textbf{Verdadeiro Negativo (VN):} o caso era seguro e o modelo filtrou o alerta. É o objetivo central do trabalho --- o falso positivo efetivamente eliminado.
+\end{itemize}
+
+A Figura~\ref{fig:matrizes} resume essa estrutura. Nela, a marcação sobre a coluna ``detectou'' e a seta que dela parte tornam explícita a dependência entre as duas matrizes: motores diferentes exigem matrizes diferentes, mas apenas as amostras dessa coluna alimentam a avaliação do modelo. O silêncio do Semgrep, portanto, nunca é contabilizado como decisão do LLM.
+
+\begin{figure}[htpb]
+    \centering
+    \caption{As duas matrizes de classificação: a matriz de acerto do LLM é calculada sobre a coluna ``detectou'' da matriz de cobertura}
+    \label{fig:matrizes}
+    \resizebox{\textwidth}{!}{
+    \begin{tikzpicture}[
+        font=\scriptsize,
+        cell/.style={draw, minimum width=22mm, minimum height=12mm, align=center, inner sep=1pt},
+        hd/.style={font=\scriptsize\bfseries, align=center}
+    ]
+        % ---- Matriz A: Cobertura (Semgrep) ----
+        \node[cell, fill=green!15] (a11) {VP\\\scriptsize detectou vuln};
+        \node[cell, fill=red!12, right=0pt of a11] (a12) {FN\\\scriptsize ponto cego};
+        \node[cell, fill=red!12, below=0pt of a11] (a21) {FP\\\scriptsize ruído};
+        \node[cell, fill=green!15, right=0pt of a21] (a22) {VN\\\scriptsize silêncio ok};
+        \node[hd, above=1mm of a11] (hdet) {Detectou};
+        \node[hd, above=1mm of a12] (hsil) {Silenciou};
+        \node[hd, left=2mm of a11] {Vulnerável};
+        \node[hd, left=2mm of a21] {Seguro};
+        \node[hd, above=6mm of a11, xshift=11mm] {\normalsize Cobertura (Semgrep)};
+
+        % ---- Matriz B: Acerto (LLM) ----
+        \node[cell, fill=green!15, right=40mm of a12] (b11) {VP\\\scriptsize acerto};
+        \node[cell, fill=red!12, right=0pt of b11] (b12) {FN\\\scriptsize falha crítica};
+        \node[cell, fill=red!12, below=0pt of b11] (b21) {FP\\\scriptsize ruído mantido};
+        \node[cell, fill=green!15, right=0pt of b21] (b22) {VN\\\scriptsize acerto};
+        \node[hd, above=1mm of b11] {LLM: VP};
+        \node[hd, above=1mm of b12] {LLM: FP};
+        \node[hd, left=2mm of b11] {Vulnerável};
+        \node[hd, left=2mm of b21] {Seguro};
+        \node[hd, above=6mm of b11, xshift=11mm] {\normalsize Acerto (LLM)};
+
+        % ---- Vínculo: só a coluna "detectou" alimenta a matriz de acerto ----
+        \node[fit=(hdet)(a21), draw=blue!65, very thick, dashed,
+              rounded corners, inner sep=1.5mm] (coldet) {};
+        \node[coordinate] (bmid) at ($(b21.south)!0.5!(b22.south)$) {};
+        \node[coordinate, below=10mm of a21] (d1) {};
+        \node[coordinate] (d2) at (bmid |- d1) {};
+        \draw[-{Latex[length=2.5mm]}, very thick, blue!65, rounded corners]
+            (coldet.south) -- (d1) --
+            node[below, font=\scriptsize, text=black, align=center]
+                {somente as amostras desta coluna chegam ao LLM\\
+                 o silêncio do Semgrep encerra-se na matriz de cobertura}
+            (d2) -- (bmid);
+    \end{tikzpicture}
+    }
+    \fonteautores
+\end{figure}
+
+\subsection{Análise Quantitativa}
+As métricas quantitativas foram definidas para mensurar objetivamente a performance das diferentes estratégias de \textit{prompting} aplicadas ao LLM.
+
+\textbf{Questão Geral: Como auxiliar o desenvolvedor na avaliação do resultado da análise estática (SAST) de forma a reduzir a fadiga de alertas?}
+\begin{itemize}
+\item \textbf{Taxa de Redução de Alertas (TRA):} Mede o percentual absoluto de alertas que o \textit{pipeline} rotulou como seguros em relação ao volume total de alertas analisados. É calculada pela proporção de decisões de descarte (instâncias classificadas como negativas) sobre o total de validações realizadas pela IA: $\mathrm{TRA} = \frac{\mathrm{VN} + \mathrm{FN}}{\mathrm{VP} + \mathrm{VN} + \mathrm{FP} + \mathrm{FN}}$.
+\item \textbf{Proporção de Falsos Positivos Filtrados:} Avalia a eficiência do sistema em identificar os alarmes falsos, calculada pela razão entre os alarmes falsos corretamente identificados pelo LLM e o total de falsos positivos reais presentes na amostra: $\frac{\mathrm{VN}}{\mathrm{VN} + \mathrm{FP}}$.
+\end{itemize}
+
+\textbf{Q1: Qual o impacto do enriquecimento semântico na precisão do LLM ao classificar alertas como verdadeiros ou falsos?}
+\begin{itemize}
+\item \textbf{Precisão (\textit{Precision}):} Compara a capacidade do modelo de não rotular um Falso Positivo como vulnerabilidade real. Calculada para os tipos de \textit{prompt} através da fórmula: $\mbox{Precisão} = \frac{\mathrm{VP}}{\mathrm{VP} + \mathrm{FP}}$.
+\item \textbf{Impacto no \textit{F1-Score}:} Média harmônica entre Precisão e \textit{Recall}, utilizada para entender se o enriquecimento semântico gera um ganho de performance equilibrado: $F1 = 2 \times \frac{\mbox{Precisão} \times \mathrm{Recall}}{\mbox{Precisão} + \mathrm{Recall}}$.
+
+\item \textbf{Coeficiente de Correlação de Matthews (MCC):} Devido ao alto desbalanceamento intrínseco aos alertas de ferramentas SAST (onde o volume de falsos positivos supera substancialmente o de vulnerabilidades reais), a Precisão e o F1-Score isolados podem ser imprecisos. O MCC avalia a qualidade da classificação binária considerando todas as proporções da matriz de confusão, retornando um valor entre $-1$ e $+1$:
+$$\mathrm{MCC} = \frac{(\mathrm{VP} \times \mathrm{VN}) - (\mathrm{FP} \times \mathrm{FN})}{\sqrt{(\mathrm{VP}+\mathrm{FP})(\mathrm{VP}+\mathrm{FN})(\mathrm{VN}+\mathrm{FP})(\mathrm{VN}+\mathrm{FN})}}$$
+\end{itemize}
+
+\textbf{Q2: Em que proporção a arquitetura neuro-simbólica proposta consegue reduzir o volume de falsos positivos sem introduzir falsos negativos?}
+\begin{itemize}
+\item \textbf{\textit{Recall} (Revocação):} Capacidade do modelo de encontrar vulnerabilidades reais, calculada por $\mathrm{Recall} = \frac{VP}{VP + FN}$.
+\item \textbf{Taxa de Falsos Negativos (TFN):} Métrica crítica para a segurança, indicando a proporção de vulnerabilidades reais que o LLM erroneamente classificou como seguras: $\mathrm{TFN} = \frac{\mathrm{FN}}{\mathrm{FN} + \mathrm{VP}}$. O objetivo empírico é maximizar o VN (Falsos Positivos filtrados) mantendo a TFN próxima a zero.
+\end{itemize}
+
+\textbf{Q3: Como o desempenho do LLM na filtragem de falsos positivos se comporta ao analisar vulnerabilidades estruturais e lógicas específicas da linguagem Go, como os problemas de concorrência?}
+\begin{itemize}
+\item \textbf{Acurácia Segmentada por Categoria (CWE):} Percentual de classificações corretas agrupadas pelas categorias do \textit{Common Weakness Enumeration} (CWE) incidentes em Go. Esta métrica permite isolar quantitativamente o desempenho do modelo em falhas de arquitetura (\textit{data races}, vazamento de \textit{goroutines}, etc.) em contraste com falhas comuns de injeção.
+\end{itemize}
+
+\subsection{Análise Qualitativa}
+
+\textbf{Q4: De que forma a combinação de regras teóricas de segurança estruturadas em \textit{prompts} influencia na capacidade de raciocínio do modelo?}
+\begin{itemize}
+    \item \textbf{Auditoria de \textit{Reasoning} e Identificação de Alucinações:} Além do veredito binário, a avaliação qualitativa será conduzida sobre o campo de justificativa técnica (\textit{reasoning}) retornado no artefato JSON da Fase 4. A análise consistirá na verificação manual e heurística dos motivos apresentados pela IA para confirmar ou descartar um alerta. O objetivo é atestar se o LLM apresenta consistência lógica baseada nos paradigmas e nas abstrações da linguagem Go, mapeando se a decisão do modelo foi tomada pela fundamentação correta ou se resultou de uma alucinação estocástica. Essa análise revelará o quão efetiva foi a injeção do contexto semântico (Fase 2) na estabilização da narrativa gerada pelo modelo.
+\end{itemize}
+
+\section{Limitações do Estudo}
+\label{sec:limitacoes}
+Apesar do rigor na elaboração do delineamento metodológico e da arquitetura do \textit{pipeline}, este estudo apresenta limitações inerentes ao escopo da pesquisa e às tecnologias adotadas, as quais podem influenciar a generalização dos resultados. As principais limitações identificadas são:
+\begin{itemize}
+\item \textbf{Delimitação de Linguagem:} A análise empírica concentra-se exclusivamente na linguagem Go. Embora essa escolha seja justificada por sua relevância em arquiteturas \textit{cloud-native} e por questões de viabilidade operacional do experimento, ela restringe a extrapolação direta dos resultados para ecossistemas de software com paradigmas distintos, modelos de concorrência diferentes ou tipagem dinâmica.
+\item \textbf{Dependência de APIs e Modelos Proprietários:} A arquitetura depende de modelos de linguagem acessados via APIs de terceiros. Isso introduz limitações práticas relacionadas a custos financeiros, limites de taxa de requisição (\textit{rate limits}) e latência no ambiente de integração contínua. Além disso, por se tratarem de modelos comerciais de código fechado, atualizações não documentadas nas ferramentas podem impactar a reprodutibilidade exata do experimento a longo prazo.
+\item \textbf{Dependência do \textit{Dataset} de Validação:} O experimento confia no SastBench como base de dados para a validação das métricas. Consequentemente, a eficácia medida do \textit{pipeline} está atrelada à abrangência, à qualidade e aos possíveis vieses das vulnerabilidades mapeadas nessa base, podendo não refletir integralmente as complexidades de repositórios não catalogados.
+\item \textbf{Validade do gabarito de vulnerabilidades reais:} A trilha de verdadeiros positivos é derivada da mineração de correções de CVEs, técnica que, embora consolidada, está sujeita a ruído de rótulo. \textit{Commits} de correção podem agregar mudanças não relacionadas à segurança (\textit{tangled commits}); correções podem ser incompletas, deixando resíduos da falha na versão tida como segura; e a granularidade de função pode omitir o contexto necessário para determinar com certeza se um trecho é vulnerável.
+\begin{comment}
+\item \textbf{Natureza Estocástica dos LLMs:} A geração de inferências por modelos de linguagem é um processo inerentemente estocástico. A utilização de uma única amostra de resposta por combinação de parâmetros e \textit{prompts} reduz a capacidade de capturar a variabilidade natural das saídas do modelo, o que pode afetar a percepção real e a consistência na triagem de falsos positivos \cite{biderman2023emergentpredictablememorizationlarge}.
+@misc{biderman2023emergentpredictablememorizationlarge,
+      title={Emergent and Predictable Memorization in Large Language Models}, 
+      author={Stella Biderman and USVSN Sai Prashanth and Lintang Sutawika and Hailey Schoelkopf and Quentin Anthony and Shivanshu Purohit and Edward Raff},
+      year={2023},
+      eprint={2304.11158},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2304.11158}, 
+}
+\end{comment}
+\item \textbf{Limite arquitetural do filtro puro:} Por construção, a triagem neural atua exclusivamente sobre os alertas efetivamente emitidos pelo motor simbólico. Vulnerabilidades reais que o Semgrep não detecta (pontos cegos) jamais chegam ao LLM e, portanto, não podem ser recuperadas pela camada neural. Em consequência, a arquitetura é capaz de aprimorar a precisão da triagem --- filtrando falsos positivos ---, mas herda o teto de \textit{recall} do analisador estático, conforme evidenciado na prova de conceito (Capítulo~\ref{cap:poc}).
+\end{itemize}
+
+\section{Uso de Ferramentas de Inteligência Artificial Generativa}
+Para fins de transparência e em conformidade com o Código de Conduta da Sociedade Brasileira de Computação (SBC), declara-se que ferramentas de Inteligência Artificial Generativa --- Claude, da Anthropic, e Gemini, do Google --- foram utilizadas exclusivamente como apoio à revisão de escrita, à padronização e à formatação textual deste documento, sem participação na concepção da arquitetura, na condução do experimento, na análise ou nos resultados. Todo o conteúdo técnico e as ideias apresentadas são de inteira responsabilidade dos autores.
+
+\section{Cronograma}
+A Tabela~\ref{tab:cronograma} apresenta o cronograma planejado com as principais atividades a serem realizadas durante o desenvolvimento do TCC 2. O cronograma apresentado é estruturado em uma escala mensal, compreendendo o período de julho a dezembro.
+\begin{table}[htpb]
+    \centering
+    \caption{Cronograma de atividades do TCC 2}
+    \label{tab:cronograma}
+    \renewcommand{\arraystretch}{1.4}
+    \begin{tabular}{|l|c|c|c|c|c|c|}
+        \hline
+        \textbf{Atividade} & \textbf{Jul} & \textbf{Ago} & \textbf{Set} & \textbf{Out} & \textbf{Nov} & \textbf{Dez} \\
+        \hline
+        Preparação do \textit{Dataset} e Ambiente & X & & & & & \\
+        \hline
+        Construção do \textit{Pipeline} Automatizado & X & X & & & & \\
+        \hline
+        Engenharia de \textit{Prompts} Específicos para Go & & X & X & & & \\
+        \hline
+        Execução das Inferências e Testes & & & X & X & & \\
+        \hline
+        Análise de Resultados e Cálculo de Métricas & & & & X & & \\
+        \hline
+        Escrita do Relatório & & & & X & X & \\
+        \hline
+        Revisão Final e Adequação às Normas & & & & & X & X \\
+        \hline
+        Envio do Documento à Banca & & & & & & X \\
+        \hline
+        Apresentação & & & & & & X \\
+        \hline
+    \end{tabular}
+    \fonteautores
+\end{table}

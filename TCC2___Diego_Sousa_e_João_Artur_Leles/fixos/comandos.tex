@@ -1,0 +1,16 @@
+\renewcommand{\backrefpagesname}{Citado na(s) página(s):~}
+\renewcommand{\backref}{}
+\renewcommand*{\backrefalt}[4]{
+	\ifcase #1 %
+		Nenhuma citação no texto.%
+	\or
+		Citado na página #2.%
+	\else
+		Citado #1 vezes nas páginas #2.%
+	\fi}%
+% ---
+
+% --- Fonte de figuras e tabelas (ABNT) ---
+\newcommand{\fonteautores}{\par\vspace{2pt}{\centering\footnotesize Fonte: Elaborada por Leite e Pinheiro (2026).\par}}
+\newcommand{\fontepesquisa}{\par\vspace{2pt}{\centering\footnotesize Fonte: Dados da pesquisa (Leite e Pinheiro, 2026).\par}}
+% ---

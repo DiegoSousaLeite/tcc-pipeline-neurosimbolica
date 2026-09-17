@@ -1,0 +1,120 @@
+\chapter[Referencial Teórico]{Referencial Teórico}
+\label{cap:referencial}
+
+Este capítulo apresenta o referencial teórico que sustenta o desenvolvimento desta pesquisa. Inicialmente, são discutidas as ferramentas de Análise Estática de Segurança (SAST), contrastando o modelo relacional do CodeQL com a análise leve e baseada em padrões semânticos do Semgrep, motor simbólico adotado neste trabalho. Em seguida, abordam-se os Grandes Modelos de Linguagem (LLMs) e sua aplicação no raciocínio semântico aplicado ao código-fonte. Na sequência, exploram-se as técnicas de engenharia de \textit{prompts} e a relevância da injeção de contexto para a otimização da precisão dos modelos. Posteriormente, detalha-se o paradigma da integração neuro-simbólica na verificação de software, unindo o rigor determinístico à flexibilidade neural. Por fim, descrevem-se as especificidades arquiteturais da linguagem Go no contexto de sistemas nativos da nuvem e apresentam-se os trabalhos relacionados que situam esta pesquisa frente ao estado da arte. 
+
+\section{Análise Estática de Segurança (SAST) e Semgrep}
+
+A garantia da segurança e da integridade de um \textit{software} exige processos contínuos de verificação ao longo de todo o seu ciclo de desenvolvimento. Nesse cenário, a Análise Estática de Segurança, amplamente conhecida pelo termo em inglês \textit{Static Application Security Testing} (SAST), consolidou-se como uma das principais técnicas defensivas da indústria. Segundo \citeonline{scandariato2019}, o SAST baseia-se na inspeção minuciosa do código-fonte, do \textit{bytecode} ou de binários em busca de padrões de vulnerabilidades e falhas de lógica, com a característica fundamental de realizar essa varredura sem a necessidade de executar o programa.
+
+Como a análise ocorre antes da execução, as ferramentas de SAST operam, por natureza, de forma aproximada. Para garantir que nenhuma falha crítica passe despercebida pela varredura, essas ferramentas adotam algoritmos conservadores, baseados em superaproximação. Embora essa estratégia seja eficaz para cobrir todos os caminhos possíveis de execução de um código \cite{Sommerville2007}, ela apresenta um efeito colateral amplamente documentado na literatura: a geração de uma quantidade massiva de falsos positivos, alertando sobre vulnerabilidades teóricas que, na prática, não podem ser exploradas \cite{scandariato2019}.
+
+Para realizar essa varredura estrutural, os analisadores estáticos de modo geral não operam sobre o texto bruto do programa, mas sim o traduzem para representações intermediárias que viabilizam análises matemáticas e lógicas. Na literatura de engenharia de software, as abordagens clássicas envolvem a construção de Árvores de Sintaxe Abstrata (AST) para capturar a hierarquia do código, e Grafos de Fluxo de Controle (CFG) para mapear os possíveis caminhos de execução. A partir dessas estruturas, os motores de análise aplicam desde simples casamentos de padrões até inferências complexas sobre o estado do programa, como a análise de fluxo de dados. É a profundidade com que a ferramenta constrói e percorre essas representações que define o seu custo computacional e a sua precisão.
+
+Dentro do ecossistema atual de SAST, diferentes ferramentas materializam esses conceitos gerais sob paradigmas distintos. O CodeQL \cite{codeqldocs}, por exemplo, caracteriza-se por uma abordagem de análise semântica avançada. Em vez de abordagens baseadas apenas em expressões regulares, ele modela o código-fonte como um banco de dados relacional, sobre o qual problemas complexos de segurança são expressos como consultas declarativas orientadas a objetos, em uma linguagem própria denominada QL \cite{avgustinov2016ql}. Essa modelagem habilita análises profundas de fluxo de dados, porém a um custo: para construir a base relacional, a ferramenta precisa compilar o projeto, o que pressupõe um ambiente de \textit{build} íntegro e eleva o tempo e a fragilidade da análise, sobretudo ao reanalisar versões históricas de repositórios de terceiros.
+
+Como alternativa a esse paradigma de compilação pesada, o Semgrep \cite{semgrepdocs} adota uma análise leve e ágil, que dispensa a etapa de \textit{build}. Seu nome deriva de \textit{semantic grep}: a ferramenta converte o código em uma Árvore de Sintaxe Abstrata (AST), por meio do \textit{parser} incremental \textit{tree-sitter}, e casa padrões de vulnerabilidade descritos com uma sintaxe que se assemelha ao próprio código analisado \cite{bennett2024semgrep}. Essa leveza e a integração nativa a fluxos de Integração Contínua consolidaram a ferramenta no ecossistema \textit{cloud-native} e de \textit{DevSecOps}: o GitLab, por exemplo, adota o Semgrep como analisador de SAST padrão para diversas linguagens em seus \textit{pipelines} \cite{gitlabsast}. Por operar diretamente sobre o código-fonte e localizar o achado na linha exata, o Semgrep adequa-se ao cenário deste trabalho --- a reanálise automatizada de \textit{commits} históricos de repositórios em Go ---, razão pela qual foi adotado como motor simbólico da arquitetura proposta. A Figura~\ref{fig:codeql-semgrep} contrasta os dois paradigmas.
+
+\begin{figure}[htpb]
+    \centering
+    \caption{Paradigmas de SAST: o modelo relacional do CodeQL frente à análise baseada em padrões do Semgrep}
+    \label{fig:codeql-semgrep}
+    \resizebox{\textwidth}{!}{
+    \begin{tikzpicture}[
+        font=\small,
+        box/.style={draw, rounded corners, align=center, minimum height=8mm,
+                    text width=22mm, inner sep=2pt},
+        lab/.style={font=\small\bfseries},
+        arr/.style={-{Latex[length=2mm]}, thick}
+    ]
+        \node[box, fill=red!8] (c1) {Código-fonte};
+        \node[box, fill=red!8, right=7mm of c1] (c2) {Compilação (\textit{build})};
+        \node[box, fill=red!8, right=7mm of c2] (c3) {BD relacional};
+        \node[box, fill=red!8, right=7mm of c3] (c4) {Consulta QL};
+        \node[box, fill=red!8, right=7mm of c4] (c5) {Alerta};
+        \node[lab, left=4mm of c1] {CodeQL};
+        \draw[arr] (c1)--(c2); \draw[arr] (c2)--(c3);
+        \draw[arr] (c3)--(c4); \draw[arr] (c4)--(c5);
+
+        \node[box, fill=blue!8, below=12mm of c1] (s1) {Código-fonte};
+        \node[box, fill=blue!8, right=7mm of s1] (s2) {AST (\textit{tree-sitter})};
+        \node[box, fill=blue!8, right=7mm of s2] (s3) {Casamento de padrões};
+        \node[box, fill=blue!8, right=7mm of s3] (s4) {Alerta};
+        \node[lab, left=4mm of s1] {Semgrep};
+        \draw[arr] (s1)--(s2); \draw[arr] (s2)--(s3); \draw[arr] (s3)--(s4);
+    \end{tikzpicture}
+    }
+    \fonteautores
+\end{figure}
+
+A capacidade analítica das ferramentas de SAST modernas não se restringe ao casamento sintático. Por meio do modo de rastreamento de dados corrompidos (\textit{taint mode}), o Semgrep, por exemplo, acompanha o trânsito de informações não confiáveis desde a sua origem (\textit{source}) até o ponto em que são consumidas por uma função crítica (\textit{sink}), considerando ainda os elementos que propagam (\textit{propagators}) ou neutralizam (\textit{sanitizers}) esses dados ao longo do caminho. Cada achado é reportado com a sua localização exata no código-fonte e o identificador da fraqueza correspondente (CWE). Esse achado localizado, posteriormente enriquecido com o contexto de código adjacente, constitui o insumo primário consumido pelos modelos de linguagem na triagem neuro-simbólica. A Figura~\ref{fig:taint} ilustra esse fluxo de \textit{taint}.
+
+\begin{figure}[htpb]
+    \centering
+    \caption{Análise de \textit{taint}: o trânsito de dados não confiáveis da origem ao ponto crítico}
+    \label{fig:taint}
+    \resizebox{0.85\textwidth}{!}{
+    \begin{tikzpicture}[
+        font=\small,
+        box/.style={draw, rounded corners, align=center, minimum height=9mm,
+                    text width=26mm, inner sep=2pt},
+        arr/.style={-{Latex[length=2.5mm]}, thick}
+    ]
+        \node[box, fill=orange!12] (src) {\textbf{Source}\\\scriptsize entrada não confiável};
+        \node[box, fill=black!5, right=14mm of src] (prop) {\textbf{Propagator}\\\scriptsize atribuições / chamadas};
+        \node[box, fill=red!12, right=14mm of prop] (sink) {\textbf{Sink}\\\scriptsize função crítica};
+        
+        \node[box, fill=green!12, above=9mm of prop, xshift=14mm] (san) {\textbf{Sanitizer}\\\scriptsize neutraliza o dado};
+        
+        \draw[arr] (src) -- (prop);
+        \draw[arr] (prop) -- coordinate (meio) (sink);
+        \draw[arr, dashed] (san) -- node[right, font=\scriptsize] {intercepta} (meio);
+    \end{tikzpicture}
+    }
+    \fonte{Adaptada da documentação do Semgrep \cite{semgrepdocs}.}
+\end{figure}
+
+\section{Inteligência Artificial Generativa e LLMs}
+A Inteligência Artificial Generativa representa uma mudança de paradigma no campo do aprendizado de máquina, transitando de modelos puramente discriminativos, focados em classificação e regressão, para modelos capazes de sintetizar novos conteúdos originais. O marco fundamental que viabilizou a atual geração desses sistemas foi a introdução da arquitetura \textit{Transformer}, proposta por \citeonline{vaswani2017attention}. Diferente das arquiteturas neurais anteriores, que processavam informações de forma sequencial e limitada, os \textit{Transformers} introduziram o mecanismo de auto-atenção, permitindo que o modelo identifique correlações contextuais entre todos os elementos de uma sequência simultaneamente, independentemente da distância entre eles \cite{vaswani2017attention}.
+
+Essa inovação permitiu o surgimento dos Grandes Modelos de Linguagem (\textit{Large Language Models} – LLMs), que são treinados em volumes massivos de dados textuais para prever a probabilidade do próximo \textit{token} em uma sequência. Conforme demonstrado por \citeonline{brown2020language}, ao atingirem escalas de bilhões de parâmetros, esses modelos deixam de ser simples preditores estatísticos e passam a exibir propriedades emergentes, como a capacidade de realizar tarefas complexas com poucos exemplos e de emular raciocínio lógico em linguagem natural. Por essa razão, os LLMs são frequentemente categorizados como modelos de fundação, servindo como uma base de conhecimento geral que pode ser adaptada para domínios específicos sem a necessidade de novos treinamentos extensivos \cite{hou2024large}.
+
+No âmbito da engenharia de software, os LLMs demonstram competência por tratarem o código-fonte não apenas como um conjunto de caracteres, mas como uma estrutura linguística com semântica e gramática próprias. Segundo o mapeamento de \citeonline{hou2024large}, esses modelos conseguem capturar dependências lógicas que escapam aos analisadores sintáticos tradicionais, pois conseguem associar a estrutura do código à intenção descrita em comentários e documentações. Essa dualidade entre o rigor da sintaxe e a flexibilidade da linguagem natural é o que permite aos LLMs atuarem como avaliadores em processos de triagem, interpretando o contexto de um alerta de segurança para decidir se um fluxo de dados representa, de fato, uma ameaça real ou um comportamento seguro intencional.
+
+\section{Engenharia de Prompts e Injeção de Contexto}
+A engenharia de \textit{prompt} ou \textit{prompt engineering} refere-se ao processo de elaboração e refinamento de instruções textuais com o objetivo de tornar as respostas de LLMs mais eficazes e consistentes. Com o avanço da área, essa prática evoluiu de simples formulação de comandos para um verdadeiro paradigma de programação. A programação de \textit{prompts} envolve a estruturação intencional de contexto para guiar o modelo de IA a produzir resultados mais precisos \cite{reynolds2021promptprogramminglargelanguage}. No contexto de análise estática, essa abordagem se manifesta pela injeção de regras de segurança e trechos de código no contexto do modelo, estabelecendo restrições capazes de orientar a análise e identificar vulnerabilidades.
+
+No estudo ``Language Models are Few-Shot Learners'', de \citeonline{brown2020language}, observou-se que os LLMs exibem uma melhora significativa na produção de resultados ao receberem pequenos exemplos no prompt de tarefas especializadas, dispensando a necessidade de retreinamento dos modelos. Dentro do escopo desta pesquisa, a estratégia de \textit{few-shot prompting} permite fornecer à IA exemplos prévios de contrastes entre falsos positivos e vulnerabilidades reais, auxiliando o modelo a estabelecer padrões de reconhecimento antes de realizar a inferência.
+
+A técnica de \textit{Chain-of-Thought} (CoT), na qual o LLM é induzido a seguir um raciocínio lógico em etapas, pode auxiliar substancialmente na análise e na descoberta de vulnerabilidades. A inclusão de instruções que exigem que o LLM detalhe o seu processo cognitivo antes de emitir uma resposta definitiva aumenta a precisão da avaliação \cite{nong2024chainofthoughtpromptinglargelanguage}. No caso deste estudo, solicitar que o modelo fundamente o porquê de um determinado trecho de código representar ou não uma ameaça ao sistema auxilia a inteligência artificial a interpretar corretamente o fluxo de dados e a intenção semântica da aplicação.
+
+A convergência dessas abordagens teóricas fundamenta o fluxo neuro-simbólico adotado neste trabalho. Ao integrar o direcionamento de contexto, a inserção de exemplos estruturados e a indução de uma cadeia de raciocínio voltada para a segurança, constrói-se um modelo teórico para que os prompts atuem como filtros sobre os relatórios gerados por ferramentas SAST.
+
+\section{Integração Neuro-Simbólica na Verificação de Software}
+A inteligência artificial neuro-simbólica surge como uma abordagem híbrida projetada para unificar dois paradigmas historicamente distintos da ciência da computação: as abordagens baseadas em redes neurais, marcadas pela capacidade de aprender padrões a partir de dados, e o simbolismo, caracterizado por sistemas baseados em regras lógicas estruturadas e determinísticas. Segundo \citeonline{garcez2020neurosymbolic}, essa integração, frequentemente chamada de ``terceira onda da inteligência artificial'', visa combinar a robustez do raciocínio formal matemático com a flexibilidade da interpretação semântica em larga escala.
+
+Aplicando esse conceito à verificação de \textit{software}, a integração neuro-simbólica oferece uma solução para as limitações individuais de cada abordagem isolada. Por um lado, as ferramentas de análise estática (puramente simbólicas) fornecem rastreamento rigoroso de fluxo de dados, mas carecem de compreensão contextual ampla, o que resulta em altas taxas de alarmes falsos \cite{muske2022survey}. Por outro lado, as LLMs (puramente neurais) possuem uma vasta compreensão semântica da intenção do programador, mas são propensos a alucinações ou saltos lógicos incorretos se não forem ancorados em fatos concretos. A combinação desses sistemas permite que as decisões da rede neural sejam guiadas por evidências objetivas, reduzindo alucinações e aumentando a confiabilidade dos resultados.
+
+A materialização desse paradigma no estado da arte da segurança de código pode ser observada em sistemas de validação automatizada de vulnerabilidades. O \textit{framework ZeroFalse} \cite{iranmanesh2025zerofalseimprovingprecisionstatic} exemplifica essa arquitetura ao utilizar um SAST para gerar as provas iniciais de vulnerabilidade, como caminhos de fluxo de dados precisos extraídos em formato estruturado. Em vez de apresentar esses dados brutos diretamente ao desenvolvedor, a arquitetura neuro-simbólica utiliza essas evidências objetivas como ancoragem de contexto para o modelo de linguagem.
+
+Nessa dinâmica, o LLM não é encarregado de procurar falhas de forma exploratória em um repositório inteiro, uma tarefa na qual frequentemente falharia por quebra de contexto, mas sim atua como um avaliador focado exclusivamente em um caminho de fluxo de dados já evidenciado pela análise estática. A IA avalia as mitigações semânticas que o analisador estático não conseguiu interpretar, como regras de negócios complexas ou funções de sanitização customizadas. O resultado dessa sinergia é uma filtragem cirúrgica e automatizada dos falsos positivos \cite{iranmanesh2025zerofalseimprovingprecisionstatic}. Dessa forma, a arquitetura híbrida assegura que a verificação de segurança mantenha a sua precisão técnica, ao mesmo tempo em que adquire a capacidade cognitiva necessária para compreender as abstrações de sistemas modernos.
+
+O interesse crescente por essa classe de soluções já motivou a criação de \textit{benchmarks} dedicados à avaliação da triagem automatizada de alertas. O SastBench \cite{feiglin2026sastbench}, em particular, formaliza a tarefa de triagem agêntica de SAST ao reunir falsos positivos gerados por análise estática e verdadeiros positivos derivados de CVEs, em proporções que emulam o desbalanceamento observado em cenários reais. Esse conjunto de dados, além de evidenciar a maturidade do campo, fornece a base de validação empregada neste trabalho (Seção~\ref{subsec:base}).
+
+\section{Arquitetura e Segurança em Linguagens Cloud-Native}
+A transição da indústria de \textit{software} para arquiteturas \textit{Cloud-Native} impulsionou a adoção de linguagens capazes de lidar com processamento distribuído e uso eficiente de recursos. Nesse panorama, a linguagem Go destaca-se no desenvolvimento de infraestruturas modernas e microsserviços. Dados do ecossistema refletem essa mudança arquitetural: levantamentos recentes da \textit{Cloud Native Computing Foundation} \cite{cncf2025survey} e pesquisas de mercado com desenvolvedores \cite{stackoverflow2025} apontam essa linguagem como pilar na construção de sistemas críticos e escaláveis. Contudo, essa modernização também introduziu vetores de vulnerabilidades estritamente ligados aos paradigmas da nova tecnologia.
+
+A linguagem Go consolidou-se como a base de ferramentas fundamentais da nuvem, devido ao seu modelo simplificado de concorrência. No entanto, funcionalidades intrínsecas à linguagem, como as \textit{goroutines} e os \textit{channels}, introduzem lógicas assíncronas que frequentemente induzem os desenvolvedores a cometerem erros críticos. Problemas de sincronização e vazamentos de rotinas (\textit{goroutine leaks}) constituem em grande parte vulnerabilidades complexas e difíceis de serem mapeadas em tempo de desenvolvimento \cite{tu2019understanding}.
+
+A identificação automatizada dessas falhas em Go apresenta obstáculos significativos. Analisadores estáticos tradicionais e \textit{linters} frequentemente esbarram em limitações semânticas ao rastrear dados através de canais concorrentes. Essas ferramentas muitas vezes falham em detectar esse tipo de vulnerabilidade, e quando a detectam, são incapazes de fornecer direcionamentos precisos para a correção, gerando frustração e abandono dessas ferramentas por parte das equipes \cite{wu2026}. 
+
+A assincronicidade nativa e o modelo de concorrência em Go evidenciam os desafios da análise estática contemporânea. As vulnerabilidades nessas linguagens raramente são falhas de sintaxe isoladas, mas sim violações de arquitetura e contexto. Consequentemente, a triagem dessas anomalias exige um esforço cognitivo elevado, reforçando a necessidade de abordagens neuro-simbólicas capazes de interpretar a semântica do código e fornecer resoluções assertivas aos desenvolvedores.
+
+\section{Trabalhos Relacionados}
+O estudo empírico conduzido por \citeonline{johnson2013} evidenciou que a principal barreira para a adoção de ferramentas SAST por desenvolvedores é a sobrecarga cognitiva gerada por alarmes falsos, os quais resultam em fadiga e no abandono dessas tecnologias. Essa percepção é reafirmada por \citeonline{sadowski2018lessons}, que relatam as lições aprendidas na construção e implementação de analisadores estáticos em larga escala no Google, ressaltando que o sucesso dessas ferramentas está condicionado à sua alta precisão.
+
+Com a ascensão das LLMs, o desenvolvimento e a verificação de \textit{software} sofreram transformações significativas. Embora a IA generativa tenha acelerado a produção de código, houve também um aumento na introdução de trechos contendo vulnerabilidades conhecidas, uma vez que assistentes virtuais frequentemente reproduzem tais falhas \cite{pearce2022copilot}. Esse fenômeno intensifica o volume de anomalias inseridas nas bases de código, tornando a triagem manual insustentável e forçando a indústria a investigar a própria IA como um mecanismo de filtragem automatizada.
+
+Nesse contexto de interseção entre IA e segurança, o \textit{framework ZeroFalse}, proposto por \citeonline{iranmanesh2025zerofalseimprovingprecisionstatic}, explora a utilização de LLMs para processar os resultados brutos de ferramentas SAST clássicas, com o intuito de identificar e filtrar falsos positivos de maneira automatizada. A abordagem adotada no estudo demonstra a viabilidade de empregar a compreensão semântica da inteligência artificial para mitigar o problema histórico do SAST.
+
+Apesar dos avanços trazidos pelo \textit{ZeroFalse} e por abordagens correlatas, observa-se uma lacuna no que tange à especificidade arquitetural de linguagens modernas focadas em ambientes \textit{Cloud-Native}. Enquanto o \textit{ZeroFalse} concentra a sua validação metodológica avaliando a precisão do modelo estritamente sobre bases e repositórios desenvolvidos em Java (por meio do \textit{OWASP Benchmark} e do \textit{dataset OpenVuln}), a presente pesquisa propõe-se a direcionar o fluxo neuro-simbólico às complexidades semânticas de Go. Ao enriquecer o \textit{prompt} com os achados e o fluxo de dados extraídos do Semgrep e acoplar o contexto adjacente de construções específicas, como o assincronismo das \textit{goroutines} e a sincronização via \textit{channels}, este trabalho visa preencher essa lacuna e aumentar a assertividade da análise.

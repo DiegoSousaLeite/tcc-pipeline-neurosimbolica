@@ -47,7 +47,14 @@ apresentacao/
 # tp_pairs*.json NÃO entra aqui de propósito: com repos/ apagado, regenerá-los
 # exige refazer o fetch raso dos ~70 repos (~1 h). São entrada da pipeline.
 
-TCC2___Diego_Sousa_e_João_Artur_Leles
+# A monografia da Parte 2 passa a ser versionada (17/09/2026). O motivo é de
+# escrita, não de engenharia: a partir daqui o texto muda com frequência e
+# precisa de histórico — ver o que mudou entre duas revisões e poder voltar.
+# As FONTES entram (.tex, .bib, figuras); o que o build gera fica de fora, em
+# TCC2___Diego_Sousa_e_João_Artur_Leles/.gitignore.
+#
+# TCC1/TCC2 da Ana Luiza e do Pedro continuam fora: são PDFs de terceiros,
+# usados como referência de estrutura, não artefatos deste trabalho.
 TCC1___Ana_Luiz_e_Pedro.pdf
 TCC2___Ana_Luiz_e_Pedro.pdf
 

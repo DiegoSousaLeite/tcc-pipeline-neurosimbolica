@@ -1,0 +1,91 @@
+\chapter[Introdução]{Introdução}
+%\addcontentsline{toc}{chapter}{Introdução}
+
+
+\section{Contexto}
+
+A utilização em massa de Inteligência Artificial (IA) generativa redefiniu o ciclo de desenvolvimento de software. Modelos generativos modernos aceleram significativamente a escrita de código, atuando como assistentes avançados de programação. Em um extenso mapeamento sistemático sobre o uso de Grandes Modelos de Linguagem (LLMs) na engenharia de software, \citeonline{hou2024large} demonstram como essas ferramentas automatizam desde a geração de blocos lógicos até a documentação de sistemas.
+
+Nesse contexto, a indústria vem utilizando ferramentas de \textit{Static Application Security Testing} (SAST), para garantir que as aplicações estejam tecnicamente seguras antes de chegarem ao ambiente de produção. O propósito da análise estática é examinar o código-fonte em busca de falhas e anomalias de segurança, sem a necessidade de executar a aplicação. Soluções modernas de SAST, como o Semgrep \cite{semgrepdocs}, analisam o código a partir de padrões semânticos aplicados sobre a sua estrutura sintática, permitindo o rastreamento de fluxo de dados e a identificação de padrões complexos de vulnerabilidades de forma ágil e integrável ao ciclo de desenvolvimento.
+
+A evolução simultânea da análise estática e da IA tem impulsionado a investigação do conceito de integração neuro-simbólica. Essa abordagem tem como objetivo unificar o determinismo estrutural das ferramentas de SAST com a capacidade de raciocínio e interpretação semântica dos LLMs. O framework \textit{ZeroFalse} \cite{iranmanesh2025zerofalseimprovingprecisionstatic} levou essa técnica ao estado da arte ao usar modelos de linguagem como uma etapa de triagem após a análise. Ao complementar os alertas do SAST com rastros de fluxo de dados e submetê-los à avaliação do modelo, o sistema mostrou que é possível classificar vulnerabilidades de forma automatizada.
+
+Em paralelo aos avanços nas ferramentas de segurança, a infraestrutura de software também passa por uma mudança importante. A engenharia moderna vem migrando rapidamente para arquiteturas nativas da nuvem e ecossistemas de microsserviços. Nesse contexto distribuído, a linguagem Go se consolidou como um dos principais padrões da indústria para o desenvolvimento em nuvem. Relatórios recentes da \textit{Cloud Native Computing Foundation} \cite{cncf2025survey} indicam que essa adoção é impulsionada pela combinação de alto desempenho e mecanismos de segurança mais robustos.
+
+Essa linguagem já é amplamente usada desde orquestradores de contêineres até plataformas logísticas e financeiras de alta demanda. Essa tendência também se reflete na comunidade técnica. Dados do \textit{Stack Overflow Developer Survey} \cite{stackoverflow2025} mostram crescimento contínuo na adoção e na preferência por Go, indicando uma migração consistente dos desenvolvedores para essa tecnologia.
+
+Diferente das linguagens orientadas a objetos clássicas, esses ecossistemas modernos operam sob arquiteturas únicas. A linguagem Go, por exemplo, gerencia a concorrência massiva por meio de \textit{goroutines} e \textit{channels}, uma abstração essencial para sistemas de processamento assíncrono. Essas assinaturas semânticas e o modelo de concorrência próprio da linguagem tornam os sistemas altamente eficientes, mas redefinem a forma como defeitos de software e vulnerabilidades lógicas --- a exemplo de condições de corrida (\textit{race conditions}) e bloqueios (\textit{deadlocks}) --- se manifestam e devem ser analisados em nível de código.
+
+\section{Problema}
+A eficácia teórica das ferramentas SAST, muitas vezes, esbarra na usabilidade real delas. No estudo empírico intitulado ``\textit{Why don't software developers use static analysis tools to find bugs?}'', de \citeonline{johnson2013}, o autor conclui que a quantidade excessiva de falsos positivos gerados nos relatórios de ferramentas SAST ocorre por esse tipo de mecanismo seguir um princípio de abordagem conservadora, a fim de evitar que vulnerabilidades passem despercebidas. No entanto, o trabalho adicional e desnecessário para lidar com esses alarmes falsos acaba por fadigar os desenvolvedores, levando-os a não utilizar esses sistemas, ainda que estes consigam localizar falhas críticas. Diante disso, torna-se uma necessidade encontrar métodos para diminuir ou filtrar o número de falsos positivos, restaurando a confiança das equipes nessas ferramentas.
+
+Esse cenário de fadiga e desconfiança pode ser agravado no contexto de desenvolvimento, onde ferramentas de IA aumentam drasticamente a produtividade, ao mesmo tempo em que elas introduzem novos vetores de risco à segurança das aplicações. Por serem treinadas em vastos repositórios de código aberto que não são regularmente verificados, essas ferramentas tendem a reproduzir e recomendar trechos que contêm vulnerabilidades conhecidas \cite{pearce2022copilot}. Consequentemente, o aumento exponencial no volume de código sintético introduzido nas aplicações torna o processo de análise e correção manual insustentável para os desenvolvedores, ampliando o gargalo na entrega de um software seguro.
+
+Apesar do mercado buscar saídas com o uso de ferramentas de SAST para analisar código e detectar vulnerabilidades, as correções destas permanecem sendo um processo totalmente manual, o que muitas vezes pode atrasar o desenvolvimento do software. Ainda que existam \textit{frameworks} que utilizam LLMs para reduzir o número de falsos positivos dessas ferramentas \cite{iranmanesh2025zerofalseimprovingprecisionstatic} e, assim, ajudar a diminuir o tempo atribuído a essas vulnerabilidades, o processo pode se tornar desgastante para a equipe de desenvolvimento, uma vez que ocorre uma quebra de contexto, em que a equipe para de desenvolver novas funcionalidades e passa a estudar e tentar resolver esses problemas. Como consequência, ocorre uma redução na produtividade e um aumento no tempo de entrega.
+
+A ascensão da linguagem Go, no contexto de arquiteturas modernas e principalmente no ecossistema Cloud, trouxe novos paradigmas ao mesmo tempo que também trouxe novas falhas. Em um estudo sobre o ecossistema de infraestrutura, \citeonline{tu2019understanding}, demonstra que funcionalidades da linguagem como as \textit{goroutines} e \textit{channels} induzem os desenvolvedores, muitas vezes acostumados a outras linguagens, a cometerem erros de lógica e concorrência. Ainda que existam ferramentas capazes de identificar erros para os desenvolvedores, muitas apresentam limitações ao lidar com a linguagem em questão, além de serem incapazes de orientar a equipe de desenvolvimento em como corrigir tais problemas \cite{wu2026}. A intersecção entre a falta de experiência na linguagem associada a mecanismos de correção automatizada pouco precisos mostra que este campo necessita de soluções mais assertivas e descritivas.
+
+É justamente para mitigar essa ineficiência na avaliação manual e reduzir o esforço cognitivo das equipes que este estudo foi concebido. Diante do cenário exposto, o presente trabalho se propõe a investigar a seguinte \textbf{questão geral da pesquisa}:
+
+\begin{quote}
+Como auxiliar o desenvolvedor na avaliação do resultado da análise estática (SAST) de forma a reduzir a fadiga de alertas?
+\end{quote}
+
+Para responder a essa indagação central, a investigação se desdobra nas seguintes \textbf{subquestões específicas}:
+
+\begin{itemize}
+    \item Q1: Qual o impacto do enriquecimento semântico na precisão do LLM ao classificar alertas SAST como verdadeiros ou falsos?
+    \item Q2: Em que proporção a arquitetura neuro-simbólica proposta consegue reduzir o volume de falsos positivos sem introduzir falsos negativos?
+    \item Q3: Como o desempenho do LLM na filtragem de falsos positivos se comporta ao analisar vulnerabilidades estruturais e lógicas específicas da linguagem Go, como os problemas de concorrência?
+    \item Q4: De que forma a combinação de regras teóricas de segurança estruturadas em \textit{prompts} influencia na capacidade de raciocínio do modelo?
+\end{itemize}
+
+\section{Objetivo}
+
+\subsection{Objetivo geral}
+Desenvolver uma abordagem automatizada, baseada em LLM, para a triagem e filtragem de falsos positivos em relatórios de SAST, com ênfase na complexidade semântica da linguagem Go, visando aumentar a precisão da análise e reduzir o esforço cognitivo das equipes.
+
+\subsection{Objetivos específicos}
+\begin{itemize}
+    \item Selecionar e preparar uma base de dados a partir de repositórios de código aberto na linguagem Go, submetendo-os à ferramenta de análise estática Semgrep para gerar uma base inicial de relatórios contendo vulnerabilidades.
+    \item Desenvolver um componente para enriquecimento semântico, responsável por interpretar os relatórios do Semgrep, extrair o fluxo de dados do alerta e anexar os blocos de código adjacentes às vulnerabilidades.
+    \item Estruturar uma arquitetura de \textit{prompts} que integre regras teóricas de segurança com as peculiaridades de cada linguagem.
+    \item Empregar LLMs como motores de inferência para processar e classificar os alertas distinguindo os falsos positivos de vulnerabilidades reais.
+    \item Comparar quantitativamente o desempenho do fluxo em relação à análise estática convencional, mensurando métricas como a taxa de redução de falsos positivos e a retenção de vulnerabilidades reais.
+    \item Documentar e disponibilizar a esteira desenvolvida, assim como os resultados gerados pelos modelos, em formato estruturado para permitir a replicação do experimento.
+\end{itemize}
+
+\section{Metodologia}
+A pesquisa se caracteriza como um estudo experimental e quantitativo, com foco na avaliação do desempenho de LLMs como filtros de falsos positivos em ferramentas de análise estática. Para viabilizar o experimento, propõe-se uma arquitetura baseada em um fluxo de execução neuro-simbólico, projetado para operar de forma nativa em um ambiente de Integração Contínua e Entrega Contínua (CI/CD). O fluxo de execução é estruturado em três frentes principais: extração de dados brutos, enriquecimento semântico e inferência neural.
+
+A coleta de dados se inicia com a execução da análise simbólica automatizada. Repositórios contendo código-fonte escrito na linguagem Go são submetidos à avaliação de uma ferramenta de SAST, especificamente o Semgrep. A ferramenta aplica regras de segurança diretamente sobre o código-fonte, sem a necessidade de compilá-lo, e produz um relatório estruturado que contém a lista de alertas, as suas localizações exatas e o fluxo de dados associado, servindo como evidência primária de potenciais vulnerabilidades.
+
+Para adequar os relatórios técnicos à capacidade de interpretação dos modelos de linguagem, a arquitetura prevê uma etapa intermediária de enriquecimento de contexto por meio de um \textit{middleware}. Este componente interpreta o relatório do Semgrep, mapeia os alertas emitidos e executa a hidratação de contexto: para cada alerta, captura blocos de código-fonte adjacentes ao ponto de falha --- tipicamente a função envolvente ---, com o objetivo de incluir contextos relevantes, como importações e funções de sanitização que o analisador estático possa não ter considerado. As informações extraídas são então estruturadas em \textit{prompts} dinâmicos. Esses \textit{prompts} combinam as regras teóricas de segurança com a semântica específica da linguagem analisada, orientando o modelo sobre peculiaridades arquiteturais da linguagem Go, como o tratamento de \textit{goroutines}.
+
+A etapa de avaliação consiste na inferência neural, na qual os \textit{prompts} estruturados são processados via interface de programação de aplicações (API) por modelos de linguagem de fronteira. A IA avalia as evidências extraídas e emite um veredito classificatório, acompanhado de uma justificativa técnica. Por fim, os resultados gerados são consolidados em relatórios. A partir desses dados, realiza-se a extração de métricas analíticas consolidadas na literatura de engenharia de software, como Precisão, \textit{Recall} e \textit{F1-Score}, permitindo a validação empírica da eficácia do contexto especializado na redução de falsos positivos.
+
+Dessa forma, o estudo pretende oferecer não apenas um panorama quantitativo sobre a capacidade de filtragem de falsos positivos pelo modelo, mas também evidências qualitativas acerca da influência que a injeção de contexto específico da linguagem Go exerce na precisão da análise de segurança.
+
+As seguintes macro-atividades compõem o escopo de execução da pesquisa:
+
+\begin{itemize}
+    \item Configuração do ambiente de análise estática e geração de alertas base com o Semgrep;
+    \item Construção e refinamento do \textit{middleware} de integração para hidratação de contexto e extração dos blocos de código adjacentes aos alertas;
+    \item Elaboração estruturada dos \textit{prompts} dinâmicos com injeção de contexto semântico (\textit{goroutines}, \textit{channels}, etc.);
+    \item Execução da inferência neural via API utilizando modelos de linguagem de fronteira;
+    \item Organização dos vereditos e justificativas da IA numa base de dados estruturada de resultados;
+    \item Extração das métricas analíticas (Precisão, \textit{Recall} e \textit{F1-Score}) e discussão do impacto da solução.
+\end{itemize}
+
+\section{Organização}
+O trabalho foi organizado em cinco capítulos, sendo eles:
+
+\begin{itemize}
+    \item Introdução;
+    \item Referencial teórico;
+    \item Metodologia;
+    \item Prova de conceito.
+    \item Considerações finais.
+\end{itemize}
+
+Na sequência do trabalho, o Capítulo~\ref{cap:referencial} vai apresentar o referencial teórico no qual este estudo se baseia; no Capítulo~\ref{cap:metodologia}, é descrita a metodologia que será adotada para a análise e coleta dos dados, assim como o cronograma dos próximos passos; o Capítulo~\ref{cap:poc} detalhará a prova de conceito e a continuação do estudo no Trabalho de Conclusão de Curso 2 (TCC 2); o Capítulo~\ref{cap:consideracao} apresenta as considerações finais desta etapa e as perspectivas para o desenvolvimento da pesquisa futura.
