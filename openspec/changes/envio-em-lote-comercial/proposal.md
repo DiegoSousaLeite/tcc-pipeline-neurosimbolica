@@ -25,6 +25,26 @@ número para a monografia; produz a capacidade de produzir. A pergunta de escopo
 (até onde valem as respostas a Q1, Q2 e Q3) continua sendo respondida pela
 rodada comercial, que é decisão separada desta.
 
+**Esta change tem uma sucessora obrigatória: `rodada-comercial`.** O registro é
+deliberado. A `ruleset-alcancabilidade` — que também não respondia pergunta
+alguma — nomeava as três changes que a consumiriam, e por isso nenhuma delas foi
+esquecida: a colheita filtrada, a trilha `TP_alcancavel` e a rodada da classe
+positiva saíram todas de lá. Uma change de infraestrutura que não nomeia o
+consumidor entrega um andaime e vai embora.
+
+A sucessora tem dois consumidores concretos e já escritos, ambos em
+`editaveis/resultados.tex`:
+
+- a Tabela `tab:modelos`, que hoje traz apenas os dois modelos locais e tem
+  marcação explícita para as linhas dos modelos de fronteira;
+- o item **"Escopo de modelos"** da seção de limitações, que hoje delimita as
+  conclusões a "modelos locais de 7 a 9 bilhões de parâmetros" e só pode ser
+  reescrito depois da rodada.
+
+Enquanto a sucessora não existir, esses dois pontos ficam sem dono — e são
+exatamente os que respondem à objeção de escopo que a banca tem mais motivo
+para levantar.
+
 **Parte do TCC:** Parte 2 — a comparação com modelo comercial é Parte 2 por
 definição.
 
