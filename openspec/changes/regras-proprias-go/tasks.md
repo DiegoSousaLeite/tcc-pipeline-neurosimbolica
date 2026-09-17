@@ -56,16 +56,16 @@ revisado; o que falta é implementação.
 
 ## 3. Partição — antes de qualquer regra, e commitada isoladamente
 
-- [ ] 3.1 Analisar a distribuição dos casos alvo por repositório e decidir se a
+- [x] 3.1 Analisar a distribuição dos casos alvo por repositório e decidir se a
       estratificação é só por CWE ou também por repositório. Verificar: a decisão
       e os números que a sustentam ficam em `design.md`.
-- [ ] 3.2 Escrever `scripts/particionar_avaliacao.py`: derivação determinística a
+- [x] 3.2 Escrever `scripts/particionar_avaliacao.py`: derivação determinística a
       partir do `ID_Caso`, estratificada conforme 2.1, sem semente. Verificar:
       `--selftest` confirma determinismo e estratificação sobre população
       sintética.
-- [ ] 3.3 Fazer o script recusar reparticionar quando a partição já existe.
+- [x] 3.3 Fazer o script recusar reparticionar quando a partição já existe.
       Verificar: teste que a segunda invocação falha com erro explícito.
-- [ ] 3.4 Executar e gravar a partição em `data/particao_avaliacao.json`.
+- [x] 3.4 Executar e gravar a partição em `data/particao_avaliacao.json`.
       Verificar: cada CWE alvo tem casos nas duas partições.
 - [ ] 3.5 **Commitar a partição sozinha, antes de qualquer regra.** Verificar:
       `git log` mostra este commit sem nenhum arquivo sob `regras/go/`.
