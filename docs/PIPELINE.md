@@ -653,8 +653,8 @@ python scripts/preencher_cache.py
 
 `src/cache_simbolico.py` persiste, por caso, o resultado das Fases 1 e 2:
 alerta do Semgrep, contexto hidratado, status, motivo da não-detecção e regras
-não casadas, mais **três eixos de invalidação** — a versão do ruleset, a da
-regra de pareamento e a identidade do motor. Chave:
+não casadas, mais **três eixos de invalidação** — a identidade do conjunto de
+rulesets, a versão da regra de pareamento e a identidade do motor. Chave:
 `(repo, commit, arquivo, CWE)`. Arquivos em
 `cache_simbolico/<owner>__<repo>/<commit>/<hash-do-caminho>__<cwe>[__pro].json`.
 
@@ -664,6 +664,22 @@ passa a aceitar como do caso um conjunto diferente de alertas, e o motor quando
 o alcance da análise muda. Espremer um dentro do outro faria o mesmo ruleset
 parecer duas coisas, e perderia a capacidade de responder "este alerta veio de
 qual motor?" sem reexecutar.
+
+O eixo do ruleset identifica o **conjunto** configurado, não um ruleset isolado:
+acrescentar um segundo muda o que o motor emite tanto quanto trocar o primeiro, e
+uma identidade que descrevesse só um deles faria a rodada composta ser servida
+com os alertas da unitária. A identidade do conjunto unitário é o próprio nome do
+ruleset, então as entradas gravadas antes desta mudança continuam válidas; a
+ordem dos rulesets não invalida, porque não altera a união dos achados.
+
+**A identidade do ruleset NÃO entra no caminho da entrada** — só o motor entra,
+como sufixo. A consequência é que entradas de conjuntos diferentes não coexistem
+para o mesmo caso: a segunda gravação sobrescreve a primeira, e a sobrescrita
+não é servida por engano (a identidade diverge e o caso é recomputado), mas o
+trabalho se perde. Por isso `scripts/medir_regras_locais.py` grava num
+diretório próprio, `cache_simbolico/_regras_locais/`, em vez de disputar o
+caminho com as entradas de `p/default`. Pôr o conjunto no nome do arquivo seria
+a alternativa, e invalidaria por caminho as ~1.900 entradas já em disco.
 
 Entrada gravada **antes** de a identidade do motor existir é lida como
 `ce, entre_arquivos=False` — é factualmente verdade, não havia outro motor
