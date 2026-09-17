@@ -19,38 +19,38 @@ As deltas destas tarefas estão em
 `openspec/changes/archive/2026-09-17-ruleset-gosec/specs/`. São desenho pronto e
 revisado; o que falta é implementação.
 
-- [ ] 2.1 Fazer `SEMGREP_CONFIG` aceitar mais de um ruleset, mantendo
+- [x] 2.1 Fazer `SEMGREP_CONFIG` aceitar mais de um ruleset, mantendo
       `p/default` sozinho como padrão. Verificar: teste que a configuração padrão
       monta exatamente a mesma linha de comando de hoje.
-- [ ] 2.2 Materializar a configuração como `--config` repetido em
+- [x] 2.2 Materializar a configuração como `--config` repetido em
       `montar_comando`, preservando o contrato de que `entre_arquivos=False` com
       configuração unitária devolve a lista de antes. Verificar: teste que dois
       rulesets produzem dois `--config`, na ordem configurada.
-- [ ] 2.3 Fazer configuração vazia falhar com erro explícito. Verificar: teste que
+- [x] 2.3 Fazer configuração vazia falhar com erro explícito. Verificar: teste que
       a falha é levantada e que o motor não é invocado.
-- [ ] 2.4 Derivar a identidade do conjunto, insensível à ordem e distinta para
+- [x] 2.4 Derivar a identidade do conjunto, insensível à ordem e distinta para
       subconjuntos. Verificar: três testes, um por propriedade.
-- [ ] 2.5 Fazer `src/ruleset.py` fundir os catálogos dos rulesets configurados,
+- [x] 2.5 Fazer `src/ruleset.py` fundir os catálogos dos rulesets configurados,
       mantendo o cache de catálogo **por ruleset**. Verificar: teste que
       acrescentar um ruleset não rebusca o catálogo do outro, e teste que o
       conjunto alcançável com dois contém o conjunto com um.
-- [ ] 2.6 Fazer o grau da CWE considerar a melhor regra entre todos os rulesets.
+- [x] 2.6 Fazer o grau da CWE considerar a melhor regra entre todos os rulesets.
       Verificar: teste que CWE coberta por taint num e por regra sintática de
       vulnerabilidade noutro recebe o grau alto.
-- [ ] 2.7 Trocar o eixo de ruleset do cache simbólico pela identidade do conjunto,
+- [x] 2.7 Trocar o eixo de ruleset do cache simbólico pela identidade do conjunto,
       **fundindo com o eixo de identidade do motor que
       `semgrep-pro-entre-arquivos` já aplicou** — não substituindo. Verificar:
       teste que entrada gravada sob conjunto unitário é ignorada sob conjunto
       composto, e que os testes de identidade do motor continuam passando.
-- [ ] 2.8 Garantir que a ordem dos rulesets não invalida e que entrada legada de
+- [x] 2.8 Garantir que a ordem dos rulesets não invalida e que entrada legada de
       ruleset único é lida como conjunto unitário. Verificar: dois testes.
-- [ ] 2.9 Implementar a deduplicação por `(arquivo, posição, CWE)`, determinística
+- [x] 2.9 Implementar a deduplicação por `(arquivo, posição, CWE)`, determinística
       e sem rebaixar status. Verificar: quatro testes — equivalentes contam como
       um; mesma posição com CWEs diferentes não é duplicata; repetição preserva o
       mesmo achado; `DETECTADO` permanece `DETECTADO`.
-- [ ] 2.10 Registrar a procedência de cada ruleset — terceiros ou próprio — e
+- [x] 2.10 Registrar a procedência de cada ruleset — terceiros ou próprio — e
       propagá-la ao manifesto. Verificar: rodar um caso e inspecionar o manifesto.
-- [ ] 2.11 Rodar uma rodada com configuração unitária servida do cache e confirmar
+- [x] 2.11 Rodar uma rodada com configuração unitária servida do cache e confirmar
       que os alertas são idênticos aos de antes. Verificar: diff vazio contra o
       CSV da última rodada.
 
