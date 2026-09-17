@@ -1,0 +1,175 @@
+{
+ "data": "2026-09-16T02:47:44+00:00",
+ "semgrep_versao": "1.167.0",
+ "ruleset": "p/default",
+ "etapas": {
+  "gabarito": [
+   {
+    "alvo": "1panel-dev/1panel@278a562320 (CWE-22)",
+    "repo": "1panel-dev/1panel",
+    "commit": "278a56232054ba830dee31a49030264ca76c0558",
+    "cwe": "CWE-22",
+    "arquivo_do_caso": "backend/app/service/database_mysql.go",
+    "ce": {
+     "alertas_no_repo": 60,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 55.9
+    },
+    "pro": {
+     "alertas_no_repo": 63,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 123.7
+    },
+    "ganho": "igual"
+   },
+   {
+    "alvo": "getarcaneapp/arcane@67fae1255d (CWE-22)",
+    "repo": "getarcaneapp/arcane",
+    "commit": "67fae1255d3fca117dd6ececaed8363cda3dab4e",
+    "cwe": "CWE-22",
+    "arquivo_do_caso": "backend/internal/services/project_service.go",
+    "ce": {
+     "alertas_no_repo": 131,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 69.5
+    },
+    "pro": {
+     "alertas_no_repo": 136,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 224.1
+    },
+    "ganho": "igual"
+   },
+   {
+    "alvo": "openlistteam/openlist@5a5d8d6e0e (CWE-22)",
+    "repo": "openlistteam/openlist",
+    "commit": "5a5d8d6e0ea9df89237be0a313b74211bb5c72c1",
+    "cwe": "CWE-22",
+    "arquivo_do_caso": "server/handles/fsbatch.go",
+    "ce": {
+     "alertas_no_repo": 161,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 43.3
+    },
+    "pro": {
+     "alertas_no_repo": 164,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 214.4
+    },
+    "ganho": "igual"
+   },
+   {
+    "alvo": "abhinavxd/libredesk@f7aa1ef2eb (CWE-918)",
+    "repo": "abhinavxd/libredesk",
+    "commit": "f7aa1ef2eb255a73739363eb22e08ac520f97a0b",
+    "cwe": "CWE-918",
+    "arquivo_do_caso": "cmd/init.go",
+    "ce": {
+     "alertas_no_repo": 25,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 41.3
+    },
+    "pro": {
+     "alertas_no_repo": 25,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 119.7
+    },
+    "ganho": "igual"
+   },
+   {
+    "alvo": "gogs/gogs@0089c4c8e5 (CWE-918)",
+    "repo": "gogs/gogs",
+    "commit": "0089c4c8e5b8d99eb6e5c8727f8f40d765f1f58a",
+    "cwe": "CWE-918",
+    "arquivo_do_caso": "internal/database/webhook.go",
+    "ce": {
+     "alertas_no_repo": 278,
+     "alertas_no_gabarito": [
+      {
+       "regra": "go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion",
+       "arquivo": "internal/database/webhook.go",
+       "linha": 714
+      }
+     ],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 194.3
+    },
+    "pro": {
+     "executou": false,
+     "segundos": 900.2,
+     "stderr": "timeout de 900s; "
+    },
+    "ganho": "sem_dado"
+   },
+   {
+    "alvo": "oasdiff/oasdiff@c01d48dae4 (CWE-918)",
+    "repo": "oasdiff/oasdiff",
+    "commit": "c01d48dae4806e11f2041163c92d9ad7d34632bd",
+    "cwe": "CWE-918",
+    "arquivo_do_caso": "internal/errors.go",
+    "ce": {
+     "alertas_no_repo": 30,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 27.6
+    },
+    "pro": {
+     "alertas_no_repo": 30,
+     "alertas_no_gabarito": [],
+     "casam_com_a_cwe": [],
+     "veredito_fase1": "NAO_DETECTADO",
+     "trilhas_entre_arquivos_tocando_gabarito": [],
+     "executou": true,
+     "segundos": 42.6
+    },
+    "ganho": "igual"
+   }
+  ]
+ },
+ "classificacao": "inconclusivo",
+ "motivo": "nenhuma_deteccao_nova_em_5_casos",
+ "classificacao_por_etapa": {
+  "gabarito": {
+   "classificacao": "inconclusivo",
+   "motivo": "nenhuma_deteccao_nova_em_3_casos"
+  }
+ }
+}

@@ -17,6 +17,10 @@ Duas decisões que este módulo materializa:
 - **O conjunto é derivado do catálogo, nunca embutido no código.** O ruleset é
   configurável por `SEMGREP_CONFIG`; uma lista fixa passaria a mentir no instante
   em que ele mudasse, e mentiria em silêncio.
+- **Mais de um ruleset é a união dos catálogos.** O motor recebe todos numa
+  invocação só, então uma CWE coberta por qualquer um deles é alcançável naquela
+  execução. O cache de catálogo, porém, é POR ruleset: eles são buscados e mudam
+  de forma independente.
 
 O que ele NÃO é: fonte da regra de pareamento. A comparação vem de
 `fase1_semgrep._numero_cwe`, importada e não copiada — se a alcançabilidade
@@ -30,7 +34,13 @@ from datetime import datetime
 from typing import NamedTuple
 
 from .config import CACHE_SIMBOLICO_DIR
-from .fase1_semgrep import SEMGREP_CONFIG, _numero_cwe
+from .fase1_semgrep import (
+    PROCEDENCIA_PROPRIA,
+    SEMGREP_CONFIG,
+    SEMGREP_CONFIGS,
+    _numero_cwe,
+    procedencia,
+)
 
 
 class RulesetIndisponivelError(Exception):
@@ -151,66 +161,195 @@ def _garantir_cache(destino, url):
 
 
 # Releitura do JSON (2 MB) a cada consulta custaria caro num laço sobre a
-# população inteira. A chave inclui mtime e tamanho: refazer a busca invalida a
-# memória sozinha, sem que o consumidor precise saber que ela existe.
+# população inteira. `destino -> (chave, regras)`, com a chave em mtime e
+# tamanho: refazer a busca invalida a memória sozinha, sem que o consumidor
+# precise saber que ela existe.
+#
+# A memória é POR RULESET, e não do último snapshot lido — que era o
+# comportamento anterior, correto enquanto houvesse um ruleset só. Com dois
+# configurados, guardar um só faria cada consulta reler do disco o catálogo do
+# outro, alternadamente, num laço sobre a população inteira.
 _MEMORIA = {}
 
 
-def carregar_regras(destino=None, config=SEMGREP_CONFIG):
-    """`check_id` -> `Regra(cwes, linguagens)`, do cache ou do registry."""
+def _regra_de_dict(r) -> Regra:
+    return Regra(
+        cwes=_lista((r.get("metadata") or {}).get("cwe")),
+        linguagens=list(r.get("languages") or []),
+        subcategorias=tuple(_lista((r.get("metadata") or {}).get("subcategory"))),
+        taint=(r.get("mode") == "taint"),
+    )
+
+
+def _catalogo_local(config):
+    """Catálogo de um ruleset que sai de arquivo nosso, lido do disco.
+
+    Sem isto, a alcançabilidade de uma configuração com `regras/go` tentaria
+    buscar `https://semgrep.dev/c/regras/go` no registry e falharia com 404 — e
+    a CWE que a regra local cobre ficaria de fora do conjunto alcançável, que é
+    exatamente o contrário do motivo de a regra existir.
+
+    A memória é a mesma do catálogo remoto, mas com a chave derivada do conteúdo
+    dos arquivos: um ruleset local é um diretório, não um arquivo só, e o mtime
+    do diretório não muda quando uma regra dentro dele é editada.
+    """
+    from . import regras_locais
+
+    caminho = (config if os.path.isabs(config)
+               else os.path.join(os.path.dirname(os.path.dirname(
+                   os.path.abspath(__file__))), config))
+    arquivos = regras_locais.arquivos_de_regra(caminho)
+    if not arquivos:
+        raise RulesetIndisponivelError(
+            f"ruleset local '{config}' não tem regra alguma em {caminho}. "
+            "Conjunto vazio faria toda CWE parecer inalcançável e recusaria a "
+            "população inteira em silêncio.")
+
+    chave = tuple((a, os.stat(a).st_mtime_ns, os.stat(a).st_size)
+                  for a in arquivos)
+    memorizado = _MEMORIA.get(caminho)
+    if memorizado is not None and memorizado[0] == chave:
+        return memorizado[1]
+
+    import yaml
+
+    regras = {}
+    for arquivo in arquivos:
+        with open(arquivo, encoding="utf-8") as f:
+            documento = yaml.safe_load(f) or {}
+        for r in documento.get("rules") or []:
+            regras[r["id"]] = _regra_de_dict(r)
+    _MEMORIA[caminho] = (chave, regras)
+    return regras
+
+
+def carregar_regras(destino=None, config=None):
+    """`check_id` -> `Regra(cwes, linguagens)` de UM ruleset, do disco ou do registry."""
+    config = SEMGREP_CONFIG if config is None else config
+    if destino is None and procedencia(config) == PROCEDENCIA_PROPRIA:
+        return _catalogo_local(config)
     destino = os.path.abspath(destino or caminho_cache(config))
     _garantir_cache(destino, url_registry(config))
 
     st = os.stat(destino)
-    chave = (destino, st.st_mtime_ns, st.st_size)
-    if chave in _MEMORIA:
-        return _MEMORIA[chave]
+    chave = (st.st_mtime_ns, st.st_size)
+    memorizado = _MEMORIA.get(destino)
+    if memorizado is not None and memorizado[0] == chave:
+        return memorizado[1]
 
     with open(destino, encoding="utf-8") as f:
         dados = json.load(f)
-    regras = {
-        r["id"]: Regra(
-            cwes=_lista((r.get("metadata") or {}).get("cwe")),
-            linguagens=list(r.get("languages") or []),
-            subcategorias=tuple(
-                _lista((r.get("metadata") or {}).get("subcategory"))),
-            taint=(r.get("mode") == "taint"),
-        )
-        for r in dados.get("rules", [])
-    }
-    _MEMORIA.clear()          # só interessa o snapshot corrente
-    _MEMORIA[chave] = regras
+    regras = {r["id"]: _regra_de_dict(r) for r in dados.get("rules", [])}
+    _MEMORIA[destino] = (chave, regras)
     return regras
 
 
-def cwes_alcancaveis(linguagem, destino=None, config=SEMGREP_CONFIG):
-    """Números de CWE que alguma regra DA LINGUAGEM declara.
+def _configs_alvo(config=None, configs=None):
+    """Quais rulesets uma consulta cobre.
+
+    `configs` (plural) manda; `config` (singular) é o atalho de um ruleset só,
+    preservado porque os consumidores que passam um catálogo de teste passam
+    também o ruleset dele. Sem nenhum dos dois, vale a configuração corrente.
+    """
+    if configs is not None:
+        return tuple(configs)
+    if config is not None:
+        return (config,)
+    return SEMGREP_CONFIGS
+
+
+def regras_configuradas(destino=None, config=None, configs=None):
+    """Todas as regras dos rulesets configurados, como sequência.
+
+    Sequência, e não dicionário `check_id -> Regra`: rulesets diferentes trazem
+    regras de MESMO identificador — o `p/gosec` e o `p/default` compartilham 22
+    delas —, e fundir por chave descartaria silenciosamente uma das versões. Se
+    a descartada fosse a de grau mais alto, a CWE seria rebaixada por um detalhe
+    de nomenclatura.
+
+    Um `destino` explícito é tratado como catálogo único, seja qual for a
+    configuração corrente: é o caminho dos testes e dos scripts que consultam um
+    snapshot específico.
+    """
+    if destino is not None:
+        return list(carregar_regras(destino).values())
+    return [regra
+            for c in _configs_alvo(config, configs)
+            for regra in carregar_regras(None, c).values()]
+
+
+class Alcancaveis(frozenset):
+    """Conjunto de CWEs alcançáveis, que também sabe dizer se é piso.
+
+    Herda de `frozenset` — e não de `NamedTuple` — porque a qualificação é
+    informação EXTRA sobre um conjunto, não uma estrutura nova. Como tupla, ela
+    quebrava `== {77, 918}`, união, diferença e tudo mais que os três
+    consumidores já fazem com a resposta; a marcação de incerteza não pode
+    custar a semântica de conjunto, senão ela é removida na primeira vez que
+    alguém precisar comparar dois resultados.
+    """
+
+    def __new__(cls, cwes=(), limite_inferior=False):
+        obj = super().__new__(cls, cwes)
+        obj.limite_inferior = bool(limite_inferior)
+        return obj
+
+
+def cwes_alcancaveis(linguagem, destino=None, config=None,
+                     entre_arquivos=False, configs=None):
+    """CWEs que alguma regra DA LINGUAGEM declara, com a incerteza declarada.
 
     Devolve números inteiros, não strings: `CWE-077` e `CWE-77` são a mesma
     fraqueza escrita de duas formas, e comparar texto as separaria.
+
+    O conjunto é a UNIÃO dos catálogos configurados, porque o motor recebe todos
+    os rulesets numa invocação só: uma CWE coberta por regra de qualquer um
+    deles é alcançável naquela execução. Derivar de um só quando há vários
+    subestimaria a cobertura e recusaria, na colheita, população que o motor
+    detectaria — o defeito exato que esta capability existe para prevenir.
+
+    Sob o modo entre-arquivos o conjunto é marcado como **limite inferior**. As
+    regras próprias desse modo não constam do catálogo público do registry, e
+    não há como derivá-las honestamente daqui. Duas saídas erradas foram
+    descartadas: estimar a cobertura extra (inventaria número) e tratar o
+    conjunto aberto como exato (recusaria, na colheita, população que o motor
+    detectaria — o defeito exato que esta capability existe para prevenir).
+    Declarar a incerteza é a única saída que não mente.
+
+    Isso foi confirmado na prática: na etapa real do portão, o Pro emitiu
+    alertas de regras que o CE não tinha — `gin-command-injection-taint`,
+    `gin-tainted-url-host`, `jwt-hardcoded-jwt-key` — nenhuma delas derivável
+    do catálogo aberto.
     """
     alvo = str(linguagem).casefold()
     numeros = set()
-    for regra in carregar_regras(destino, config).values():
+    for regra in regras_configuradas(destino, config, configs):
         if not any(str(lin).casefold() == alvo for lin in regra.linguagens):
             continue
         for tag in regra.cwes:
             numero = _numero_cwe(tag)
             if numero is not None:
                 numeros.add(numero)
-    return numeros
+    return Alcancaveis(numeros, limite_inferior=entre_arquivos)
 
 
-def cwe_alcancavel(cwe, linguagem, destino=None, config=SEMGREP_CONFIG):
+def cwe_alcancavel(cwe, linguagem, destino=None, config=None,
+                   entre_arquivos=False, configs=None):
     """Alguma regra da linguagem declara ESTA CWE?
 
     O casamento é pelo número inteiro, com `_numero_cwe` da Fase 1: `CWE-77` e
     `CWE-770` são fraquezas distintas e ambas estão na população.
+
+    A resposta continua binária de propósito. Sob modo entre-arquivos ela é
+    conservadora — um `False` significa "não consta do catálogo aberto", e não
+    "o motor não detecta": use `cwes_alcancaveis(...).limite_inferior` quando a
+    diferença importar.
     """
     alvo = cwe if isinstance(cwe, int) else _numero_cwe(cwe)
     if alvo is None:
         return False
-    return alvo in cwes_alcancaveis(linguagem, destino, config)
+    return alvo in cwes_alcancaveis(linguagem, destino, config, entre_arquivos,
+                                    configs)
 
 
 def _afirma_vulnerabilidade(regra):
@@ -224,21 +363,48 @@ def _afirma_vulnerabilidade(regra):
                for s in regra.subcategorias)
 
 
-def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG):
+def graus_alcancabilidade(linguagem, destino=None, config=None,
+                          entre_arquivos=False, configs=None):
     """`{numero_da_cwe: grau}` para as CWEs alcançáveis naquela linguagem.
 
     Devolve o mapa inteiro, e não uma consulta por vez, porque o relatório da
     colheita precisa do grau de todas as CWEs de uma vez e refazer a leitura por
     CWE percorreria o ruleset uma vez por consulta.
+
+    `entre_arquivos` muda o eixo de TAINT, e só ele. A justificativa escrita do
+    grau intermediário é *"o motor não rastreia fluxo entre arquivos"* — é uma
+    afirmação sobre o MOTOR, não sobre a CWE. Sob um motor que rastreia,
+    mantê-la faria a escala descrever uma limitação extinta, e a colheita
+    continuaria evitando CWE-918, que é precisamente o que a troca de motor
+    pretende destravar.
+
+    A validação empírica da escala (alta 11,30 %, media 1,67 %, baixa 0,30 %)
+    foi medida sob o CE e NÃO transfere: sob o modo entre-arquivos a escala
+    precisa ser revalidada do zero. Pelo mesmo motivo ela não transfere entre
+    conjuntos de rulesets: a evidência colhida sob um conjunto não sustenta
+    outro, e a separação precisa ser remedida por conjunto em uso.
+
+    A melhor regra é procurada em TODOS os rulesets configurados. O critério já
+    vigente é que basta uma regra capaz para o motor ter chance de alcançar a
+    CWE; limitar a busca a um ruleset o contradiria assim que houvesse mais de
+    um. A consequência é intencional: uma CWE hoje em grau intermediário por só
+    ter regra de taint sobe de grau quando outro ruleset traz regra sintática
+    que afirma vulnerabilidade.
     """
     alvo = str(linguagem).lower()
     melhor = {}
-    for regra in carregar_regras(destino, config).values():
+    for regra in regras_configuradas(destino, config, configs):
         if alvo not in {str(x).lower() for x in regra.linguagens}:
             continue
         if _afirma_vulnerabilidade(regra):
-            grau = GRAU_MEDIA if regra.taint else GRAU_ALTA
+            # Sob modo entre-arquivos o rebaixamento por taint deixa de fazer
+            # sentido: o motivo dele era o alcance, e o alcance mudou.
+            rebaixa = regra.taint and not entre_arquivos
+            grau = GRAU_MEDIA if rebaixa else GRAU_ALTA
         else:
+            # O eixo de AUDITORIA não é afetado pelo motor: nenhuma análise de
+            # fluxo transforma regra de auditoria em afirmação de
+            # vulnerabilidade.
             grau = GRAU_BAIXA
         for c in regra.cwes:
             n = _numero_cwe(c)
@@ -252,7 +418,8 @@ def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG):
     return melhor
 
 
-def grau_alcancabilidade(cwe, linguagem, destino=None, config=SEMGREP_CONFIG):
+def grau_alcancabilidade(cwe, linguagem, destino=None, config=None,
+                         entre_arquivos=False, configs=None):
     """Grau de uma CWE, ou `None` quando ela não é alcançável de forma alguma.
 
     `None` e `GRAU_BAIXA` são estados diferentes e não devem ser confundidos:
@@ -263,18 +430,36 @@ def grau_alcancabilidade(cwe, linguagem, destino=None, config=SEMGREP_CONFIG):
     n = _numero_cwe(cwe)
     if n is None:
         return None
-    return graus_alcancabilidade(linguagem, destino, config).get(n)
+    return graus_alcancabilidade(linguagem, destino, config, entre_arquivos,
+                                 configs).get(n)
 
 
-def metadados_snapshot(destino=None, config=SEMGREP_CONFIG):
-    """Origem, caminho e data do snapshot do ruleset em uso.
+def metadados_snapshot(destino=None, config=None):
+    """Origem, caminho e data do snapshot de UM ruleset.
 
     A data é a de escrita do arquivo — um `git checkout` a reescreveria. Ela diz
     "não mais velho que isto", que é o suficiente para o desvio ficar visível.
+
+    Sem `config`, descreve o PRIMEIRO ruleset configurado. Para a configuração
+    inteira use `metadados_snapshots`: descrever um conjunto composto por um só
+    dos seus snapshots é a mentira por omissão que este módulo existe para
+    evitar.
     """
+    config = SEMGREP_CONFIG if config is None else config
     destino = os.path.abspath(destino or caminho_cache(config))
     regras = carregar_regras(destino, config)
     obtido_em = datetime.fromtimestamp(
         os.path.getmtime(destino)).astimezone().isoformat(timespec="seconds")
     return Snapshot(origem=url_registry(config), caminho=destino,
                     obtido_em=obtido_em, regras=len(regras))
+
+
+def metadados_snapshots(configs=None):
+    """Um `Snapshot` por ruleset configurado, na ordem da configuração.
+
+    Ruleset próprio fica de fora: ele não tem snapshot do registry a descrever, e
+    a data que importa nele é o commit — que o manifesto registra por outro
+    caminho (`src/regras_locais.para_manifesto`).
+    """
+    return [metadados_snapshot(config=c) for c in _configs_alvo(configs=configs)
+            if procedencia(c) != PROCEDENCIA_PROPRIA]

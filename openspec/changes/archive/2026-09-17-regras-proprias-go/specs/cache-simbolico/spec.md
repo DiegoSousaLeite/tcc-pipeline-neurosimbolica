@@ -1,48 +1,4 @@
-# cache-simbolico
-
-## Purpose
-
-Persistir em disco o resultado das Fases 1 e 2 por caso — alerta do Semgrep, status de detecção e contexto hidratado — para que os braços da matriz experimental executem apenas a chamada de LLM.
-
-Atende a dois objetivos distintos. O de custo: sem o cache, cada braço reexecutaria o Semgrep sobre a população inteira, inclusive nos casos `NAO_DETECTADO`, que são a maioria e onde o motor simbólico gasta tempo sem produzir chamada de LLM. O de validade interna, que é o mais importante: o contexto hidratado gravado é a string que alimenta todos os braços, o que garante entrada byte-a-byte idêntica na comparação pareada — sem isso, uma diferença de veredito poderia vir de uma diferença de entrada, não do braço.
-
-Fica separado do cache de fontes (`cache/`) porque este é imutável por construção — a chave é um SHA de commit — enquanto o resultado simbólico depende da versão do ruleset do Semgrep, da versão da regra de pareamento e da identidade do motor que o produziu, que mudam.
-
-## Requirements
-
-### Requirement: Persistência do resultado simbólico
-O sistema SHALL persistir em disco, por caso, o resultado da Fase 1 (alerta do Semgrep, status de detecção, motivo da não-detecção e regras que dispararam sem casar) e o contexto hidratado da Fase 2, de forma que execuções subsequentes possam reaproveitá-los sem reexecutar o Semgrep.
-
-O motivo e as regras concorrentes entram no payload porque são produto da Fase 1 como qualquer outro: se ficassem de fora, uma rodada servida do cache perderia o diagnóstico de cobertura simbólica e só o recuperaria reexecutando o Semgrep sobre a população inteira — exatamente o custo que este cache existe para evitar.
-
-A identidade do motor que produziu o resultado entra no payload pela mesma razão: é produto da Fase 1, não é recuperável depois, e sem ela uma entrada não sabe dizer se descreve o que o motor CE viu ou o que o motor com análise entre arquivos viu.
-
-#### Scenario: Primeira execução popula o cache
-- **WHEN** um caso passa pelas Fases 1 e 2 pela primeira vez
-- **THEN** uma entrada de cache simbólico é gravada contendo o alerta, o contexto hidratado, o status do Semgrep, a versão do ruleset, a versão da regra de pareamento e a identidade do motor simbólico
-
-#### Scenario: Execução seguinte reaproveita
-- **WHEN** o mesmo caso é executado em outro braço
-- **THEN** o Semgrep não é invocado e o contexto vem do cache simbólico
-
-#### Scenario: Casos não detectados também são cacheados
-- **WHEN** um caso termina em `NAO_DETECTADO`
-- **THEN** esse status é gravado no cache simbólico junto com o motivo da não-detecção e as regras que dispararam sem casar, e é reaproveitado sem nova execução do Semgrep
-
-#### Scenario: Falha de esteira não é cacheada
-- **WHEN** a resolução do arquivo-alvo ou a execução do Semgrep falha com erro de esteira
-- **THEN** nenhuma entrada é gravada, para que uma falha transitória de rede não se torne um `NAO_DETECTADO` permanente
-
-### Requirement: Contexto idêntico entre braços
-O sistema SHALL fornecer aos quatro braços o mesmo contexto hidratado byte-a-byte para um dado caso, garantindo validade interna da comparação pareada.
-
-#### Scenario: Byte-a-byte igual
-- **WHEN** o mesmo caso é avaliado nos quatro braços
-- **THEN** a string de contexto passada ao montador de prompt é idêntica em todos, byte a byte
-
-#### Scenario: Fases 1 e 2 rodam uma vez por caso
-- **WHEN** um caso é processado numa rodada com N braços
-- **THEN** o motor simbólico e a hidratação são invocados uma única vez, fora do laço de braços
+## MODIFIED Requirements
 
 ### Requirement: Chave e invalidação do cache simbólico
 O sistema SHALL indexar o cache simbólico pela combinação repositório, commit, arquivo e CWE, SHALL registrar na entrada a identidade do **conjunto de rulesets**, a versão da regra de pareamento e a identidade do motor simbólico, e SHALL tratar como inválida a entrada em que qualquer uma das três diverge da corrente.
@@ -112,6 +68,8 @@ A invalidação por mudança de motor SHALL alcançar as entradas `NAO_DETECTADO
 #### Scenario: Entradas dos dois motores coexistem
 - **WHEN** o mesmo caso foi executado sob os dois motores
 - **THEN** as duas entradas existem em disco simultaneamente e cada rodada recebe a que corresponde ao seu motor, sem que uma sobrescreva a outra
+
+## ADDED Requirements
 
 ### Requirement: Medição sob conjunto de rulesets distinto não disputa o cache da rodada
 O sistema SHALL manter o resultado de uma medição feita sob conjunto de rulesets diferente do da rodada em armazenamento próprio, separado do cache simbólico da rodada.

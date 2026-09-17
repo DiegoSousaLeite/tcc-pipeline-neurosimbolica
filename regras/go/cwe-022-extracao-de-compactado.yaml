@@ -1,0 +1,64 @@
+# CWE-22 — travessia de caminho na extração de arquivo compactado (zip-slip)
+#
+# PROTOCOLO: `desenvolvimento`. Escrita DEPOIS de inspecionar a partição de
+# desenvolvimento, e informada por ela: 11 dos 54 casos de CWE-22 daquela
+# partição trazem marcas de extração de compactado, e a entrada externa é o nome
+# de uma entrada do arquivo — `zip.File.Name`, `archives.FileInfo.NameInArchive`,
+# `child.Name()` do ISO 9660 —, não um parâmetro de requisição HTTP.
+#
+# O número desta regra NÃO pode ser reportado sobre a população inteira. Ver
+# `scripts/medir_regras_locais.py`, que recusa o agregado quando ela está
+# carregada.
+#
+# A fraqueza é conhecida como zip-slip: o nome da entrada é concatenado ao
+# diretório de destino e, contendo `../`, escapa dele. `filepath.Join` limpa o
+# caminho resultante mas não o prende à base.
+rules:
+  - id: extracao-de-compactado-sem-prender-a-base
+    languages: [go]
+    severity: WARNING
+    message: >-
+      Nome de entrada de arquivo compactado é concatenado ao diretório de destino
+      e usado para criar arquivo ou diretório, sem verificação de que o resultado
+      permanece dentro da base. Uma entrada com `../` no nome escreve fora do
+      diretório de extração (CWE-22, zip-slip).
+    metadata:
+      cwe:
+        - "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      subcategory: [vuln]
+      proveniencia: desenvolvimento
+      confidence: LOW
+      category: security
+      technology: [go]
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+        - https://pkg.go.dev/archive/zip#File
+    patterns:
+      - pattern-either:
+          - pattern: os.Create(<... $CAMINHO ...>)
+          - pattern: os.OpenFile(<... $CAMINHO ...>, ...)
+          - pattern: os.MkdirAll(<... $CAMINHO ...>, ...)
+          - pattern: os.Mkdir(<... $CAMINHO ...>, ...)
+          - pattern: os.WriteFile(<... $CAMINHO ...>, ...)
+          - pattern: os.Symlink($ORIGEM, <... $CAMINHO ...>)
+          - pattern: $FS.Create(<... $CAMINHO ...>)
+          - pattern: $FS.MkdirAll(<... $CAMINHO ...>, ...)
+          - pattern: $FS.OpenFile(<... $CAMINHO ...>, ...)
+      - pattern-inside: |
+          $CAMINHO := $COMPOSICAO
+          ...
+      - metavariable-pattern:
+          metavariable: $COMPOSICAO
+          patterns:
+            # A composição é uma junção de caminho...
+            - pattern-either:
+                - pattern: filepath.Join(...)
+                - pattern: path.Join(...)
+                - pattern: stdpath.Join(...)
+            # ...que leva o nome de uma entrada do compactado.
+            - pattern-either:
+                - pattern: <... $ENTRADA.Name ...>
+                - pattern: <... $ENTRADA.Name() ...>
+                - pattern: <... $ENTRADA.NameInArchive ...>
+                - pattern: <... $ENTRADA.FileInfo().Name() ...>
+                - pattern: <... $ENTRADA.Header.Name ...>

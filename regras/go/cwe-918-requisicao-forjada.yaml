@@ -1,0 +1,68 @@
+# CWE-918 — Server-Side Request Forgery (SSRF)
+#
+# PROTOCOLO: `definicao`. Escrita a partir da definição da CWE-918 (MITRE) e do
+# idioma de Go, sem que nenhum arquivo da população tenha sido inspecionado.
+# Fontes consultadas:
+#   - CWE-918, MITRE: "the web server receives a URL or similar request from an
+#     upstream component and retrieves the contents of this URL, but it does not
+#     sufficiently ensure that the request is being sent to the expected
+#     destination".
+#   - documentação de `net/http` (Get, Post, Head, PostForm, NewRequest,
+#     NewRequestWithContext, Client.Do) e de `Request.FormValue` / `URL.Query`.
+#
+# Por que sintática, e não `mode: taint` (design.md, D5): o mesmo motivo da
+# regra de CWE-22. O motor CE não rastreia fluxo entre arquivos, e a análise de
+# taint escrita para um motor que não a alcança repetiria o defeito que esta
+# change tenta corrigir.
+rules:
+  - id: requisicao-a-url-de-entrada-externa
+    languages: [go]
+    severity: WARNING
+    message: >-
+      URL construída a partir de entrada externa chega a um cliente HTTP do
+      servidor. Sem validação do destino contra uma lista de hosts permitidos, o
+      cliente pode ser induzido a buscar endereços internos — `localhost`, faixas
+      privadas, o serviço de metadados da nuvem (CWE-918).
+    metadata:
+      cwe:
+        - "CWE-918: Server-Side Request Forgery (SSRF)"
+      subcategory: [vuln]
+      proveniencia: definicao
+      confidence: LOW
+      category: security
+      technology: [go]
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+        - https://pkg.go.dev/net/http#Client
+    patterns:
+      # O destino: um cliente HTTP do servidor recebendo uma URL em que a
+      # variável de entrada aparece em qualquer profundidade.
+      - pattern-either:
+          - pattern: http.Get(<... $EXTERNO ...>)
+          - pattern: http.Head(<... $EXTERNO ...>)
+          - pattern: http.Post(<... $EXTERNO ...>, ...)
+          - pattern: http.PostForm(<... $EXTERNO ...>, ...)
+          - pattern: http.NewRequest($METODO, <... $EXTERNO ...>, ...)
+          - pattern: http.NewRequestWithContext($CTX, $METODO, <... $EXTERNO ...>, ...)
+          - pattern: $CLIENTE.Get(<... $EXTERNO ...>)
+          - pattern: $CLIENTE.Head(<... $EXTERNO ...>)
+          - pattern: $CLIENTE.Post(<... $EXTERNO ...>, ...)
+      # A origem: a variável vem de um acessor de dado de requisição, no mesmo
+      # escopo. É o que separa "URL montada" — que todo cliente HTTP faz — de
+      # "URL montada com o que o cliente mandou".
+      - pattern-inside: |
+          $EXTERNO := $FONTE
+          ...
+      - metavariable-pattern:
+          metavariable: $FONTE
+          patterns:
+            - pattern-either:
+                - pattern: <... $R.URL.Query().Get(...) ...>
+                - pattern: <... $R.FormValue(...) ...>
+                - pattern: <... $R.PostFormValue(...) ...>
+                - pattern: <... $R.Header.Get(...) ...>
+                - pattern: <... mux.Vars($R)[...] ...>
+                - pattern: <... chi.URLParam(...) ...>
+                - pattern: <... $C.Param(...) ...>
+                - pattern: <... $C.Query(...) ...>
+                - pattern: <... $C.FormValue(...) ...>
