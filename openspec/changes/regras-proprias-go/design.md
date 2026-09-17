@@ -136,6 +136,51 @@ mecanismo é meio para ele, não fim.
 **O que muda em relação ao plano original:** a promessa de que "nada em `src/`
 precisa mudar" cai. Era condicional a um pré-requisito que não se cumpriu.
 
+### D7 — A unidade de partição é `(CWE, repositório)`, não o par
+
+**Decisão:** a partição é estratificada por CWE **e** por repositório: o que é
+sorteado para um lado ou para o outro é o grupo `(CWE, repositório)` inteiro,
+nunca um par isolado.
+
+**Por quê:** medido em 2026-09-17 sobre `tp_pairs_osv_alcancavel.json`, os 226
+pares alvo se distribuem assim:
+
+| CWE | pares | repositórios | maior repositório |
+|-----|------:|-------------:|------------------:|
+| CWE-22 | 114 | 46 | 8 pares (`dagucloud/dagu`, `rclone/rclone`) |
+| CWE-918 | 112 | 33 | 10 pares (`axllent/mailpit`) |
+
+A cauda é longa — a maioria dos repositórios contribui com um par —, mas a
+cabeça não é desprezível: 8 e 10 pares num único repositório. Pares da mesma CWE
+no mesmo repositório compartilham idioma de código, convenção de nome e, com
+frequência, o mesmo `helper` de validação de caminho. Se um caísse no
+desenvolvimento e outro na avaliação, uma regra escrita olhando o primeiro
+detectaria o segundo de graça, e o número da avaliação herdaria a contaminação
+que a partição existe para impedir. Agrupar por repositório é a única forma de
+fechar esse vazamento.
+
+**Como, sem semente:** os grupos de cada CWE são ordenados pelo digest SHA-256
+da chave `(CWE, repositório)` — ordem estável, reproduzível por qualquer um que
+tenha a população, e que não é a ordem do arquivo — e percorridos nessa ordem,
+cada um indo para a partição que estiver menor no momento. O balanceamento é
+determinístico: mesma população, mesmo resultado, sem semente para ajustar.
+
+**Consequência medida:** a alternativa mais simples — paridade do digest, sem
+balanceamento — desequilibrava justamente por causa da cabeça (CWE-22 ficava
+126/102 em casos). Com o balanceamento guloso:
+
+| CWE | desenvolvimento | avaliação | pares na avaliação |
+|-----|----------------:|----------:|-------------------:|
+| CWE-22 | 108 casos | 120 casos | 60 |
+| CWE-918 | 110 casos | 114 casos | 57 |
+
+Os dois lados ficam acima do limiar de 30 que o projeto já adota, o que preserva
+a partição de avaliação como denominador utilizável.
+
+**O par não se divide.** As versões vulnerável e corrigida do mesmo par vão
+sempre para a mesma partição: são o mesmo arquivo em dois commits, e separá-las
+mostraria a correção de um caso cujo lado vulnerável seria usado para medir.
+
 ## Risks / Trade-offs
 
 **[Ajuste ao conjunto de teste]** → É o risco central. Mitigações empilhadas:
@@ -192,11 +237,11 @@ alterado.
   duas que concentram a perda, e a medição de `ruleset-gosec` confirmou que
   nenhum ruleset público as cobre em Go. Se outra CWE entrar depois, a
   verificação de cobertura pública se repete para ela.
-- A partição estratificada é por CWE apenas, ou também por repositório? Casos da
-  mesma CWE no mesmo repositório podem compartilhar idioma de código, e cair em
-  partições diferentes vazaria informação de desenvolvimento para avaliação.
-  **Provavelmente precisa ser por repositório também — verificar a distribuição
-  antes de particionar.**
+- ~~A partição estratificada é por CWE apenas, ou também por repositório?~~
+  **Respondida em D7:** por CWE **e** por repositório. A distribuição foi
+  medida antes de particionar — 114 pares de CWE-22 em 46 repositórios, 112 de
+  CWE-918 em 33, com cabeças de 8 e 10 pares — e a cabeça é grande o bastante
+  para o vazamento ser real.
 - Uma regra `definicao` que não funcionou pode ser corrigida sem virar
   `desenvolvimento`? Corrigir sintaxe de padrão não é o mesmo que ajustar a casos
   vistos, mas a fronteira é tênue e precisa de critério escrito.
