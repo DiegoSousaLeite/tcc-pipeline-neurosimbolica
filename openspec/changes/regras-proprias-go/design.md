@@ -181,6 +181,154 @@ a partição de avaliação como denominador utilizável.
 sempre para a mesma partição: são o mesmo arquivo em dois commits, e separá-las
 mostraria a correção de um caso cujo lado vulnerável seria usado para medir.
 
+### D8 — As regras `definicao` não bastaram, e o número é 1,8 % e 0,9 %
+
+**Medido em 2026-09-17**, 452 casos, zero falhas de esteira. O agregado sobre a
+população inteira é legítimo porque todas as regras carregadas eram `definicao`:
+
+| CWE | detecção | disparo na versão corrigida |
+|-----|---------:|----------------------------:|
+| CWE-22 | **2/114 (1,8 %)** | 2/114 (1,8 %) |
+| CWE-918 | **1/112 (0,9 %)** | 0/112 |
+
+**Decisão: insatisfatório.** Não só pela magnitude — indistinguível do zero que o
+`p/default` já entregava — mas porque as duas detecções de CWE-22 vêm
+acompanhadas de disparo na versão **corrigida** dos mesmos casos. Ali a regra não
+separa vulnerável de corrigido: ela aponta a composição de caminho, que a
+correção não removeu. Um número construído sobre isso não mede detecção de
+vulnerabilidade.
+
+A seção 6 abre.
+
+### D9 — A lacuna não é do ruleset: é do arquivo rotulado
+
+Aberta **apenas** a partição de desenvolvimento (54 casos de CWE-22, 55 de
+CWE-918, todos vulneráveis), a pergunta "por que as regras não dispararam?"
+tem uma resposta que não é sobre as regras.
+
+**Primeiro, a operação perigosa muitas vezes não está no arquivo:**
+
+| | CWE-22 | CWE-918 |
+|---|---:|---:|
+| Operação na forma que uma regra sintática nomeia (`os.Open`, `http.Get`, …) | 23/54 (42,6 %) | 15/55 (27,3 %) |
+| Operação atrás de abstração ou método de receptor (`afero`, `billy`, `fs.FS`, `cliente.Do`) | 14/54 (25,9 %) | 24/55 (43,6 %) |
+| **Nenhuma operação perigosa no arquivo** | **17/54 (31,5 %)** | **16/55 (29,1 %)** |
+
+Cerca de **30 % da classe positiva não tem, no arquivo rotulado, a operação que a
+fraqueza descreve**. Não é lacuna de ruleset: regra sintática nenhuma, de ruleset
+nenhum, pode detectar ali o que ali não está. O gabarito é por arquivo, e o
+arquivo que o commit de correção toca é com frequência o do *check* acrescentado
+— `filebrowser/files/scoped.go func within` é uma verificação de contenção, não
+uma abertura de arquivo —, não o do ponto perigoso.
+
+**Segundo, a origem quase nunca é o que a definição da CWE sugere:**
+
+| | CWE-22 | CWE-918 |
+|---|---:|---:|
+| Arquivo contém acessor HTTP (`r.URL.Query().Get`, `FormValue`, …) | 6/54 (11,1 %) | 13/55 (23,6 %) |
+| Entrada vem de campo de struct (`args.InnerPath`, `req.Signature`, `m.state.SrcUri`) | 23/54 (42,6 %) | 37/55 (67,3 %) |
+| Marcas de extração de arquivo compactado | 11/54 (20,4 %) | 0/55 |
+| **Fonte E sumidouro no MESMO arquivo** | **3/54 (5,6 %)** | **8/55 (14,5 %)** |
+
+A CWE-22 desta população é, em boa parte, **zip-slip**: a entrada externa é o
+nome de uma entrada de arquivo compactado (`zip.File.Name`,
+`archives.FileInfo.NameInArchive`, `child.Name()` do ISO 9660), não um parâmetro
+de requisição. A CWE-918 entra por campo de struct decodificado de JSON, de
+protobuf ou de estado de tarefa — `request.Scope`, `req.Signature`,
+`m.state.SrcUri`.
+
+**A última linha é um teto, e é preciso dizer de quê.** Os 5,6 % e 14,5 % limitam
+a regra de arquivo único que exija **acessor HTTP** como fonte — que é o que a
+definição da CWE sugere, e o que as regras `definicao` assumiram. Não é o teto de
+toda regra sintática: uma regra cuja fonte seja o nome de entrada de um
+compactado não depende de acessor HTTP nenhum, e de fato a medição de 6.3 passou
+desse número (CWE-22, 6,7 % na partição de avaliação). A correção importa porque
+a afirmação forte estava escrita aqui antes de ser medida.
+
+**O teto que vale para qualquer regra de arquivo único** é a linha anterior: os
+31,5 % e 29,1 % em que **não há operação perigosa no arquivo rotulado**. Aqueles
+casos são inalcançáveis por vocabulário de fonte nenhum, porque não é a fonte que
+falta — é o sumidouro. Somados aos 25,9 % e 43,6 % que só aparecem atrás de
+abstração, sobra pouco para regra sintática de biblioteca padrão morder.
+
+É isso que explica por que o `p/default` detecta ~0, por que nenhum ruleset
+público cobre, e por que escrever regra melhora tão pouco.
+
+**Consequência para o texto.** A contribuição desta change é esta tabela, não as
+regras. As regras são a evidência de que a lacuna foi diagnosticada corretamente:
+escritas contra a definição da CWE, elas detectam 1,8 % — e a análise diz
+exatamente por quê.
+
+### D10 — Quando corrigir uma regra `definicao` a rebaixa para `desenvolvimento`
+
+A questão em aberto era: corrigir a sintaxe de um padrão que não funcionou é o
+mesmo que ajustar a regra aos casos vistos? Não é — mas a fronteira precisa de
+um critério que não dependa de boa-fé para ser aplicado.
+
+**O critério é a origem de cada token do padrão, não a intenção de quem edita:**
+
+- Permanece `definicao` a correção cuja justificativa cabe inteiramente em
+  *(a)* o arquivo de teste da própria regra, *(b)* a documentação do Semgrep e
+  *(c)* a definição da CWE e a documentação da biblioteca padrão de Go. É o caso
+  de trocar `pattern-inside` por `pattern` porque a sequência de statements não
+  aceitava o operador de expressão profunda: a regra passou a dizer o que já
+  pretendia dizer.
+- Vira `desenvolvimento` a edição em que **qualquer** elemento novo do padrão —
+  um sumidouro, um acessor, um nome de campo, um item de `metavariable-regex` —
+  foi escolhido porque apareceu num caso da partição de desenvolvimento.
+
+**O teste operacional, que é o que de fato decide:** *este token estaria numa
+lista derivável da definição da CWE e da documentação de Go, sem abrir arquivo
+algum da população?* `os.MkdirAll` estaria. `NameInArchive` — campo de uma
+biblioteca de terceiros que só aparece porque a vimos usada — não estaria.
+
+**Regra de contato, para o caso duvidoso:** regra editada enquanto a partição de
+desenvolvimento estava aberta é `desenvolvimento`. É verificável e não depende de
+introspecção.
+
+**Desempate assimétrico, e é de propósito:** na dúvida, `desenvolvimento`.
+Declarar `desenvolvimento` por engano custa denominador — os 114 casos de CWE-22
+viram 60. Declarar `definicao` por engano custa o número inteiro, e o custo só
+aparece quando alguém de fora perguntar.
+
+**Como esta change aplicou o critério.** As duas regras `definicao` não foram
+tocadas depois da medição de D8: o número de 1,8 % e 0,9 % continua sendo delas,
+medido sobre a população inteira. As regras informadas pela partição são
+**novas**, e declaram `desenvolvimento`. Editar as antigas com o que a partição
+ensinou teria rebaixado as duas — e apagado o único número que esta change tem
+direito de reportar sobre a população inteira.
+
+### D11 — O que as regras `desenvolvimento` acrescentaram, na partição de avaliação
+
+Medido em 2026-09-17, 452 casos, com as quatro regras carregadas. O agregado
+sobre a população inteira foi **recusado**, como o protocolo exige.
+
+| CWE | `definicao` só (avaliação) | `definicao`+`desenvolvimento` (avaliação) | desenvolvimento (diagnóstico interno) |
+|-----|---------------------------:|------------------------------------------:|--------------------------------------:|
+| CWE-22 | 2/60 (3,3 %) | **4/60 (6,7 %)** | 4/54 (7,4 %) |
+| CWE-918 | 0/57 (0 %) | **1/57 (1,8 %)** | 3/55 (5,5 %) |
+
+**O número reportável é o da coluna do meio.** A da direita é diagnóstico: diz se
+a regra faz o que se pretendia, não quanto ela detecta.
+
+**Duas leituras, e a segunda é a que interessa à banca.**
+
+A primeira é que olhar a partição de desenvolvimento dobrou a detecção de CWE-22
+(2 para 4 em 60) e tirou a CWE-918 do zero. É ganho real e medido fora do que
+informou as regras.
+
+A segunda é a distância entre as duas últimas colunas. Em CWE-22 elas quase
+coincidem (7,4 % contra 6,7 %): a regra de zip-slip descreve um idioma, não os
+casos que a inspiraram, e generaliza. Em CWE-918 a de desenvolvimento é **três
+vezes** a de avaliação (5,5 % contra 1,8 %): ali a regra descreve mais os casos
+vistos do que a fraqueza. Sem a partição, as duas apareceriam somadas num único
+número e essa diferença seria invisível — que é exatamente o que o protocolo
+existe para impedir.
+
+**Nenhum dos dois números sustenta "escrevemos regras que fecham a lacuna".** 6,7 %
+e 1,8 % continuam próximos do chão, e a explicação é D9: a maior parte da classe
+positiva não tem, no arquivo rotulado, o que uma regra sintática poderia nomear.
+
 ## Risks / Trade-offs
 
 **[Ajuste ao conjunto de teste]** → É o risco central. Mitigações empilhadas:
@@ -242,9 +390,11 @@ alterado.
   medida antes de particionar — 114 pares de CWE-22 em 46 repositórios, 112 de
   CWE-918 em 33, com cabeças de 8 e 10 pares — e a cabeça é grande o bastante
   para o vazamento ser real.
-- Uma regra `definicao` que não funcionou pode ser corrigida sem virar
-  `desenvolvimento`? Corrigir sintaxe de padrão não é o mesmo que ajustar a casos
-  vistos, mas a fronteira é tênue e precisa de critério escrito.
+- ~~Uma regra `definicao` que não funcionou pode ser corrigida sem virar
+  `desenvolvimento`?~~ **Respondida em D10:** pode, se a justificativa da
+  correção couber no arquivo de teste da própria regra, na documentação do
+  Semgrep e na definição da CWE. Qualquer token escolhido por ter aparecido num
+  caso da partição rebaixa a regra, e na dúvida o desempate é `desenvolvimento`.
 - Como demonstrar, a quem ler a monografia, que o protocolo foi seguido? O
   histórico do Git é evidência, mas exige que o leitor o consulte. Vale um
   apêndice com os hashes de commit da partição e das regras.
