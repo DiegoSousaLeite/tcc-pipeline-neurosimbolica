@@ -183,11 +183,42 @@ def carregar_regras(destino=None, config=SEMGREP_CONFIG):
     return regras
 
 
-def cwes_alcancaveis(linguagem, destino=None, config=SEMGREP_CONFIG):
-    """Números de CWE que alguma regra DA LINGUAGEM declara.
+class Alcancaveis(frozenset):
+    """Conjunto de CWEs alcançáveis, que também sabe dizer se é piso.
+
+    Herda de `frozenset` — e não de `NamedTuple` — porque a qualificação é
+    informação EXTRA sobre um conjunto, não uma estrutura nova. Como tupla, ela
+    quebrava `== {77, 918}`, união, diferença e tudo mais que os três
+    consumidores já fazem com a resposta; a marcação de incerteza não pode
+    custar a semântica de conjunto, senão ela é removida na primeira vez que
+    alguém precisar comparar dois resultados.
+    """
+
+    def __new__(cls, cwes=(), limite_inferior=False):
+        obj = super().__new__(cls, cwes)
+        obj.limite_inferior = bool(limite_inferior)
+        return obj
+
+
+def cwes_alcancaveis(linguagem, destino=None, config=SEMGREP_CONFIG,
+                     entre_arquivos=False):
+    """CWEs que alguma regra DA LINGUAGEM declara, com a incerteza declarada.
 
     Devolve números inteiros, não strings: `CWE-077` e `CWE-77` são a mesma
     fraqueza escrita de duas formas, e comparar texto as separaria.
+
+    Sob o modo entre-arquivos o conjunto é marcado como **limite inferior**. As
+    regras próprias desse modo não constam do catálogo público do registry, e
+    não há como derivá-las honestamente daqui. Duas saídas erradas foram
+    descartadas: estimar a cobertura extra (inventaria número) e tratar o
+    conjunto aberto como exato (recusaria, na colheita, população que o motor
+    detectaria — o defeito exato que esta capability existe para prevenir).
+    Declarar a incerteza é a única saída que não mente.
+
+    Isso foi confirmado na prática: na etapa real do portão, o Pro emitiu
+    alertas de regras que o CE não tinha — `gin-command-injection-taint`,
+    `gin-tainted-url-host`, `jwt-hardcoded-jwt-key` — nenhuma delas derivável
+    do catálogo aberto.
     """
     alvo = str(linguagem).casefold()
     numeros = set()
@@ -198,19 +229,25 @@ def cwes_alcancaveis(linguagem, destino=None, config=SEMGREP_CONFIG):
             numero = _numero_cwe(tag)
             if numero is not None:
                 numeros.add(numero)
-    return numeros
+    return Alcancaveis(numeros, limite_inferior=entre_arquivos)
 
 
-def cwe_alcancavel(cwe, linguagem, destino=None, config=SEMGREP_CONFIG):
+def cwe_alcancavel(cwe, linguagem, destino=None, config=SEMGREP_CONFIG,
+                   entre_arquivos=False):
     """Alguma regra da linguagem declara ESTA CWE?
 
     O casamento é pelo número inteiro, com `_numero_cwe` da Fase 1: `CWE-77` e
     `CWE-770` são fraquezas distintas e ambas estão na população.
+
+    A resposta continua binária de propósito. Sob modo entre-arquivos ela é
+    conservadora — um `False` significa "não consta do catálogo aberto", e não
+    "o motor não detecta": use `cwes_alcancaveis(...).limite_inferior` quando a
+    diferença importar.
     """
     alvo = cwe if isinstance(cwe, int) else _numero_cwe(cwe)
     if alvo is None:
         return False
-    return alvo in cwes_alcancaveis(linguagem, destino, config)
+    return alvo in cwes_alcancaveis(linguagem, destino, config, entre_arquivos)
 
 
 def _afirma_vulnerabilidade(regra):
@@ -224,12 +261,24 @@ def _afirma_vulnerabilidade(regra):
                for s in regra.subcategorias)
 
 
-def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG):
+def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG,
+                          entre_arquivos=False):
     """`{numero_da_cwe: grau}` para as CWEs alcançáveis naquela linguagem.
 
     Devolve o mapa inteiro, e não uma consulta por vez, porque o relatório da
     colheita precisa do grau de todas as CWEs de uma vez e refazer a leitura por
     CWE percorreria o ruleset uma vez por consulta.
+
+    `entre_arquivos` muda o eixo de TAINT, e só ele. A justificativa escrita do
+    grau intermediário é *"o motor não rastreia fluxo entre arquivos"* — é uma
+    afirmação sobre o MOTOR, não sobre a CWE. Sob um motor que rastreia,
+    mantê-la faria a escala descrever uma limitação extinta, e a colheita
+    continuaria evitando CWE-918, que é precisamente o que a troca de motor
+    pretende destravar.
+
+    A validação empírica da escala (alta 11,30 %, media 1,67 %, baixa 0,30 %)
+    foi medida sob o CE e NÃO transfere: sob o modo entre-arquivos a escala
+    precisa ser revalidada do zero.
     """
     alvo = str(linguagem).lower()
     melhor = {}
@@ -237,8 +286,14 @@ def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG):
         if alvo not in {str(x).lower() for x in regra.linguagens}:
             continue
         if _afirma_vulnerabilidade(regra):
-            grau = GRAU_MEDIA if regra.taint else GRAU_ALTA
+            # Sob modo entre-arquivos o rebaixamento por taint deixa de fazer
+            # sentido: o motivo dele era o alcance, e o alcance mudou.
+            rebaixa = regra.taint and not entre_arquivos
+            grau = GRAU_MEDIA if rebaixa else GRAU_ALTA
         else:
+            # O eixo de AUDITORIA não é afetado pelo motor: nenhuma análise de
+            # fluxo transforma regra de auditoria em afirmação de
+            # vulnerabilidade.
             grau = GRAU_BAIXA
         for c in regra.cwes:
             n = _numero_cwe(c)
@@ -252,7 +307,8 @@ def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG):
     return melhor
 
 
-def grau_alcancabilidade(cwe, linguagem, destino=None, config=SEMGREP_CONFIG):
+def grau_alcancabilidade(cwe, linguagem, destino=None, config=SEMGREP_CONFIG,
+                         entre_arquivos=False):
     """Grau de uma CWE, ou `None` quando ela não é alcançável de forma alguma.
 
     `None` e `GRAU_BAIXA` são estados diferentes e não devem ser confundidos:
@@ -263,7 +319,8 @@ def grau_alcancabilidade(cwe, linguagem, destino=None, config=SEMGREP_CONFIG):
     n = _numero_cwe(cwe)
     if n is None:
         return None
-    return graus_alcancabilidade(linguagem, destino, config).get(n)
+    return graus_alcancabilidade(linguagem, destino, config,
+                                 entre_arquivos).get(n)
 
 
 def metadados_snapshot(destino=None, config=SEMGREP_CONFIG):

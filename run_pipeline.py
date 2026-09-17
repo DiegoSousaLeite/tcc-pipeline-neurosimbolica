@@ -64,10 +64,13 @@ from src.fase1_semgrep import (
     MOTIVO_NA,
     SEMGREP,
     SEMGREP_CONFIG,
+    ModoIndisponivelError,
     SemgrepError,
     SemgrepFileNotFoundError,
     SemgrepTimeoutError,
     executar_semgrep,
+    exigir_viabilidade,
+    motor_corrente,
 )
 from src.fase2_middleware import extrair_e_hidratar_contexto
 from src.fase5_auditoria import CATEGORIAS_ERRO, inicializar_relatorio, registrar_resultado
@@ -597,7 +600,7 @@ def novo_run_id() -> str:
 
 def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
                      inicio, fim, catalogo, sem_llm, cache_ativo, argv,
-                     sondagens=None):
+                     sondagens=None, entre_arquivos=False):
     """Registra a configuração completa da rodada.
 
     É o que permite, meses depois, dizer de qual código, ruleset, catálogo e
@@ -610,9 +613,14 @@ def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
         "inicio_utc": inicio.isoformat(),
         "fim_utc": fim.isoformat(),
         "duracao_s": round((fim - inicio).total_seconds(), 2),
+        # A identidade do MOTOR entra ao lado da do modelo local, e pelo mesmo
+        # motivo: permitir dizer, meses depois, qual motor produziu cada número.
+        # `versao` e `ruleset` continuam onde estavam para não quebrar quem lê
+        # manifestos das rodadas anteriores (`scripts/analise_rodada.py`).
         "semgrep": {
             "versao": versao_semgrep(),
             "ruleset": SEMGREP_CONFIG,
+            "motor": motor_corrente(entre_arquivos).como_dict(),
         },
         "catalogo_cwe": {
             "caminho": os.path.relpath(catalogo.caminho, BASE),
@@ -691,7 +699,14 @@ def resolver_simbolico(caso, cache_simbolico=None):
     caminho_arquivo = obter_arquivo(caso["repo_name"], caso["commit"],
                                     caso["arquivo"])
     log.info("    -> Fase 1: executando Semgrep...")
-    alerta, motivo, regras = executar_semgrep(caminho_arquivo, caso["cwe"])
+    # O modo vem do cache, e não de um parâmetro próprio: é o mesmo objeto que
+    # decide qual entrada serve este caso, então as duas decisões não podem
+    # divergir. Ler o motor de uma fonte e a invocação de outra reintroduziria,
+    # por outro caminho, o descasamento que o terceiro eixo da chave elimina.
+    entre_arquivos = bool(cache_simbolico is not None
+                          and cache_simbolico.motor.entre_arquivos)
+    alerta, motivo, regras = executar_semgrep(caminho_arquivo, caso["cwe"],
+                                              entre_arquivos)
 
     if alerta is None:
         status, contexto = "NAO_DETECTADO", ""
@@ -985,6 +1000,13 @@ def main():
     ap.add_argument("--sem-cache-simbolico", action="store_true",
                     help="Reexecuta Fases 1-2 sempre, sem ler nem gravar o "
                          "cache de resultado simbólico.")
+    ap.add_argument("--entre-arquivos", action="store_true",
+                    help="Liga a análise ENTRE ARQUIVOS do Semgrep (--pro). "
+                         "Desligada por padrão: ligá-la muda o conjunto de "
+                         "alertas, invalida o cache simbólico daquela população "
+                         "e torna a rodada incomparável com as Rodadas 1-3. "
+                         "Exige registro de viabilidade aprovado "
+                         "(scripts/verificar_pro.py).")
     ap.add_argument("--modelo", action="append", metavar="MODELO",
                     help=f"Modelo do braço. Repetível. Padrão: {MODELO_LLM}. "
                          f"Modelo local via Ollama: ollama:<tag> "
@@ -1011,6 +1033,16 @@ def main():
         ap.error("Informe um modo: --amostra N, --tudo, --fp-only ou --tp-only")
     if args.matriz and (args.modelo or args.prompt):
         ap.error("--matriz já define os braços; não combine com --modelo/--prompt")
+    # Antes de qualquer trabalho: pedir o modo sem viabilidade verificada aborta
+    # aqui, e não cai no CE em silêncio no meio da população.
+    if args.entre_arquivos:
+        try:
+            registro, _ = exigir_viabilidade()
+        except ModoIndisponivelError as e:
+            ap.error(str(e))
+        log.info("[!] Modo ENTRE-ARQUIVOS ligado (viabilidade: %s).",
+                 os.path.relpath(registro, BASE))
+        log.info("    Os alertas NÃO são comparáveis com os das Rodadas 1-3.")
 
     with open(DATASET_PATH, encoding="utf-8") as f:
         dataset = json.load(f)
@@ -1088,7 +1120,9 @@ def main():
 
     if args.sem_llm:
         log.info("[+] Modo --sem-llm: só cobertura simbólica (nenhuma chamada de API).")
-    cache_simbolico = CacheSimbolico(ativo=not args.sem_cache_simbolico)
+    cache_simbolico = CacheSimbolico(
+        ativo=not args.sem_cache_simbolico,
+        motor=motor_corrente(args.entre_arquivos))
     log.info("[+] Cache simbólico: %s (ruleset %s)",
              "ativo" if cache_simbolico.ativo else "DESATIVADO",
              cache_simbolico.versao_ruleset)
@@ -1105,7 +1139,8 @@ def main():
         destino = gravar_manifesto(
             dir_rodada, run_id, bracos, por_trilha, len(casos), inicio,
             datetime.now(timezone.utc), catalogo, args.sem_llm,
-            cache_simbolico.ativo, " ".join(sys.argv), sondagens)
+            cache_simbolico.ativo, " ".join(sys.argv), sondagens,
+            entre_arquivos=args.entre_arquivos)
         log.info("[+] Manifesto: %s", os.path.relpath(destino, BASE))
 
 
