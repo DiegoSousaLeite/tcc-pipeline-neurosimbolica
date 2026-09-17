@@ -65,6 +65,10 @@ A invalidação por mudança de motor SHALL alcançar as entradas `NAO_DETECTADO
 - **WHEN** o runner é invocado com a opção que desativa o cache simbólico
 - **THEN** as Fases 1 e 2 são executadas normalmente e o resultado não é lido do cache
 
+#### Scenario: Entradas dos dois motores coexistem
+- **WHEN** o mesmo caso foi executado sob os dois motores
+- **THEN** as duas entradas existem em disco simultaneamente e cada rodada recebe a que corresponde ao seu motor, sem que uma sobrescreva a outra
+
 ## ADDED Requirements
 
 ### Requirement: Medição sob conjunto de rulesets distinto não disputa o cache da rodada
