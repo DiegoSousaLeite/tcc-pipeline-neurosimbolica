@@ -63,14 +63,15 @@ from src.config import (
 from src.fase1_semgrep import (
     MOTIVO_NA,
     SEMGREP,
-    SEMGREP_CONFIG,
     ModoIndisponivelError,
     SemgrepError,
     SemgrepFileNotFoundError,
     SemgrepTimeoutError,
     executar_semgrep,
     exigir_viabilidade,
+    identidade_conjunto,
     motor_corrente,
+    rulesets_configurados,
 )
 from src.fase2_middleware import extrair_e_hidratar_contexto
 from src.fase5_auditoria import CATEGORIAS_ERRO, inicializar_relatorio, registrar_resultado
@@ -616,10 +617,19 @@ def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
         # A identidade do MOTOR entra ao lado da do modelo local, e pelo mesmo
         # motivo: permitir dizer, meses depois, qual motor produziu cada número.
         # `versao` e `ruleset` continuam onde estavam para não quebrar quem lê
-        # manifestos das rodadas anteriores (`scripts/analise_rodada.py`).
+        # manifestos das rodadas anteriores (`scripts/analise_rodada.py`);
+        # `ruleset` passa a ser a identidade do CONJUNTO, que para a
+        # configuração unitária é o nome do ruleset — exatamente o valor de
+        # antes.
+        #
+        # `rulesets` acrescenta a procedência de cada um. A distinção é
+        # metodológica: ruleset publicado no registry não foi escrito olhando
+        # para a nossa população; ruleset que sai de arquivo nosso pode ter
+        # sido, e o texto da monografia trata os dois casos de forma diferente.
         "semgrep": {
             "versao": versao_semgrep(),
-            "ruleset": SEMGREP_CONFIG,
+            "ruleset": identidade_conjunto(),
+            "rulesets": rulesets_configurados(),
             "motor": motor_corrente(entre_arquivos).como_dict(),
         },
         "catalogo_cwe": {
@@ -1123,7 +1133,7 @@ def main():
     cache_simbolico = CacheSimbolico(
         ativo=not args.sem_cache_simbolico,
         motor=motor_corrente(args.entre_arquivos))
-    log.info("[+] Cache simbólico: %s (ruleset %s)",
+    log.info("[+] Cache simbólico: %s (rulesets %s)",
              "ativo" if cache_simbolico.ativo else "DESATIVADO",
              cache_simbolico.versao_ruleset)
     log.info("=" * 44)

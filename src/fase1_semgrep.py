@@ -15,10 +15,106 @@ SEMGREP = os.environ.get(
     "SEMGREP_BIN",
     r"C:\Users\Soous\AppData\Local\Programs\Python\Python314\Scripts\semgrep.exe",
 )
+# --- conjunto de rulesets ------------------------------------------------
+#
 # p/default (registry amplo) reproduz as CWEs do dataset; o p/golang enxuto
 # perdia ~97 alertas (NAO_DETECTADO) por não ter regras para CWE-665/79/470/400/etc.
-SEMGREP_CONFIG = os.environ.get("SEMGREP_CONFIG", "p/default")
+#
+# A configuração aceita MAIS DE UM ruleset porque acrescentar cobertura não pode
+# custar a cobertura existente: trocar de ruleset já foi avaliado e recusado, e
+# a união é a única forma de somar sem subtrair. O padrão permanece unitário —
+# ligar um segundo ruleset muda o conjunto de alertas e, portanto, o objeto que
+# o braço neural tria; as Rodadas 1–3 mediram `p/default` sozinho, e a
+# comparabilidade só pode se perder por decisão explícita.
+
+# Separador da lista. Vírgula, e não espaço nem `os.pathsep`: identificador do
+# registry (`p/default`) e caminho local (`regras/go`) contêm barra, e no
+# Windows `os.pathsep` é `;`, que o shell come antes de a variável chegar aqui.
+_SEPARADOR_CONFIG = ","
+
+
+def _configs_de(texto):
+    """Rulesets declarados numa string de configuração, na ordem em que aparecem.
+
+    Entradas vazias são descartadas em silêncio (`"p/default,"` é um typo, não
+    um ruleset anônimo), mas a lista INTEIRA vazia não vira `p/default` por
+    omissão: quem apagou a variável pediu algo, e `montar_comando` recusa em vez
+    de invocar o motor sem regras.
+    """
+    return tuple(p.strip() for p in str(texto).split(_SEPARADOR_CONFIG)
+                 if p.strip())
+
+
+SEMGREP_CONFIGS = _configs_de(os.environ.get("SEMGREP_CONFIG", "p/default"))
+# Primeiro ruleset configurado. Mantido porque consumidores de um ruleset só
+# (snapshot do catálogo, URL do registry) continuam existindo; NÃO é a
+# identidade da configuração — para isso existe `identidade_conjunto`.
+SEMGREP_CONFIG = SEMGREP_CONFIGS[0] if SEMGREP_CONFIGS else ""
 SEMGREP_TIMEOUT = int(os.environ.get("SEMGREP_TIMEOUT", "240"))
+
+# Procedência de um ruleset. A distinção é metodológica, não organizacional: um
+# ruleset publicado no registry não foi escrito olhando para a nossa população, e
+# medir com ele não levanta a objeção de ajuste ao conjunto de teste. Um ruleset
+# que sai de arquivo local pode ter sido, e o texto da monografia precisa tratar
+# os dois casos de forma diferente.
+PROCEDENCIA_TERCEIROS = "terceiros"
+PROCEDENCIA_PROPRIA = "propria"
+
+# `p/`, `r/` e `s/` são os prefixos do registry do Semgrep; URL é registry
+# remoto por outro caminho.
+_RE_REGISTRY = re.compile(r"^(?:[prs]/|https?://)", re.IGNORECASE)
+
+
+class ConfiguracaoVaziaError(Exception):
+    """Nenhum ruleset configurado.
+
+    É erro, e não invocação sem `--config`: uma execução sem regras produz zero
+    alertas e faria a população INTEIRA parecer não detectada — o mesmo modo de
+    falha silenciosa do `settings.yml` corrompido, que já custou 200
+    não-detecções falsas a este projeto.
+    """
+
+
+def procedencia(config) -> str:
+    """Este ruleset é publicado por terceiros ou sai de arquivo nosso?
+
+    Tudo que não é identificador do registry conta como próprio, inclusive
+    caminho fora deste repositório. É o lado conservador: classificar como de
+    terceiros um arquivo que ninguém publicou dispensaria a ressalva
+    metodológica justamente onde ela pode ser necessária.
+    """
+    return (PROCEDENCIA_TERCEIROS if _RE_REGISTRY.match(str(config))
+            else PROCEDENCIA_PROPRIA)
+
+
+def identidade_conjunto(configs=None) -> str:
+    """Identidade do CONJUNTO de rulesets configurado.
+
+    Insensível à ordem (os nomes são ordenados) porque a ordem não altera a
+    união dos achados, e fazê-la alterar a identidade invalidaria cache por um
+    detalhe sem significado. Distinta para conjuntos distintos, inclusive quando
+    um contém o outro: `p/default` e `p/default+regras/go` não colidem.
+
+    É nome legível, e não hash, por dois motivos. O conjunto unitário fica
+    IDÊNTICO ao nome do ruleset — então as ~1.700 entradas de cache gravadas
+    quando a configuração era um ruleset só continuam válidas, sem migração. E
+    quem abrir um manifesto meses depois lê a configuração em vez de um digest
+    que só o código sabe traduzir.
+    """
+    alvo = SEMGREP_CONFIGS if configs is None else tuple(configs)
+    if not alvo:
+        raise ConfiguracaoVaziaError(
+            "nenhum ruleset configurado: SEMGREP_CONFIG está vazia. Uma "
+            "execução sem regras produziria zero alertas e faria toda a "
+            "população parecer não detectada.")
+    return "+".join(sorted(set(alvo)))
+
+
+def rulesets_configurados(configs=None) -> list:
+    """`[{'config': ..., 'procedencia': ...}]`, para o manifesto da rodada."""
+    alvo = SEMGREP_CONFIGS if configs is None else tuple(configs)
+    return [{"config": c, "procedencia": procedencia(c)} for c in alvo]
+
 
 # Versão da REGRA DE PAREAMENTO — a decisão de qual alerta do Semgrep pertence
 # ao caso. Subir isto invalida todo o cache simbólico (ver src/cache_simbolico.py):
@@ -272,23 +368,86 @@ def _normalizar(result: dict) -> dict:
     }
 
 
-def montar_comando(caminho_arquivo: str, entre_arquivos: bool = False) -> list:
+def montar_comando(caminho_arquivo: str, entre_arquivos: bool = False,
+                   configs=None) -> list:
     """Linha de comando do Semgrep para um alvo.
 
-    Com `entre_arquivos=False` — o padrão — devolve EXATAMENTE a mesma lista de
-    antes desta mudança. É a garantia de que ligar a capacidade não mexeu na
-    invocação de quem não a pediu: as Rodadas 1–3 mediram esta linha, e qualquer
-    argumento a mais aqui as tornaria irreproduzíveis.
+    Com configuração unitária e `entre_arquivos=False` — o padrão — devolve
+    EXATAMENTE a mesma lista de antes destas mudanças. É a garantia de que ligar
+    as capacidades não mexeu na invocação de quem não as pediu: as Rodadas 1–3
+    mediram esta linha, e qualquer argumento a mais aqui as tornaria
+    irreproduzíveis.
+
+    Mais de um ruleset vira `--config` repetido, na ORDEM CONFIGURADA. A ordem
+    não altera a união dos achados — por isso não entra na identidade do
+    conjunto —, mas a linha de comando reproduz o que foi pedido, e não uma
+    reordenação nossa, para que copiá-la do log e rodá-la à mão dê o mesmo
+    resultado.
     """
-    cmd = [SEMGREP, "--config", SEMGREP_CONFIG, "--sarif", "--quiet"]
+    alvo = SEMGREP_CONFIGS if configs is None else tuple(configs)
+    if not alvo:
+        raise ConfiguracaoVaziaError(
+            "nenhum ruleset configurado: SEMGREP_CONFIG está vazia. Uma "
+            "execução sem regras produziria zero alertas e faria toda a "
+            "população parecer não detectada.")
+    cmd = [SEMGREP]
+    for config in alvo:
+        cmd += ["--config", config]
+    cmd += ["--sarif", "--quiet"]
     if entre_arquivos:
         cmd.append("--pro")
     cmd.append(caminho_arquivo)
     return cmd
 
 
+def _cwes_da_regra(tags) -> tuple:
+    """Números de CWE que a regra declara, ordenados — a chave semântica dela."""
+    return tuple(sorted({n for n in (_numero_cwe(t) for t in tags)
+                         if n is not None}))
+
+
+def _posicao(result: dict) -> tuple:
+    loc = ((result.get("locations") or [{}])[0]).get("physicalLocation", {})
+    regiao = loc.get("region", {})
+    arquivo = (loc.get("artifactLocation") or {}).get("uri", "")
+    return (str(arquivo), regiao.get("startLine", 1), regiao.get("startColumn", 1))
+
+
+def deduplicar(results, regras) -> list:
+    """Achados equivalentes de rulesets diferentes contam como um só.
+
+    Equivalente é `(arquivo, posição, CWE)` — dois rulesets podem cobrir a mesma
+    fraqueza no mesmo ponto do código com regras de nomes diferentes. Sem
+    política, o número de alertas por arquivo passaria a depender de quantos
+    rulesets cobrem aquele padrão, e é esse número que alimenta o diagnóstico de
+    cobertura simbólica (`regras_nao_casadas`).
+
+    A CWE entra na chave: mesma posição com CWEs diferentes NÃO é duplicata,
+    porque descreve fraquezas distintas. Regra sem CWE alguma tem chave própria
+    (tupla vazia) e só deduplica contra outra igualmente sem CWE na mesma
+    posição.
+
+    Determinística: a ordem é `(arquivo, linha, coluna, check_id)` e o
+    sobrevivente é sempre o primeiro dela — não o primeiro da saída do Semgrep,
+    que é estável na prática mas é detalhe interno da ferramenta.
+
+    Não rebaixa status: o sobrevivente de um grupo declara as mesmas CWEs que os
+    descartados, então se algum do grupo casava com o gabarito, ele casa.
+    """
+    ordenados = sorted(results, key=lambda r: (*_posicao(r), _check_id(r)))
+    preservados, vistos = [], set()
+    for r in ordenados:
+        chave = (*_posicao(r), _cwes_da_regra(regras.get(r.get("ruleId"), [])))
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        preservados.append(r)
+    return preservados
+
+
 def executar_semgrep(caminho_arquivo: str, cwe: str,
-                     entre_arquivos: bool = False) -> ResultadoFase1:
+                     entre_arquivos: bool = False,
+                     configs=None) -> ResultadoFase1:
     """Roda o Semgrep no arquivo-alvo e devolve o alerta cuja CWE casa com a
     do dataset.
 
@@ -312,7 +471,7 @@ def executar_semgrep(caminho_arquivo: str, cwe: str,
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
     try:
         res = subprocess.run(
-            montar_comando(caminho_arquivo, entre_arquivos),
+            montar_comando(caminho_arquivo, entre_arquivos, configs),
             capture_output=True, timeout=SEMGREP_TIMEOUT, env=env,
         )
     except subprocess.TimeoutExpired:
@@ -356,6 +515,13 @@ def executar_semgrep(caminho_arquivo: str, cwe: str,
         regra.get("id"): regra.get("properties", {}).get("tags", [])
         for regra in run.get("tool", {}).get("driver", {}).get("rules", [])
     }
+
+    # A deduplicação só entra com configuração COMPOSTA. Com um ruleset só não
+    # há de onde vir achado equivalente de outra procedência, e aplicá-la mesmo
+    # assim poderia encolher `regras_nao_casadas` numa rodada unitária —
+    # alterando, sem ganho algum, a série que as Rodadas 1–3 mediram.
+    if len(SEMGREP_CONFIGS if configs is None else tuple(configs)) > 1:
+        results = deduplicar(results, regras)
 
     # Condição necessária E suficiente: a regra que emitiu o alerta declara a
     # CWE do gabarito. Havia aqui um fallback que aceitava o alerta quando ele

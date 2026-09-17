@@ -18,10 +18,10 @@ Por que é separado de `cache/`
 ------------------------------
 `cache/` guarda o CONTEÚDO de um arquivo num commit: a chave é imutável por
 construção (um SHA não muda), então aquele cache nunca invalida. O resultado
-simbólico depende da versão do ruleset do Semgrep, que muda. Misturar os dois
-violaria a invariante "o cache de fontes nunca invalida"; por isso a versão do
-ruleset entra no payload e uma divergência invalida a ENTRADA DAQUI, sem tocar
-em um único byte de `cache/`.
+simbólico depende do conjunto de rulesets do Semgrep, que muda. Misturar os dois
+violaria a invariante "o cache de fontes nunca invalida"; por isso a identidade
+do conjunto entra no payload e uma divergência invalida a ENTRADA DAQUI, sem
+tocar em um único byte de `cache/`.
 
 Chave: `(repo, commit, arquivo, cwe)` — a mesma granularidade de um caso.
 """
@@ -32,8 +32,8 @@ import os
 
 from .config import CACHE_SIMBOLICO_DIR
 from .fase1_semgrep import (
-    SEMGREP_CONFIG,
     VERSAO_PAREAMENTO,
+    identidade_conjunto,
     motor_corrente,
     motor_de_payload,
 )
@@ -50,11 +50,25 @@ VERSAO_FORMATO = 2
 class CacheSimbolico:
     """Leitura e gravação do resultado simbólico, indexado por caso.
 
-    `versao_ruleset` identifica o ruleset do Semgrep vigente e
+    `versao_ruleset` identifica o CONJUNTO de rulesets vigente e
     `versao_pareamento` a regra que decide qual alerta pertence ao caso. Uma
     entrada gravada sob qualquer uma das duas divergente é ignorada (não
-    apagada): ela continua sendo evidência do que aquele ruleset e aquela regra
+    apagada): ela continua sendo evidência do que aquele conjunto e aquela regra
     produziram.
+
+    O eixo é o conjunto, e não um ruleset isolado, porque acrescentar um segundo
+    ruleset muda o que o motor emite tanto quanto trocar o primeiro. Se a
+    identidade registrada descrevesse apenas um deles, uma rodada composta seria
+    servida do disco com os alertas da rodada unitária — e o experimento
+    reportaria como resultado do conjunto novo aquilo que o conjunto antigo
+    produziu. A invalidação alcança os `NAO_DETECTADO` com mais razão ainda: é
+    neles que o ruleset acrescentado pode produzir resultado diferente, e
+    aceitá-los do disco esconderia o único ganho que justifica acrescentá-lo.
+
+    A identidade do conjunto unitário é o nome do próprio ruleset, então as
+    entradas gravadas quando a configuração era um ruleset só continuam válidas
+    enquanto ele continuar sendo a configuração — e a ordem dos rulesets não
+    invalida nada, porque não altera a união dos achados.
 
     Os dois eixos não são redundantes. O ruleset muda quando o Semgrep passa a
     enxergar coisas diferentes; a regra de pareamento muda quando a pipeline
@@ -65,11 +79,14 @@ class CacheSimbolico:
     """
 
     def __init__(self, diretorio: str = CACHE_SIMBOLICO_DIR,
-                 versao_ruleset: str = SEMGREP_CONFIG, ativo: bool = True,
+                 versao_ruleset: str = None, ativo: bool = True,
                  versao_pareamento: int = VERSAO_PAREAMENTO,
                  motor=None):
         self.diretorio = diretorio
-        self.versao_ruleset = versao_ruleset
+        # Derivada na construção, e não no import: a configuração vazia é erro,
+        # e um erro no import derrubaria até quem só quisesse ler o módulo.
+        self.versao_ruleset = (identidade_conjunto()
+                               if versao_ruleset is None else versao_ruleset)
         self.versao_pareamento = versao_pareamento
         self.motor = motor if motor is not None else motor_corrente()
         self.ativo = ativo
@@ -127,8 +144,11 @@ class CacheSimbolico:
             log.debug("formato divergente (%s), recomputando: %s",
                       payload.get("versao_formato"), destino)
             return None
+        # Conjunto de rulesets divergente. `p/default` e `p/default+regras/go`
+        # são conjuntos distintos e têm identidades distintas — entrada de um
+        # não serve para o outro, inclusive quando um contém o outro.
         if payload.get("versao_ruleset") != self.versao_ruleset:
-            log.debug("ruleset divergente (%s != %s), recomputando: %s",
+            log.debug("conjunto de rulesets divergente (%s != %s), recomputando: %s",
                       payload.get("versao_ruleset"), self.versao_ruleset, destino)
             return None
         # Ausente é o estado das entradas gravadas antes deste campo existir:

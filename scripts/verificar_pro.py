@@ -78,8 +78,10 @@ sys.path.insert(0, BASE)
 
 from src.fase1_semgrep import (  # noqa: E402
     SEMGREP,
-    SEMGREP_CONFIG,
+    SEMGREP_CONFIGS,
     _cwe_nas_tags,
+    identidade_conjunto,
+    rulesets_configurados,
 )
 from src.fonte import caminho_cache  # noqa: E402
 
@@ -266,8 +268,10 @@ def rodar_semgrep(alvo, pro):
     espera um pipe que nunca fecha, e a execução trava. Medido: 56 minutos
     contra um teto de 20, e só destravou quando os netos foram mortos à mão.
     """
-    cmd = [SEMGREP, "--config", SEMGREP_CONFIG, "--sarif", "--quiet",
-           "--dataflow-traces"]
+    cmd = [SEMGREP]
+    for config in SEMGREP_CONFIGS:
+        cmd += ["--config", config]
+    cmd += ["--sarif", "--quiet", "--dataflow-traces"]
     if pro:
         cmd.append("--pro")
     cmd.append(alvo)
@@ -716,7 +720,8 @@ def executar(etapas, n_por_cwe, manter):
     relatorio = {
         "data": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "semgrep_versao": versao_semgrep(),
-        "ruleset": SEMGREP_CONFIG,
+        "ruleset": identidade_conjunto(),
+        "rulesets": rulesets_configurados(),
         "etapas": {},
     }
 

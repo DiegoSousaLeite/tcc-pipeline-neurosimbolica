@@ -17,6 +17,10 @@ Duas decisões que este módulo materializa:
 - **O conjunto é derivado do catálogo, nunca embutido no código.** O ruleset é
   configurável por `SEMGREP_CONFIG`; uma lista fixa passaria a mentir no instante
   em que ele mudasse, e mentiria em silêncio.
+- **Mais de um ruleset é a união dos catálogos.** O motor recebe todos numa
+  invocação só, então uma CWE coberta por qualquer um deles é alcançável naquela
+  execução. O cache de catálogo, porém, é POR ruleset: eles são buscados e mudam
+  de forma independente.
 
 O que ele NÃO é: fonte da regra de pareamento. A comparação vem de
 `fase1_semgrep._numero_cwe`, importada e não copiada — se a alcançabilidade
@@ -30,7 +34,7 @@ from datetime import datetime
 from typing import NamedTuple
 
 from .config import CACHE_SIMBOLICO_DIR
-from .fase1_semgrep import SEMGREP_CONFIG, _numero_cwe
+from .fase1_semgrep import SEMGREP_CONFIG, SEMGREP_CONFIGS, _numero_cwe
 
 
 class RulesetIndisponivelError(Exception):
@@ -151,20 +155,28 @@ def _garantir_cache(destino, url):
 
 
 # Releitura do JSON (2 MB) a cada consulta custaria caro num laço sobre a
-# população inteira. A chave inclui mtime e tamanho: refazer a busca invalida a
-# memória sozinha, sem que o consumidor precise saber que ela existe.
+# população inteira. `destino -> (chave, regras)`, com a chave em mtime e
+# tamanho: refazer a busca invalida a memória sozinha, sem que o consumidor
+# precise saber que ela existe.
+#
+# A memória é POR RULESET, e não do último snapshot lido — que era o
+# comportamento anterior, correto enquanto houvesse um ruleset só. Com dois
+# configurados, guardar um só faria cada consulta reler do disco o catálogo do
+# outro, alternadamente, num laço sobre a população inteira.
 _MEMORIA = {}
 
 
-def carregar_regras(destino=None, config=SEMGREP_CONFIG):
-    """`check_id` -> `Regra(cwes, linguagens)`, do cache ou do registry."""
+def carregar_regras(destino=None, config=None):
+    """`check_id` -> `Regra(cwes, linguagens)` de UM ruleset, do cache ou do registry."""
+    config = SEMGREP_CONFIG if config is None else config
     destino = os.path.abspath(destino or caminho_cache(config))
     _garantir_cache(destino, url_registry(config))
 
     st = os.stat(destino)
-    chave = (destino, st.st_mtime_ns, st.st_size)
-    if chave in _MEMORIA:
-        return _MEMORIA[chave]
+    chave = (st.st_mtime_ns, st.st_size)
+    memorizado = _MEMORIA.get(destino)
+    if memorizado is not None and memorizado[0] == chave:
+        return memorizado[1]
 
     with open(destino, encoding="utf-8") as f:
         dados = json.load(f)
@@ -178,9 +190,42 @@ def carregar_regras(destino=None, config=SEMGREP_CONFIG):
         )
         for r in dados.get("rules", [])
     }
-    _MEMORIA.clear()          # só interessa o snapshot corrente
-    _MEMORIA[chave] = regras
+    _MEMORIA[destino] = (chave, regras)
     return regras
+
+
+def _configs_alvo(config=None, configs=None):
+    """Quais rulesets uma consulta cobre.
+
+    `configs` (plural) manda; `config` (singular) é o atalho de um ruleset só,
+    preservado porque os consumidores que passam um catálogo de teste passam
+    também o ruleset dele. Sem nenhum dos dois, vale a configuração corrente.
+    """
+    if configs is not None:
+        return tuple(configs)
+    if config is not None:
+        return (config,)
+    return SEMGREP_CONFIGS
+
+
+def regras_configuradas(destino=None, config=None, configs=None):
+    """Todas as regras dos rulesets configurados, como sequência.
+
+    Sequência, e não dicionário `check_id -> Regra`: rulesets diferentes trazem
+    regras de MESMO identificador — o `p/gosec` e o `p/default` compartilham 22
+    delas —, e fundir por chave descartaria silenciosamente uma das versões. Se
+    a descartada fosse a de grau mais alto, a CWE seria rebaixada por um detalhe
+    de nomenclatura.
+
+    Um `destino` explícito é tratado como catálogo único, seja qual for a
+    configuração corrente: é o caminho dos testes e dos scripts que consultam um
+    snapshot específico.
+    """
+    if destino is not None:
+        return list(carregar_regras(destino).values())
+    return [regra
+            for c in _configs_alvo(config, configs)
+            for regra in carregar_regras(None, c).values()]
 
 
 class Alcancaveis(frozenset):
@@ -200,12 +245,18 @@ class Alcancaveis(frozenset):
         return obj
 
 
-def cwes_alcancaveis(linguagem, destino=None, config=SEMGREP_CONFIG,
-                     entre_arquivos=False):
+def cwes_alcancaveis(linguagem, destino=None, config=None,
+                     entre_arquivos=False, configs=None):
     """CWEs que alguma regra DA LINGUAGEM declara, com a incerteza declarada.
 
     Devolve números inteiros, não strings: `CWE-077` e `CWE-77` são a mesma
     fraqueza escrita de duas formas, e comparar texto as separaria.
+
+    O conjunto é a UNIÃO dos catálogos configurados, porque o motor recebe todos
+    os rulesets numa invocação só: uma CWE coberta por regra de qualquer um
+    deles é alcançável naquela execução. Derivar de um só quando há vários
+    subestimaria a cobertura e recusaria, na colheita, população que o motor
+    detectaria — o defeito exato que esta capability existe para prevenir.
 
     Sob o modo entre-arquivos o conjunto é marcado como **limite inferior**. As
     regras próprias desse modo não constam do catálogo público do registry, e
@@ -222,7 +273,7 @@ def cwes_alcancaveis(linguagem, destino=None, config=SEMGREP_CONFIG,
     """
     alvo = str(linguagem).casefold()
     numeros = set()
-    for regra in carregar_regras(destino, config).values():
+    for regra in regras_configuradas(destino, config, configs):
         if not any(str(lin).casefold() == alvo for lin in regra.linguagens):
             continue
         for tag in regra.cwes:
@@ -232,8 +283,8 @@ def cwes_alcancaveis(linguagem, destino=None, config=SEMGREP_CONFIG,
     return Alcancaveis(numeros, limite_inferior=entre_arquivos)
 
 
-def cwe_alcancavel(cwe, linguagem, destino=None, config=SEMGREP_CONFIG,
-                   entre_arquivos=False):
+def cwe_alcancavel(cwe, linguagem, destino=None, config=None,
+                   entre_arquivos=False, configs=None):
     """Alguma regra da linguagem declara ESTA CWE?
 
     O casamento é pelo número inteiro, com `_numero_cwe` da Fase 1: `CWE-77` e
@@ -247,7 +298,8 @@ def cwe_alcancavel(cwe, linguagem, destino=None, config=SEMGREP_CONFIG,
     alvo = cwe if isinstance(cwe, int) else _numero_cwe(cwe)
     if alvo is None:
         return False
-    return alvo in cwes_alcancaveis(linguagem, destino, config, entre_arquivos)
+    return alvo in cwes_alcancaveis(linguagem, destino, config, entre_arquivos,
+                                    configs)
 
 
 def _afirma_vulnerabilidade(regra):
@@ -261,8 +313,8 @@ def _afirma_vulnerabilidade(regra):
                for s in regra.subcategorias)
 
 
-def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG,
-                          entre_arquivos=False):
+def graus_alcancabilidade(linguagem, destino=None, config=None,
+                          entre_arquivos=False, configs=None):
     """`{numero_da_cwe: grau}` para as CWEs alcançáveis naquela linguagem.
 
     Devolve o mapa inteiro, e não uma consulta por vez, porque o relatório da
@@ -278,11 +330,20 @@ def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG,
 
     A validação empírica da escala (alta 11,30 %, media 1,67 %, baixa 0,30 %)
     foi medida sob o CE e NÃO transfere: sob o modo entre-arquivos a escala
-    precisa ser revalidada do zero.
+    precisa ser revalidada do zero. Pelo mesmo motivo ela não transfere entre
+    conjuntos de rulesets: a evidência colhida sob um conjunto não sustenta
+    outro, e a separação precisa ser remedida por conjunto em uso.
+
+    A melhor regra é procurada em TODOS os rulesets configurados. O critério já
+    vigente é que basta uma regra capaz para o motor ter chance de alcançar a
+    CWE; limitar a busca a um ruleset o contradiria assim que houvesse mais de
+    um. A consequência é intencional: uma CWE hoje em grau intermediário por só
+    ter regra de taint sobe de grau quando outro ruleset traz regra sintática
+    que afirma vulnerabilidade.
     """
     alvo = str(linguagem).lower()
     melhor = {}
-    for regra in carregar_regras(destino, config).values():
+    for regra in regras_configuradas(destino, config, configs):
         if alvo not in {str(x).lower() for x in regra.linguagens}:
             continue
         if _afirma_vulnerabilidade(regra):
@@ -307,8 +368,8 @@ def graus_alcancabilidade(linguagem, destino=None, config=SEMGREP_CONFIG,
     return melhor
 
 
-def grau_alcancabilidade(cwe, linguagem, destino=None, config=SEMGREP_CONFIG,
-                         entre_arquivos=False):
+def grau_alcancabilidade(cwe, linguagem, destino=None, config=None,
+                         entre_arquivos=False, configs=None):
     """Grau de uma CWE, ou `None` quando ela não é alcançável de forma alguma.
 
     `None` e `GRAU_BAIXA` são estados diferentes e não devem ser confundidos:
@@ -319,19 +380,30 @@ def grau_alcancabilidade(cwe, linguagem, destino=None, config=SEMGREP_CONFIG,
     n = _numero_cwe(cwe)
     if n is None:
         return None
-    return graus_alcancabilidade(linguagem, destino, config,
-                                 entre_arquivos).get(n)
+    return graus_alcancabilidade(linguagem, destino, config, entre_arquivos,
+                                 configs).get(n)
 
 
-def metadados_snapshot(destino=None, config=SEMGREP_CONFIG):
-    """Origem, caminho e data do snapshot do ruleset em uso.
+def metadados_snapshot(destino=None, config=None):
+    """Origem, caminho e data do snapshot de UM ruleset.
 
     A data é a de escrita do arquivo — um `git checkout` a reescreveria. Ela diz
     "não mais velho que isto", que é o suficiente para o desvio ficar visível.
+
+    Sem `config`, descreve o PRIMEIRO ruleset configurado. Para a configuração
+    inteira use `metadados_snapshots`: descrever um conjunto composto por um só
+    dos seus snapshots é a mentira por omissão que este módulo existe para
+    evitar.
     """
+    config = SEMGREP_CONFIG if config is None else config
     destino = os.path.abspath(destino or caminho_cache(config))
     regras = carregar_regras(destino, config)
     obtido_em = datetime.fromtimestamp(
         os.path.getmtime(destino)).astimezone().isoformat(timespec="seconds")
     return Snapshot(origem=url_registry(config), caminho=destino,
                     obtido_em=obtido_em, regras=len(regras))
+
+
+def metadados_snapshots(configs=None):
+    """Um `Snapshot` por ruleset configurado, na ordem da configuração."""
+    return [metadados_snapshot(config=c) for c in _configs_alvo(configs=configs)]
