@@ -601,3 +601,100 @@ Registrado aqui porque afeta a reprodutibilidade que o texto vai afirmar.
 - **Persistência:** são arquivos comuns em disco; sobrevivem a desligamento.
 - **Ressalva única:** o eixo `versao_ruleset` grava a string `"p/default"`, que não
   muda quando o conteúdo do ruleset muda no servidor. É a ameaça da §3.4.
+
+
+## 10. LIMITAÇÃO NÃO DECLARADA: a matriz comercial nunca foi executada
+
+> Registrado em 2026-09-17 pela change `escolha-modelo-faixa-media`. Levantamento
+> completo, com preços e custo calculado, em `docs/ESCOLHA-MODELO-COMERCIAL.md`.
+
+### 10.1 O que existe de fato (vai para limitações)
+
+**Nenhuma rodada comercial foi executada neste trabalho.** Todas as medições
+publicáveis — Rodadas 1 a 6 — vêm de modelos locais (`qwen2.5-coder:7b` e
+`gemma2:9b`), servidos por Ollama.
+
+O total de vereditos comerciais do projeto inteiro é **17**, mais **5**
+`API_ERROR`. Conferível nos CSVs:
+
+| pasta em `results/` | modelo | linhas | vereditos válidos | `API_ERROR` |
+|---|---|---:|---:|---:|
+| `piloto-gemini/…__baseline.csv` | `gemini-2.5-flash-lite` | 35 | **10** (4 VP, 6 FP) | 1 |
+| `piloto-gemini/…__especialista.csv` | `gemini-2.5-flash-lite` | 35 | **7** (2 VP, 5 FP) | 4 |
+| `sizing-fp/` | `gemini-2.5-flash-lite` | 965 | **0** — rodada `--sem-llm` | 0 |
+| `cobertura-tp-dataset/` | `gemini-2.5-flash-lite` | 57 | **0** — idem | 0 |
+| `20260729T181817Z-4961c9b/` | `gpt-4o-mini` | 12 | **0** — nenhuma chamada | 0 |
+| **total comercial** | | | **17** | **5** |
+
+Contra isso, só o braço de triagem local soma 3.172 chamadas por rodada, em três
+rodadas. A ordem de grandeza da diferença é de **10⁴**.
+
+Os 17 ainda são ruins: no baseline, 4 de 5 vulneráveis viraram falso negativo e
+3 de 5 seguros viraram falso positivo; no especialista, 2 de 2 vulneráveis
+perdidos. Com n=17 isso é anedota — mas certamente **não** é evidência de
+superioridade comercial, e o texto não pode sugerir que seja.
+
+**Consequência para a redação:** toda conclusão do trabalho está escopada em
+*"com modelos locais de 7–9 B quantizados"*. Isso precisa aparecer explicitamente
+no capítulo de limitações, e não só ser inferível da tabela de configuração.
+
+### 10.2 A frase que a banca vai cobrar
+
+A spec `matriz-experimental` (`openspec/specs/matriz-experimental/spec.md`) diz,
+textualmente:
+
+> "O conjunto padrão de modelos SHALL permanecer o par comercial (Gemini e GPT),
+> formando a **matriz 2x2 de referência do experimento**; modelos adicionais,
+> como os executados localmente, SHALL entrar apenas quando nomeados
+> explicitamente."
+
+Ou seja: **o desenho declara o par comercial como a referência, e o modelo local
+como o caso excepcional — e o que foi executado foi exatamente o contrário.**
+Quem ler a spec ou uma descrição de metodologia derivada dela vai entender que a
+matriz 2x2 comercial foi usada. Ela nunca rodou.
+
+Isso não é erro de execução, é **descompasso entre desenho e execução que o texto
+precisa assumir de frente**. Duas saídas, e a escolha é de redação:
+
+1. Declarar a limitação e manter o desenho como está, explicando que a matriz de
+   referência não foi executada por indisponibilidade de cota (o tier grátis do
+   Gemini permite 20 req/dia, o que torna 3.172 chamadas impossíveis por um
+   motivo que não é econômico — a rodada custaria US$ 0,45).
+2. Reescrever a descrição do desenho para que o modelo local seja o padrão e o
+   par comercial, o eixo adicional — o que é uma descrição honesta do que
+   aconteceu, mas exige mexer na spec.
+
+**A opção 1 é mais barata e mais defensável**, porque preserva o registro de que
+o desenho original era outro e diz por que ele não foi cumprido.
+
+### 10.3 O que mudaria se uma rodada comercial fosse executada
+
+Ver `docs/ESCOLHA-MODELO-COMERCIAL.md` para o levantamento completo. O resumo
+que interessa ao texto:
+
+- Uma rodada de dois braços em faixa média custa entre **US$ 1,43 e US$ 12,43**,
+  calculado sobre os tokens medidos da Rodada 4 com preços verificados em
+  2026-09-17. **Custo não é, e nunca foi, o impedimento.**
+- Rodar os dois modelos comerciais que a spec nomeia como padrão
+  (`gemini-2.5-flash-lite` e `gpt-4o-mini`, US$ 1,12 os dois) **não responderia à
+  pergunta de escopo**: os dois são a faixa barata de cada fornecedor e
+  provavelmente estão na mesma banda de capacidade de um 7 B especializado em
+  código. Seria a Rodada 6 de novo — gasto por uma confirmação que não move o
+  teto.
+- O modelo recomendado é `claude-sonnet-5` (US$ 12,43 por rodada, com o ajuste de
+  tokenizador), com `gpt-5.6-terra` como concorrente próximo e `claude-haiku-4-5`
+  como opção econômica. Critério, recusas e um conflito de interesse declarado
+  estão na §4 daquele documento.
+- **Ganho metodológico independente do modelo:** as 26 perdas por estouro de
+  janela da Rodada 4 (prompts de até ~27.420 tokens contra um teto efetivo de
+  7.680) **desaparecem** em qualquer candidato comercial, cuja janela verificada
+  é de no mínimo 200k. Com elas some a perda enviesada por tamanho de função, que
+  hoje está declarada como ameaça à validade.
+- **Se a banca perguntar por que não usaram modo batch** (desconto de 50 % nos
+  três fornecedores, verificado em 2026-09-17): a resposta está na §8 de
+  `docs/ESCOLHA-MODELO-COMERCIAL.md`. Resumo: o desconto é real, mas economiza
+  US$ 6 numa decisão cuja faixa inteira vai de US$ 0,22 a US$ 62 — e custa de 3 a
+  5 vezes mais integração, porque batch quebra o contrato síncrono de
+  `src/provedores/` e mexe na lógica de checkpoint que garante o pareamento entre
+  braços. **Preço não foi o impedimento em nenhum momento deste trabalho; cota e
+  vazão foram.**
