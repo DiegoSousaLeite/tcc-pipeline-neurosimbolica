@@ -195,11 +195,73 @@ Serve para **G1** (justificativa do Semgrep) e para a seção de ameaças:
 `p/default` e apenas 2 só no `p/golang`, nenhuma presente no corpus. Confirma a
 escolha do `p/default` já registrada em `provadeconceito.tex:247`.
 
+### 3.5 O alcance entre arquivos não era o limitante (RESULTADO NEGATIVO, 2026-09-15)
+
+**O que se testou.** As duas maiores CWEs da classe positiva são baldes secos
+(CWE-22: 114 pares, 0 detecções; CWE-918: 112 pares, 1), e a hipótese era que a
+causa fosse o alcance do motor: o Semgrep CE rastreia *taint* só dentro de um
+arquivo, e **0 de 807 alertas** do corpus trouxeram trilha de dataflow. O
+Semgrep Pro analisa entre arquivos. Portão: `scripts/verificar_pro.py`.
+
+**O que se mediu**, com conta gratuita e Semgrep 1.167.0:
+
+| pergunta | resposta |
+|---|---|
+| O tier gratuito entrega o modo entre-arquivos? | **Sim.** Projeto controlado: CE 0 trilhas entre arquivos, Pro 1. |
+| Ele produz trilha em repositórios reais? | **Sim.** 9 trilhas, em 3 de 10 repositórios, atravessando até 3 arquivos. |
+| Quanto custa? | **4–6× mais lento.** `seaweedfs` 124 s → 749 s; `mattermost` estourou 20 min por modo. |
+| **As trilhas alcançam os casos do gabarito?** | **Não, em nenhum dos 6 casos medidos.** Ver tabela abaixo. |
+
+**A medição por caso** (`--etapa gabarito`, 2026-09-15/16), aplicando a mesma
+regra de pareamento da Fase 1 sobre o arquivo do gabarito, com o repositório
+inteiro em escopo nos dois modos:
+
+| caso | CWE | CE | Pro | ganho |
+|---|---|---|---|---|
+| `seaweedfs/seaweedfs@4f8af455bf` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `1panel-dev/1panel@278a562320` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `getarcaneapp/arcane@67fae1255d` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `openlistteam/openlist@5a5d8d6e0e` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `abhinavxd/libredesk@f7aa1ef2eb` | 918 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `oasdiff/oasdiff@c01d48dae4` | 918 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `gogs/gogs@0089c4c8e5` | 918 | NAO_DETECTADO | *timeout 900 s* | sem dado |
+
+**6 casos com dado, 0 detecções novas.** Em 5 deles o arquivo do gabarito não
+recebeu **alerta nenhum** em nenhum dos dois motores; no `gogs` o CE emitiu 1
+alerta, de outra CWE. O `seaweedfs` é o caso mais ilustrativo: 849 alertas no
+repositório e **0** nos dois arquivos do gabarito, com as 6 trilhas entre
+arquivos caindo em `webdav_server.go`, `filer_server_handlers.go` e
+`file_browser_handlers.go`.
+
+**A interpretação.** `regras_nao_casadas=[]` com o repositório inteiro em escopo
+significa que **nenhuma regra olha aqueles arquivos**. Isso é cobertura de
+regra, não alcance — e alcance entre arquivos não conserta arquivo que regra
+nenhuma examina.
+
+**O que isso autoriza escrever.** *"A análise entre arquivos do Semgrep Pro foi
+verificada como disponível e funcional no tier gratuito, e não produziu nenhuma
+detecção adicional em 6 casos da população (3 de CWE-22, 3 de CWE-918)
+avaliados sob os dois motores sobre o repositório completo."* A medição está em
+`data/viabilidade_pro_2026091{5,6}.json`.
+
+**O que ainda não autoriza.** Afirmar que o ganho é zero na população inteira:
+6 casos de 226 é amostra pequena, escolhida por espaçamento uniforme e não
+aleatória, e o timeout do `gogs` mostra que repositórios grandes ficam
+sub-representados — justamente os que teriam mais camadas para atravessar. O
+enunciado honesto é sobre os casos avaliados, não sobre a população.
+
+**Encaminhamento.** O caminho que a evidência indica é `p/gosec` — regras
+sintáticas (`G304` para CWE-22, `G107` para CWE-918) que não dependem de rastro
+de fluxo. Ver a change `ruleset-gosec`.
+
+---
+
 ### 3.4 Ameaças à validade a acrescentar
 
 | ameaça | evidência |
 |---|---|
 | Ruleset não fixado | `p/default` muda do lado do servidor; o cache grava só a string. Revalidado nesta rodada (1.074 regras, mesmas 34 CWEs), mas não fixado. |
+| **Motor não fixado** (se o modo entre-arquivos for adotado) | O Semgrep Pro é binário proprietário (301,8 MB) baixado de servidor de terceiros, sem versionamento sob nosso controle. **Agrava a ameaça acima**: não é só o ruleset que muda do lado do servidor — o motor também. Medido: instalar o binário alterou o comportamento do CE nesta máquina (com `--dataflow-traces`, 0→1 trilha e ~6 s→~16 s no mesmo alvo), mesmo sem `--pro` e mesmo com `--oss-only`. A Fase 1 não passa `--dataflow-traces` e 25 casos reexecutados do cache deram 25 resultados idênticos, então as Rodadas 1–3 continuam reproduzíveis — mas "CE" deixou de ser um estado único na máquina. |
 | "Alcançável" binário superestima cobertura | CWE-918 entrou com 112 pares tendo **uma** regra de taint; CWE-22 com 114 e duas regras estreitas. |
 | Concorrência de memória em máquina única | Semgrep e `llama-server` disputam RAM; 488 casos falharam com `STATUS_DLL_INIT_FAILED`. Contornado separando Fase 1 das fases neurais. |
 | Falha de esteira reprodutível | 2 casos (`harness/harness`, CWE-79) em laço degenerativo do modelo quantizado, em todas as rodadas. |
@@ -253,6 +315,21 @@ O capítulo novo absorveria: configuração (§2.1), população (§2.2), result
 | **A1** | Acerto do LLM só se liga à 1ª coluna do detector | Matrizes já são separadas no código; falta figura + texto |
 | **A2** | Classificação científica da metodologia | Não iniciado |
 | **A3** | Cronograma: prazos, ponto crítico, contingência | **Munição pronta** — §3.1 é o ponto crítico e §3.4 as contingências |
+
+---
+
+## 6.5 Correção de método: o critério de um portão
+
+O portão do modo entre-arquivos classificou `viavel` com o critério "≥1 trilha
+entre arquivos no alvo". Isso mede a **capacidade da ferramenta**, não o **ganho
+na população** — e as duas divergiram: o portão passou e o cruzamento manual
+mostrou 0 detecções nos casos do gabarito.
+
+**Um portão que passa quando o ganho não chega aos casos não é portão.** Para
+`ruleset-gosec` e para qualquer troca futura de motor ou de ruleset, o critério
+tem que ser **detecção nos casos do gabarito**, medida sobre a mesma população,
+e não "a ferramenta funciona". Registrar isto no texto, se a seção de método
+discutir como as decisões de ferramenta foram tomadas.
 
 ---
 
