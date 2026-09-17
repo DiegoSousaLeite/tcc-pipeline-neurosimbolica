@@ -8,22 +8,54 @@ Existe porque a pergunta *"o motor tem regra para esta CWE neste arquivo?"* é p
 
 A alcançabilidade é por linguagem e o casamento é por identificador completo de CWE, reaproveitando a comparação vigente no pareamento. Uma segunda cópia da comparação divergiria no primeiro ajuste, e o defeito a evitar é justamente o casamento por substring que o pareamento acabou de corrigir: se a alcançabilidade aceitasse por um critério e o pareamento recusasse por outro, a colheita produziria casos que a Fase 1 descartaria.
 ## Requirements
-### Requirement: Conjunto de CWEs alcançáveis derivado do ruleset
-O sistema SHALL determinar, a partir do ruleset em uso, o conjunto de CWEs que o motor simbólico é capaz de detectar numa dada linguagem. O conjunto SHALL ser derivado do catálogo de regras a cada consulta, e NÃO SHALL ser uma lista fixa no código.
 
-O ruleset é configurável por `SEMGREP_CONFIG`. Uma lista fixa passaria a mentir no instante em que ele mudasse, e mentiria em silêncio — não há como um valor embutido no código perceber que o catálogo do servidor mudou.
+### Requirement: Conjunto de CWEs alcançáveis derivado do ruleset
+O sistema SHALL determinar, a partir da **união dos catálogos dos rulesets em uso** **e do motor em uso**, o conjunto de CWEs que o motor simbólico é capaz de detectar numa dada linguagem. O conjunto SHALL ser derivado dos catálogos a cada consulta, e NÃO SHALL ser uma lista fixa no código.
+
+Os rulesets são configuráveis por `SEMGREP_CONFIG`. Uma lista fixa passaria a mentir no instante em que a configuração mudasse, e mentiria em silêncio — não há como um valor embutido no código perceber que o catálogo do servidor mudou, nem que um segundo ruleset foi acrescentado.
+
+A união é o critério correto porque o motor recebe todos os rulesets numa invocação só: uma CWE coberta por regra de qualquer um deles é alcançável naquela execução. Derivar de um só quando há vários configurados subestimaria a cobertura e recusaria, na colheita, população que o motor detectaria — o defeito exato que esta capability existe para prevenir.
+
+O motor é o terceiro eixo pelo mesmo argumento. O catálogo do registry descreve as regras da edição aberta; o modo entre-arquivos acrescenta regras próprias, que não constam daquele catálogo, e altera o alcance das regras que constam — uma regra de taint que hoje só enxerga dentro do arquivo passa a atravessar arquivos. Uma consulta que ignore o motor subestimaria a cobertura em silêncio.
+
+Enquanto a consulta não souber enumerar as regras próprias do modo entre-arquivos, ela SHALL declarar essa limitação em vez de omiti-la: um conjunto derivado apenas dos catálogos abertos é **limite inferior** da cobertura do motor com o modo ligado, e tratá-lo como exato recusaria população que o motor teria detectado.
+
+O cache de catálogo SHALL ser **por ruleset**, e não pelo conjunto. Rulesets são buscados e mudam independentemente; cachear por conjunto rebuscaria o catálogo inteiro de um deles toda vez que outro fosse acrescentado ou retirado.
+
+Regras de rulesets distintos que compartilhem o mesmo identificador SHALL ser preservadas separadamente. Rulesets publicados compartilham regras — `p/gosec` e `p/default` têm 22 em comum —, e fundir os catálogos por chave descartaria silenciosamente uma das versões; se a descartada fosse a de grau mais alto, a CWE seria rebaixada por um detalhe de nomenclatura.
 
 #### Scenario: CWE declarada por regra da linguagem é alcançável
-- **WHEN** alguma regra do ruleset declara a CWE e tem a linguagem consultada em `languages`
+- **WHEN** alguma regra de algum ruleset configurado declara a CWE e tem a linguagem consultada em `languages`
 - **THEN** a CWE consta do conjunto alcançável
 
-#### Scenario: CWE ausente do ruleset não é alcançável
-- **WHEN** nenhuma regra do ruleset declara a CWE
+#### Scenario: CWE ausente de todos os rulesets não é alcançável
+- **WHEN** nenhuma regra de nenhum ruleset configurado declara a CWE
 - **THEN** a CWE não consta do conjunto alcançável
 
 #### Scenario: Conjunto acompanha o ruleset configurado
-- **WHEN** o ruleset configurado muda
-- **THEN** o conjunto é recalculado a partir do novo catálogo, sem edição de código
+- **WHEN** o conjunto de rulesets configurado muda
+- **THEN** o conjunto alcançável é recalculado a partir dos novos catálogos, sem edição de código
+
+#### Scenario: Acréscimo de ruleset só amplia
+- **WHEN** um ruleset é acrescentado a uma configuração existente
+- **THEN** o conjunto alcançável resultante contém o anterior, e nenhuma CWE antes alcançável deixa de sê-lo
+
+#### Scenario: Catálogo é cacheado por ruleset
+- **WHEN** um segundo ruleset é acrescentado à configuração
+- **THEN** o catálogo do primeiro é servido do cache, sem nova busca
+
+#### Scenario: Identificador repetido entre rulesets não descarta regra
+- **WHEN** dois rulesets configurados trazem regras de mesmo identificador com atributos diferentes
+- **THEN** ambas contam para o grau da CWE, e a de grau mais alto prevalece
+
+#### Scenario: Conjunto acompanha o motor configurado
+- **WHEN** a consulta é feita para o motor com modo entre-arquivos e para o motor sem ele
+- **THEN** os dois resultados são distinguíveis, e o do modo entre-arquivos nunca é subconjunto próprio do outro
+
+#### Scenario: Cobertura do modo entre-arquivos é declarada como limite inferior
+- **WHEN** a consulta é feita para o motor com modo entre-arquivos e o catálogo disponível não enumera as regras próprias desse modo
+- **THEN** o conjunto é devolvido acompanhado da informação de que é limite inferior, em vez de apresentado como exato
+
 
 ### Requirement: Alcançabilidade é por linguagem
 O sistema SHALL considerar apenas as regras cuja lista `languages` inclui a linguagem consultada. Uma CWE coberta somente por regras de outras linguagens NÃO SHALL ser considerada alcançável para a linguagem consultada.
@@ -128,3 +160,44 @@ A colheita é a etapa que compromete rede, disco e horas de varredura. Saber ant
 
 Restringir por grau muda o denominador do recall: passa a medir o motor sobre as fraquezas em que ele afirma detectar, e não sobre as que declara cobrir. É decisão de método, não de conveniência, e por isso SHALL ser explícita na invocação em vez de padrão.
 
+### Requirement: Grau de taint reflete o alcance do motor
+O sistema SHALL considerar o alcance do motor ao atribuir o grau de alcançabilidade às CWEs cobertas apenas por regras de taint. Com o modo entre-arquivos ativo, essas CWEs NÃO SHALL ser rebaixadas ao grau intermediário pelo motivo que hoje as rebaixa.
+
+O grau intermediário existe porque "o motor não rastreia fluxo entre arquivos e a vulnerabilidade real frequentemente atravessa camadas". Essa justificativa é uma propriedade do motor CE, não da CWE. Mantê-la sob um motor que rastreia entre arquivos faria a escala descrever uma limitação que deixou de existir, e a colheita continuaria evitando exatamente as CWEs que a troca de motor pretendia destravar.
+
+A escala SHALL permanecer ordinal e os graus SHALL continuar derivados de campos declarados pelas regras — esta mudança altera como o eixo de taint é interpretado, não de onde ele vem.
+
+#### Scenario: CWE de taint sob motor entre-arquivos
+- **WHEN** todas as regras de vulnerabilidade da CWE operam em modo de taint e o motor com modo entre-arquivos está em uso
+- **THEN** a CWE recebe o grau mais alto, e não o intermediário
+
+#### Scenario: CWE de taint sob motor CE
+- **WHEN** todas as regras de vulnerabilidade da CWE operam em modo de taint e o motor CE está em uso
+- **THEN** a CWE recebe o grau intermediário, exatamente como antes desta mudança
+
+#### Scenario: Eixo de auditoria não é afetado pelo motor
+- **WHEN** nenhuma regra da CWE declara subcategoria de vulnerabilidade
+- **THEN** a CWE recebe o grau mais baixo sob qualquer motor, porque nenhuma análise de fluxo transforma regra de auditoria em afirmação de vulnerabilidade
+
+#### Scenario: Validação do grau é refeita por motor
+- **WHEN** a separação empírica entre os graus é medida
+- **THEN** ela é medida separadamente por motor, porque a escala passa a ter significado diferente em cada um e a evidência de um não sustenta o outro
+
+### Requirement: Grau de alcançabilidade considera todos os rulesets
+O sistema SHALL atribuir a cada CWE o grau da melhor regra que a cobre **em qualquer dos rulesets configurados**, mantendo a regra já vigente de que o grau da CWE é o da melhor regra.
+
+O critério já em vigor é que basta uma regra capaz para que o motor tenha chance de alcançar a CWE. Limitar a busca dessa melhor regra a um único ruleset contradiria o critério assim que houvesse mais de um configurado.
+
+A consequência é intencional e foi medida em 2026-09-17: CWE-22 e CWE-918, cobertas no `p/default` apenas por regras de taint e por isso em grau intermediário, passam a ser cobertas também por regra sintática que afirma detectar vulnerabilidade quando o ruleset próprio é configurado, e sobem para o grau alto.
+
+#### Scenario: Regra de outro ruleset eleva o grau
+- **WHEN** uma CWE é coberta por regra de taint num ruleset e por regra sintática de vulnerabilidade em outro
+- **THEN** ela recebe o grau mais alto dos dois
+
+#### Scenario: Grau não cai ao acrescentar ruleset
+- **WHEN** um ruleset é acrescentado à configuração
+- **THEN** nenhuma CWE tem seu grau rebaixado
+
+#### Scenario: Validação do grau é refeita por conjunto de rulesets
+- **WHEN** a separação empírica entre os graus é medida
+- **THEN** ela é medida para o conjunto de rulesets em uso, porque a evidência colhida sob um conjunto não sustenta outro

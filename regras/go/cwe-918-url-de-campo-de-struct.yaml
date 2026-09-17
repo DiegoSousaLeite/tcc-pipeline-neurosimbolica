@@ -1,0 +1,52 @@
+# CWE-918 — URL vinda de campo de struct decodificado
+#
+# PROTOCOLO: `desenvolvimento`. Escrita DEPOIS de inspecionar a partição de
+# desenvolvimento, e informada por ela: em 37 dos 55 casos de CWE-918 daquela
+# partição a entrada externa chega como CAMPO DE STRUCT — decodificado de JSON,
+# de protobuf ou lido de estado de tarefa (`request.Scope`, `req.Signature`,
+# `m.state.SrcUri`) —, e não por acessor de requisição HTTP, que aparece em
+# apenas 13 dos 55.
+#
+# O número desta regra NÃO pode ser reportado sobre a população inteira. Ver
+# `scripts/medir_regras_locais.py`, que recusa o agregado quando ela está
+# carregada.
+#
+# É uma regra deliberadamente ruidosa: campo de struct é como praticamente toda
+# URL configurável chega a um cliente HTTP, inclusive as legítimas. O critério de
+# recorte é o nome do campo sugerir URL ou endereço. O braço neural existe para
+# filtrar o resto.
+rules:
+  - id: url-de-campo-de-struct-em-cliente-http
+    languages: [go]
+    severity: WARNING
+    message: >-
+      URL vinda de campo de struct — tipicamente decodificado de JSON ou de
+      protobuf — chega a um cliente HTTP do servidor sem validação do destino
+      contra hosts permitidos. Se o campo é preenchido por quem chama, o servidor
+      pode ser induzido a buscar endereços internos (CWE-918).
+    metadata:
+      cwe:
+        - "CWE-918: Server-Side Request Forgery (SSRF)"
+      subcategory: [vuln]
+      proveniencia: desenvolvimento
+      confidence: LOW
+      category: security
+      technology: [go]
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+    patterns:
+      - pattern-either:
+          - pattern: http.Get(<... $ORIGEM.$CAMPO ...>)
+          - pattern: http.Head(<... $ORIGEM.$CAMPO ...>)
+          - pattern: http.Post(<... $ORIGEM.$CAMPO ...>, ...)
+          - pattern: http.PostForm(<... $ORIGEM.$CAMPO ...>, ...)
+          - pattern: http.NewRequest($METODO, <... $ORIGEM.$CAMPO ...>, ...)
+          - pattern: http.NewRequestWithContext($CTX, $METODO, <... $ORIGEM.$CAMPO ...>, ...)
+          - pattern: $CLIENTE.Get(<... $ORIGEM.$CAMPO ...>)
+          - pattern: $CLIENTE.Head(<... $ORIGEM.$CAMPO ...>)
+          - pattern: $CLIENTE.Post(<... $ORIGEM.$CAMPO ...>, ...)
+      # O nome do campo precisa sugerir URL ou endereço. Sem este recorte a regra
+      # marcaria toda chamada HTTP que lê qualquer coisa de um struct.
+      - metavariable-regex:
+          metavariable: $CAMPO
+          regex: (?i).*(url|uri|endpoint|host|addr|address|link|callback|webhook|target|src|source|remote).*

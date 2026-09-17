@@ -75,6 +75,14 @@ diz de onde cada candidato veio (`alerta` / `gabarito` / `N/A`). Os números des
 rodada medem o componente neural isolado, **não o sistema em operação** — ver
 `docs/PIPELINE.md`.
 
+O Semgrep roda por padrão no motor aberto (CE), que rastreia *taint* apenas
+dentro de um arquivo. `--entre-arquivos` liga a análise entre arquivos do
+Semgrep Pro — **desligada por padrão**, porque ligá-la muda o conjunto de
+alertas, invalida o cache simbólico daquela população e torna a rodada
+incomparável com as anteriores. Ela exige um registro de viabilidade aprovado
+(`python scripts/verificar_pro.py`), e aborta sem ele em vez de cair no CE em
+silêncio. O que a medição de 2026-09-15 encontrou está em `docs/PIPELINE.md`.
+
 Cada execução cria `results/<run_id>/`, com um CSV por braço
 (`<modelo>__<prompt>.csv`) e um `manifesto.json`. Caractere inválido em nome de
 arquivo é saneado — `ollama:qwen2.5-coder:7b` vira

@@ -18,10 +18,10 @@ Por que é separado de `cache/`
 ------------------------------
 `cache/` guarda o CONTEÚDO de um arquivo num commit: a chave é imutável por
 construção (um SHA não muda), então aquele cache nunca invalida. O resultado
-simbólico depende da versão do ruleset do Semgrep, que muda. Misturar os dois
-violaria a invariante "o cache de fontes nunca invalida"; por isso a versão do
-ruleset entra no payload e uma divergência invalida a ENTRADA DAQUI, sem tocar
-em um único byte de `cache/`.
+simbólico depende do conjunto de rulesets do Semgrep, que muda. Misturar os dois
+violaria a invariante "o cache de fontes nunca invalida"; por isso a identidade
+do conjunto entra no payload e uma divergência invalida a ENTRADA DAQUI, sem
+tocar em um único byte de `cache/`.
 
 Chave: `(repo, commit, arquivo, cwe)` — a mesma granularidade de um caso.
 """
@@ -31,7 +31,12 @@ import logging
 import os
 
 from .config import CACHE_SIMBOLICO_DIR
-from .fase1_semgrep import SEMGREP_CONFIG, VERSAO_PAREAMENTO
+from .fase1_semgrep import (
+    VERSAO_PAREAMENTO,
+    identidade_conjunto,
+    motor_corrente,
+    motor_de_payload,
+)
 
 log = logging.getLogger(__name__)
 
@@ -45,11 +50,25 @@ VERSAO_FORMATO = 2
 class CacheSimbolico:
     """Leitura e gravação do resultado simbólico, indexado por caso.
 
-    `versao_ruleset` identifica o ruleset do Semgrep vigente e
+    `versao_ruleset` identifica o CONJUNTO de rulesets vigente e
     `versao_pareamento` a regra que decide qual alerta pertence ao caso. Uma
     entrada gravada sob qualquer uma das duas divergente é ignorada (não
-    apagada): ela continua sendo evidência do que aquele ruleset e aquela regra
+    apagada): ela continua sendo evidência do que aquele conjunto e aquela regra
     produziram.
+
+    O eixo é o conjunto, e não um ruleset isolado, porque acrescentar um segundo
+    ruleset muda o que o motor emite tanto quanto trocar o primeiro. Se a
+    identidade registrada descrevesse apenas um deles, uma rodada composta seria
+    servida do disco com os alertas da rodada unitária — e o experimento
+    reportaria como resultado do conjunto novo aquilo que o conjunto antigo
+    produziu. A invalidação alcança os `NAO_DETECTADO` com mais razão ainda: é
+    neles que o ruleset acrescentado pode produzir resultado diferente, e
+    aceitá-los do disco esconderia o único ganho que justifica acrescentá-lo.
+
+    A identidade do conjunto unitário é o nome do próprio ruleset, então as
+    entradas gravadas quando a configuração era um ruleset só continuam válidas
+    enquanto ele continuar sendo a configuração — e a ordem dos rulesets não
+    invalida nada, porque não altera a união dos achados.
 
     Os dois eixos não são redundantes. O ruleset muda quando o Semgrep passa a
     enxergar coisas diferentes; a regra de pareamento muda quando a pipeline
@@ -60,11 +79,16 @@ class CacheSimbolico:
     """
 
     def __init__(self, diretorio: str = CACHE_SIMBOLICO_DIR,
-                 versao_ruleset: str = SEMGREP_CONFIG, ativo: bool = True,
-                 versao_pareamento: int = VERSAO_PAREAMENTO):
+                 versao_ruleset: str = None, ativo: bool = True,
+                 versao_pareamento: int = VERSAO_PAREAMENTO,
+                 motor=None):
         self.diretorio = diretorio
-        self.versao_ruleset = versao_ruleset
+        # Derivada na construção, e não no import: a configuração vazia é erro,
+        # e um erro no import derrubaria até quem só quisesse ler o módulo.
+        self.versao_ruleset = (identidade_conjunto()
+                               if versao_ruleset is None else versao_ruleset)
         self.versao_pareamento = versao_pareamento
+        self.motor = motor if motor is not None else motor_corrente()
         self.ativo = ativo
         self.leituras = 0
         self.gravacoes = 0
@@ -72,15 +96,28 @@ class CacheSimbolico:
     # -- caminho ------------------------------------------------------------
 
     def caminho(self, repo_name: str, commit: str, arquivo: str, cwe: str) -> str:
-        """`<dir>/<owner>__<repo>/<commit12>/<hash-do-caminho>__<cwe>.json`.
+        """`<dir>/<owner>__<repo>/<commit12>/<hash-do-caminho>__<cwe>[__pro].json`.
 
         O caminho do arquivo vira hash porque um caminho Go aninhado somado ao
         prefixo do repositório estoura o limite de ~260 chars do Windows.
+
+        O sufixo do motor entra no NOME, e não num diretório próprio por motor
+        (recusado na D2, que duplicaria a lógica de leitura e tornaria a
+        comparação entre motores um problema de caminho). Ele existe porque a
+        D2 também exige que as entradas dos dois motores COEXISTAM para o mesmo
+        caso: num caminho único a segunda gravação sobrescreveria a primeira, e
+        a comparação CE×Pro sobre os mesmos casos — que é o ganho declarado de
+        manter as duas — exigiria reexecutar um dos dois.
+
+        O motor CE sem modo entre-arquivos mantém o nome EXATO de antes desta
+        mudança: as ~1.700 entradas já em disco continuam sendo encontradas,
+        em vez de virarem lixo silencioso ao lado de um cache vazio.
         """
         slug = repo_name.replace("/", "__")
         dig = hashlib.sha1(arquivo.encode("utf-8")).hexdigest()[:12]
+        sufixo = "__pro" if self.motor.entre_arquivos else ""
         return os.path.join(self.diretorio, slug, commit[:12],
-                            f"{dig}__{cwe}.json")
+                            f"{dig}__{cwe}{sufixo}.json")
 
     # -- leitura ------------------------------------------------------------
 
@@ -107,8 +144,11 @@ class CacheSimbolico:
             log.debug("formato divergente (%s), recomputando: %s",
                       payload.get("versao_formato"), destino)
             return None
+        # Conjunto de rulesets divergente. `p/default` e `p/default+regras/go`
+        # são conjuntos distintos e têm identidades distintas — entrada de um
+        # não serve para o outro, inclusive quando um contém o outro.
         if payload.get("versao_ruleset") != self.versao_ruleset:
-            log.debug("ruleset divergente (%s != %s), recomputando: %s",
+            log.debug("conjunto de rulesets divergente (%s != %s), recomputando: %s",
                       payload.get("versao_ruleset"), self.versao_ruleset, destino)
             return None
         # Ausente é o estado das entradas gravadas antes deste campo existir:
@@ -120,6 +160,25 @@ class CacheSimbolico:
             log.debug("regra de pareamento divergente (%s != %s), recomputando: %s",
                       payload.get("versao_pareamento"), self.versao_pareamento,
                       destino)
+            return None
+        # Terceiro eixo, independente dos outros dois: o mesmo ruleset, sob a
+        # mesma regra de pareamento, produz conjuntos de alertas diferentes
+        # conforme o motor rastreie fluxo só dentro do arquivo ou também entre
+        # arquivos. Sem esta checagem, ligar o modo não invalidaria nada e a
+        # rodada seria servida do disco com os alertas do motor anterior —
+        # reportando como resultado do motor novo o que o antigo produziu, em
+        # silêncio.
+        #
+        # Ausência é tratada como CE sem modo entre-arquivos (D3), o OPOSTO da
+        # regra de pareamento logo acima: lá a ausência significava que o
+        # conteúdo podia estar errado sob a regra nova; aqui significa só que o
+        # campo não existia, e o conteúdo continua correto para o CE.
+        gravado = motor_de_payload(payload)
+        if (gravado.edicao != self.motor.edicao
+                or gravado.entre_arquivos != self.motor.entre_arquivos):
+            log.debug("motor divergente (%s/%s != %s/%s), recomputando: %s",
+                      gravado.edicao, gravado.entre_arquivos,
+                      self.motor.edicao, self.motor.entre_arquivos, destino)
             return None
 
         self.leituras += 1
@@ -148,6 +207,10 @@ class CacheSimbolico:
             "versao_formato": VERSAO_FORMATO,
             "versao_ruleset": self.versao_ruleset,
             "versao_pareamento": self.versao_pareamento,
+            # Produto da Fase 1 como qualquer outro, e não recuperável depois:
+            # sem ele a entrada não sabe dizer se descreve o que o CE viu ou o
+            # que o motor com análise entre arquivos viu.
+            "motor": self.motor.como_dict(),
             "repo_name": repo_name,
             "commit": commit,
             "arquivo": arquivo,

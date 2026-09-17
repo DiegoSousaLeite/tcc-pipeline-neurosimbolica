@@ -195,15 +195,223 @@ Serve para **G1** (justificativa do Semgrep) e para a seção de ameaças:
 `p/default` e apenas 2 só no `p/golang`, nenhuma presente no corpus. Confirma a
 escolha do `p/default` já registrada em `provadeconceito.tex:247`.
 
+### 3.5 O alcance entre arquivos não era o limitante (RESULTADO NEGATIVO, 2026-09-15)
+
+**O que se testou.** As duas maiores CWEs da classe positiva são baldes secos
+(CWE-22: 114 pares, 0 detecções; CWE-918: 112 pares, 1), e a hipótese era que a
+causa fosse o alcance do motor: o Semgrep CE rastreia *taint* só dentro de um
+arquivo, e **0 de 807 alertas** do corpus trouxeram trilha de dataflow. O
+Semgrep Pro analisa entre arquivos. Portão: `scripts/verificar_pro.py`.
+
+**O que se mediu**, com conta gratuita e Semgrep 1.167.0:
+
+| pergunta | resposta |
+|---|---|
+| O tier gratuito entrega o modo entre-arquivos? | **Sim.** Projeto controlado: CE 0 trilhas entre arquivos, Pro 1. |
+| Ele produz trilha em repositórios reais? | **Sim.** 9 trilhas, em 3 de 10 repositórios, atravessando até 3 arquivos. |
+| Quanto custa? | **4–6× mais lento.** `seaweedfs` 124 s → 749 s; `mattermost` estourou 20 min por modo. |
+| **As trilhas alcançam os casos do gabarito?** | **Não, em nenhum dos 6 casos medidos.** Ver tabela abaixo. |
+
+**A medição por caso** (`--etapa gabarito`, 2026-09-15/16), aplicando a mesma
+regra de pareamento da Fase 1 sobre o arquivo do gabarito, com o repositório
+inteiro em escopo nos dois modos:
+
+| caso | CWE | CE | Pro | ganho |
+|---|---|---|---|---|
+| `seaweedfs/seaweedfs@4f8af455bf` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `1panel-dev/1panel@278a562320` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `getarcaneapp/arcane@67fae1255d` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `openlistteam/openlist@5a5d8d6e0e` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `abhinavxd/libredesk@f7aa1ef2eb` | 918 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `oasdiff/oasdiff@c01d48dae4` | 918 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `gogs/gogs@0089c4c8e5` | 918 | NAO_DETECTADO | *timeout 900 s* | sem dado |
+
+**6 casos com dado, 0 detecções novas.** Em 5 deles o arquivo do gabarito não
+recebeu **alerta nenhum** em nenhum dos dois motores; no `gogs` o CE emitiu 1
+alerta, de outra CWE. O `seaweedfs` é o caso mais ilustrativo: 849 alertas no
+repositório e **0** nos dois arquivos do gabarito, com as 6 trilhas entre
+arquivos caindo em `webdav_server.go`, `filer_server_handlers.go` e
+`file_browser_handlers.go`.
+
+**A interpretação.** `regras_nao_casadas=[]` com o repositório inteiro em escopo
+significa que **nenhuma regra olha aqueles arquivos**. Isso é cobertura de
+regra, não alcance — e alcance entre arquivos não conserta arquivo que regra
+nenhuma examina.
+
+**O que isso autoriza escrever.** *"A análise entre arquivos do Semgrep Pro foi
+verificada como disponível e funcional no tier gratuito, e não produziu nenhuma
+detecção adicional em 6 casos da população (3 de CWE-22, 3 de CWE-918)
+avaliados sob os dois motores sobre o repositório completo."* A medição está em
+`data/viabilidade_pro_2026091{5,6}.json`.
+
+**O que ainda não autoriza.** Afirmar que o ganho é zero na população inteira:
+6 casos de 226 é amostra pequena, escolhida por espaçamento uniforme e não
+aleatória, e o timeout do `gogs` mostra que repositórios grandes ficam
+sub-representados — justamente os que teriam mais camadas para atravessar. O
+enunciado honesto é sobre os casos avaliados, não sobre a população.
+
+**Encaminhamento.** A hipótese era `p/gosec` — regras sintáticas (`G304` para
+CWE-22, `G107` para CWE-918) que não dependeriam de rastro de fluxo. **Ela foi
+medida e refutada em 2026-09-16: essas regras não existem.** Ver §3.6.
+
+---
+
+### 3.6 Os rulesets públicos não cobrem CWE-22 nem CWE-918 em Go (RESULTADO NEGATIVO, medido em 2026-09-16)
+
+O §3.5 encaminhava para o `p/gosec`, supondo que o registry do Semgrep publica
+as regras do gosec reescritas — `G304` para CWE-22 e `G107` para CWE-918 —, que
+seriam sintáticas e por isso alcançariam onde as regras de taint falham. **A
+suposição era falsa.**
+
+| medida | valor |
+|---|---|
+| Regras no `p/gosec` | 23 (todas rodam em Go; `missed: 0`) |
+| Já presentes no `p/default` | **22 de 23** |
+| Exclusivas | 1 — `use-of-unsafe-block`, CWE-242, ausente da população |
+| `gosec.G304-1` / `gosec.G107-1` | **não existem**, em nenhum ruleset alcançável |
+
+O `p/gosec` publicado não é o gosec reescrito: é um recorte das regras
+`go.lang.security.*` do próprio Semgrep. Nenhum identificador contém `gosec`,
+`G304` ou `G107`.
+
+Regras Go **novas** para as duas CWEs alvo, por ruleset consultado:
+
+| ruleset | CWE-22 | CWE-918 |
+|---|---|---|
+| `p/gosec` (23 regras) | 0 | 0 |
+| `p/trailofbits` (120 regras) | 0 | 0 |
+| `p/security-audit` (225 regras) | 0 | 0 |
+
+A única regra de CWE-22 do `p/gosec` é a mesma
+`path-traversal-inside-zip-extraction` que o `p/default` já tem. Confirmado
+também na execução: `semgrep --config p/default [--config p/gosec]` sobre 5
+arquivos de CWE-22 do cache deu **0 alertas nos dois casos**.
+
+**O que isso autoriza escrever.** *"A hipótese de que a não-detecção de CWE-22 e
+CWE-918 decorresse da ausência de regras sintáticas no ruleset configurado foi
+testada e rejeitada: nenhum dos rulesets públicos do registry do Semgrep
+consultados acrescenta regra Go para essas fraquezas além das já presentes no
+`p/default`."*
+
+**O que ainda não autoriza.** Afirmar que o Semgrep não detecta CWE-22 em Go. O
+medido é mais estreito e é sobre o **catálogo**, não sobre a ferramenta: os
+rulesets públicos alcançáveis não trazem regra nova. Uma regra escrita à mão
+poderia detectar — ao custo do viés de autoria, já que seria escrita olhando
+para esta população.
+
+**Consequência metodológica.** Fecha uma alternativa e reforça o §3.1: o teto de
+recall não é um parâmetro mal configurado, é cobertura de regra que não existe
+publicada para Go. Restam dois caminhos, ambos com custo próprio — regra própria
+(`regras-proprias-go`, assume o viés) ou mais alcance no motor
+(`semgrep-pro-entre-arquivos`, que o §3.5 já mediu como sem ganho em 6 casos).
+
+Medições em `openspec/changes/archive/2026-09-17-ruleset-gosec/design.md`.
+
+---
+
+### 3.7 Regra própria melhora pouco, e a análise de por quê é a contribuição (medido em 2026-09-17)
+
+O §3.6 fechou a alternativa barata: nenhum ruleset público traz regra Go para
+CWE-22 ou CWE-918. Restava escrever regra — com o viés de autoria declarado. Foi
+escrito, medido, e o resultado é mais interessante que o número.
+
+**A contribuição é a análise de lacunas, não as regras.** Este é o ponto que o
+texto precisa deixar explícito, no modelo do Semgrep\* (EASE 2024), cuja
+contribuição publicada foi a investigação dos padrões ausentes dos rulesets, não
+o ruleset resultante. Apresentar "escrevemos quatro regras" como resultado seria
+apresentar a evidência no lugar do achado.
+
+**O achado.** Aberta apenas a partição de desenvolvimento (54 casos de CWE-22,
+55 de CWE-918, todos vulneráveis):
+
+| | CWE-22 | CWE-918 |
+|---|---:|---:|
+| Operação perigosa na forma que uma regra sintática nomeia (`os.Open`, `http.Get`, …) | 23/54 (42,6 %) | 15/55 (27,3 %) |
+| Operação atrás de abstração ou método de receptor (`afero`, `billy`, `fs.FS`, `cliente.Do`) | 14/54 (25,9 %) | 24/55 (43,6 %) |
+| **Nenhuma operação perigosa no arquivo rotulado** | **17/54 (31,5 %)** | **16/55 (29,1 %)** |
+| Arquivo contém acessor HTTP (`r.URL.Query().Get`, `FormValue`, …) | 6/54 (11,1 %) | 13/55 (23,6 %) |
+| Entrada vem de campo de struct (`args.InnerPath`, `req.Signature`, `m.state.SrcUri`) | 23/54 (42,6 %) | 37/55 (67,3 %) |
+| Marcas de extração de arquivo compactado | 11/54 (20,4 %) | 0/55 |
+
+**O que isso autoriza escrever.** *"Cerca de 30 % dos casos da classe positiva
+não contêm, no arquivo rotulado, a operação que a fraqueza descreve. Para esses
+casos nenhuma regra sintática — de qualquer ruleset — pode detectar a
+vulnerabilidade no arquivo em que ela está anotada, porque o gabarito é por
+arquivo e o arquivo que o commit de correção toca é frequentemente o da
+verificação acrescentada, não o do ponto perigoso."*
+
+Outros 26 % (CWE-22) e 44 % (CWE-918) só expõem a operação atrás de uma
+abstração de sistema de arquivos ou de um método de receptor, onde regra que
+nomeia a biblioteca padrão não morde. E a origem da entrada quase nunca é a que
+a definição da CWE sugere: a CWE-22 desta população é, em boa parte, **zip-slip**
+— a entrada externa é o nome de uma entrada de arquivo compactado.
+
+**Isso reordena o §3.1 e o §3.5.** O teto de recall não é parâmetro mal
+configurado (§3.6), não é alcance do motor (§3.5) e não é cobertura de ruleset
+que alguém poderia publicar: é **granularidade do rótulo** somada a **abstração
+do código real**. As três hipóteses anteriores foram testadas e rejeitadas nessa
+ordem, e esta é a quarta — a primeira que explica os números.
+
+**Os números das regras, e qual deles é reportável.**
+
+| CWE | regras `definicao`, população inteira | todas as regras, **partição de avaliação** | partição de desenvolvimento (diagnóstico) |
+|-----|--------------------------------------:|-------------------------------------------:|------------------------------------------:|
+| CWE-22 | 2/114 (1,8 %) | **4/60 (6,7 %)** | 4/54 (7,4 %) |
+| CWE-918 | 1/112 (0,9 %) | **1/57 (1,8 %)** | 3/55 (5,5 %) |
+
+**O número reportado sai da partição de avaliação** sempre que houver regra de
+proveniência `desenvolvimento` carregada — a coluna do meio. A primeira coluna é
+reportável sobre a população inteira porque aquelas regras foram escritas apenas
+a partir da definição da CWE e da documentação de Go, sem que nenhum caso fosse
+inspecionado. A terceira **nunca** é resultado: é diagnóstico interno, e o script
+de medição recusa somá-la às demais.
+
+A distância entre a segunda e a terceira colunas é o que só a partição torna
+visível. Em CWE-22 elas quase coincidem — a regra de zip-slip descreve um idioma
+e generaliza. Em CWE-918 o desenvolvimento é **três vezes** a avaliação: ali a
+regra descreve mais os casos vistos que a fraqueza. Num número único, essa
+diferença desapareceria.
+
+**Apêndice de verificabilidade (a escrever).** O protocolo depende da ordem —
+partição antes de regra — e a ordem é auditável no histórico do Git. O texto
+deve trazer os hashes, para que o leitor confirme sem depender da nossa palavra:
+
+| artefato | commit |
+|---|---|
+| Partição de desenvolvimento/avaliação, sozinha, sem nenhuma regra | `cc87274` |
+| Primeiras regras locais (`definicao`) | `ec37322` |
+| Regras informadas pela partição (`desenvolvimento`) | `fa7eb31` |
+
+`cc87274` não contém um único arquivo sob `regras/go/` — é o que torna a
+afirmação "as regras não informaram a partição" verificável em vez de assertiva.
+
+**Ameaça à validade residual, e ela não é pequena.** A separação estrutural
+impede que o *número* seja contaminado; não impede que a *escolha do problema*
+seja. As CWEs alvo foram escolhidas por serem onde a classe positiva se perde, e
+essa escolha veio de olhar a população agregada. O que a partição protege é a
+medida, não a agenda. Some-se a isso o tamanho: 60 e 57 casos na avaliação, com
+4 e 1 detecções — intervalos de confiança largos o bastante para que a diferença
+entre 6,7 % e 3,3 % não suporte teste de hipótese. Os números servem para
+descrever ordem de grandeza e sustentar a análise de lacunas; não para afirmar
+superioridade de uma configuração sobre outra.
+
+**A redação do `.tex` acontece em branch separada, e não na branch desta
+change.** Nenhum arquivo `.tex` foi tocado por `regras-proprias-go`.
+
+---
+
 ### 3.4 Ameaças à validade a acrescentar
 
 | ameaça | evidência |
 |---|---|
 | Ruleset não fixado | `p/default` muda do lado do servidor; o cache grava só a string. Revalidado nesta rodada (1.074 regras, mesmas 34 CWEs), mas não fixado. |
+| **Motor não fixado** (se o modo entre-arquivos for adotado) | O Semgrep Pro é binário proprietário (301,8 MB) baixado de servidor de terceiros, sem versionamento sob nosso controle. **Agrava a ameaça acima**: não é só o ruleset que muda do lado do servidor — o motor também. Medido: instalar o binário alterou o comportamento do CE nesta máquina (com `--dataflow-traces`, 0→1 trilha e ~6 s→~16 s no mesmo alvo), mesmo sem `--pro` e mesmo com `--oss-only`. A Fase 1 não passa `--dataflow-traces` e 25 casos reexecutados do cache deram 25 resultados idênticos, então as Rodadas 1–3 continuam reproduzíveis — mas "CE" deixou de ser um estado único na máquina. |
 | "Alcançável" binário superestima cobertura | CWE-918 entrou com 112 pares tendo **uma** regra de taint; CWE-22 com 114 e duas regras estreitas. |
 | Concorrência de memória em máquina única | Semgrep e `llama-server` disputam RAM; 488 casos falharam com `STATUS_DLL_INIT_FAILED`. Contornado separando Fase 1 das fases neurais. |
 | Falha de esteira reprodutível | 2 casos (`harness/harness`, CWE-79) em laço degenerativo do modelo quantizado, em todas as rodadas. |
 | Classe positiva pequena | 19 amostras; impede Recall/F1/MCC/TFN neurais. |
+| **Granularidade do rótulo** | O gabarito é por ARQUIVO, e ~30 % dos arquivos rotulados de CWE-22/918 não contêm a operação perigosa (§3.7). Para esses casos a não-detecção não informa nada sobre o motor: a fraqueza não está onde o rótulo aponta. |
+| **Escolha do problema, não da medida** | A separação desenvolvimento/avaliação protege o número das regras locais, mas as CWEs alvo foram escolhidas por olhar a população agregada. O viés de agenda permanece e precisa ser declarado (§3.7). |
 
 ---
 
@@ -555,6 +763,21 @@ O capítulo novo absorveria: configuração (§2.1), população (§2.2), result
 | **A1** | Acerto do LLM só se liga à 1ª coluna do detector | Matrizes já são separadas no código; falta figura + texto |
 | **A2** | Classificação científica da metodologia | Não iniciado |
 | **A3** | Cronograma: prazos, ponto crítico, contingência | **Munição pronta** — §3.1 é o ponto crítico e §3.4 as contingências |
+
+---
+
+## 6.5 Correção de método: o critério de um portão
+
+O portão do modo entre-arquivos classificou `viavel` com o critério "≥1 trilha
+entre arquivos no alvo". Isso mede a **capacidade da ferramenta**, não o **ganho
+na população** — e as duas divergiram: o portão passou e o cruzamento manual
+mostrou 0 detecções nos casos do gabarito.
+
+**Um portão que passa quando o ganho não chega aos casos não é portão.** Para
+`ruleset-gosec` e para qualquer troca futura de motor ou de ruleset, o critério
+tem que ser **detecção nos casos do gabarito**, medida sobre a mesma população,
+e não "a ferramenta funciona". Registrar isto no texto, se a seção de método
+discutir como as decisões de ferramenta foram tomadas.
 
 ---
 

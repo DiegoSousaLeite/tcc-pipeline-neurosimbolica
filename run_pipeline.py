@@ -51,6 +51,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
+from src import regras_locais
 from src.cache_simbolico import CacheSimbolico
 from src.catalogo import catalogo_padrao
 from src.config import (
@@ -62,12 +63,17 @@ from src.config import (
 )
 from src.fase1_semgrep import (
     MOTIVO_NA,
+    PROCEDENCIA_PROPRIA,
     SEMGREP,
-    SEMGREP_CONFIG,
+    ModoIndisponivelError,
     SemgrepError,
     SemgrepFileNotFoundError,
     SemgrepTimeoutError,
     executar_semgrep,
+    exigir_viabilidade,
+    identidade_conjunto,
+    motor_corrente,
+    rulesets_configurados,
 )
 from src.fase2_middleware import (
     ALERTA,
@@ -642,9 +648,22 @@ def novo_run_id() -> str:
     return f"{agora}-{commit_atual()}"
 
 
+def regras_locais_do_manifesto():
+    """As regras de `regras/go/`, se e somente se o ruleset local está em uso.
+
+    Condicionado à configuração de propósito: registrar regras que não entraram
+    na invocação faria o manifesto afirmar que elas produziram os alertas da
+    rodada, e é justamente esse tipo de afirmação que ele existe para sustentar.
+    """
+    if not any(p["procedencia"] == PROCEDENCIA_PROPRIA
+               for p in rulesets_configurados()):
+        return {}
+    return regras_locais.para_manifesto(commit=commit_atual())
+
+
 def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
                      inicio, fim, catalogo, sem_llm, cache_ativo, argv,
-                     sondagens=None, modo=MODO_FILTRO):
+                     sondagens=None, modo=MODO_FILTRO, entre_arquivos=False):
     """Registra a configuração completa da rodada.
 
     É o que permite, meses depois, dizer de qual código, ruleset, catálogo e
@@ -657,9 +676,28 @@ def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
         "inicio_utc": inicio.isoformat(),
         "fim_utc": fim.isoformat(),
         "duracao_s": round((fim - inicio).total_seconds(), 2),
+        # A identidade do MOTOR entra ao lado da do modelo local, e pelo mesmo
+        # motivo: permitir dizer, meses depois, qual motor produziu cada número.
+        # `versao` e `ruleset` continuam onde estavam para não quebrar quem lê
+        # manifestos das rodadas anteriores (`scripts/analise_rodada.py`);
+        # `ruleset` passa a ser a identidade do CONJUNTO, que para a
+        # configuração unitária é o nome do ruleset — exatamente o valor de
+        # antes.
+        #
+        # `rulesets` acrescenta a procedência de cada um. A distinção é
+        # metodológica: ruleset publicado no registry não foi escrito olhando
+        # para a nossa população; ruleset que sai de arquivo nosso pode ter
+        # sido, e o texto da monografia trata os dois casos de forma diferente.
         "semgrep": {
             "versao": versao_semgrep(),
-            "ruleset": SEMGREP_CONFIG,
+            "ruleset": identidade_conjunto(),
+            "rulesets": rulesets_configurados(),
+            "motor": motor_corrente(entre_arquivos).como_dict(),
+            # Regra nossa não basta constar do conjunto: ela muda por commit, e
+            # o texto precisa poder dizer quais regras, sob qual protocolo,
+            # produziram cada número. Vazio quando `regras/go/` não está
+            # configurado — que é o padrão.
+            "regras_locais": regras_locais_do_manifesto(),
         },
         "catalogo_cwe": {
             "caminho": os.path.relpath(catalogo.caminho, BASE),
@@ -743,7 +781,14 @@ def resolver_simbolico(caso, cache_simbolico=None):
     caminho_arquivo = obter_arquivo(caso["repo_name"], caso["commit"],
                                     caso["arquivo"])
     log.info("    -> Fase 1: executando Semgrep...")
-    alerta, motivo, regras = executar_semgrep(caminho_arquivo, caso["cwe"])
+    # O modo vem do cache, e não de um parâmetro próprio: é o mesmo objeto que
+    # decide qual entrada serve este caso, então as duas decisões não podem
+    # divergir. Ler o motor de uma fonte e a invocação de outra reintroduziria,
+    # por outro caminho, o descasamento que o terceiro eixo da chave elimina.
+    entre_arquivos = bool(cache_simbolico is not None
+                          and cache_simbolico.motor.entre_arquivos)
+    alerta, motivo, regras = executar_semgrep(caminho_arquivo, caso["cwe"],
+                                              entre_arquivos)
 
     if alerta is None:
         status, contexto = "NAO_DETECTADO", ""
@@ -1133,6 +1178,13 @@ def main():
     ap.add_argument("--sem-cache-simbolico", action="store_true",
                     help="Reexecuta Fases 1-2 sempre, sem ler nem gravar o "
                          "cache de resultado simbólico.")
+    ap.add_argument("--entre-arquivos", action="store_true",
+                    help="Liga a análise ENTRE ARQUIVOS do Semgrep (--pro). "
+                         "Desligada por padrão: ligá-la muda o conjunto de "
+                         "alertas, invalida o cache simbólico daquela população "
+                         "e torna a rodada incomparável com as Rodadas 1-3. "
+                         "Exige registro de viabilidade aprovado "
+                         "(scripts/verificar_pro.py).")
     ap.add_argument("--modelo", action="append", metavar="MODELO",
                     help=f"Modelo do braço. Repetível. Padrão: {MODELO_LLM}. "
                          f"Modelo local via Ollama: ollama:<tag> "
@@ -1176,6 +1228,16 @@ def main():
         ap.error(f"--sem-llm não faz sentido com --modo-montagem "
                  f"{MODO_TRIAGEM}: o braço de triagem existe para submeter ao "
                  f"LLM os casos que o Semgrep não detectou.")
+    # Antes de qualquer trabalho: pedir o modo sem viabilidade verificada aborta
+    # aqui, e não cai no CE em silêncio no meio da população.
+    if args.entre_arquivos:
+        try:
+            registro, _ = exigir_viabilidade()
+        except ModoIndisponivelError as e:
+            ap.error(str(e))
+        log.info("[!] Modo ENTRE-ARQUIVOS ligado (viabilidade: %s).",
+                 os.path.relpath(registro, BASE))
+        log.info("    Os alertas NÃO são comparáveis com os das Rodadas 1-3.")
 
     with open(DATASET_PATH, encoding="utf-8") as f:
         dataset = json.load(f)
@@ -1272,8 +1334,10 @@ def main():
                  "gabarito.")
         log.info("    [!] Os números desta rodada NÃO descrevem o sistema em "
                  "operação: num uso real esses positivos não existiriam.")
-    cache_simbolico = CacheSimbolico(ativo=not args.sem_cache_simbolico)
-    log.info("[+] Cache simbólico: %s (ruleset %s)",
+    cache_simbolico = CacheSimbolico(
+        ativo=not args.sem_cache_simbolico,
+        motor=motor_corrente(args.entre_arquivos))
+    log.info("[+] Cache simbólico: %s (rulesets %s)",
              "ativo" if cache_simbolico.ativo else "DESATIVADO",
              cache_simbolico.versao_ruleset)
     log.info("=" * 44)
@@ -1291,7 +1355,7 @@ def main():
             dir_rodada, run_id, bracos, por_trilha, len(casos), inicio,
             datetime.now(timezone.utc), catalogo, args.sem_llm,
             cache_simbolico.ativo, " ".join(sys.argv), sondagens,
-            modo=args.modo_montagem)
+            modo=args.modo_montagem, entre_arquivos=args.entre_arquivos)
         log.info("[+] Manifesto: %s", os.path.relpath(destino, BASE))
 
 
