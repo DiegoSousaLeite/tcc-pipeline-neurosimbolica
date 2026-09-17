@@ -79,6 +79,43 @@ de regra (CWE-665/79/470/400/…), que virariam `NAO_DETECTADO` artificiais. O
 ruleset em uso entra no cache simbólico e no manifesto da rodada
 (`SEMGREP_CONFIG`, padrão `p/default`).
 
+### Modo entre-arquivos (`--entre-arquivos`) — desligado por padrão
+
+O Semgrep CE rastreia *taint* apenas **dentro de um arquivo**. Medido: **0 de
+807 alertas** do corpus trouxeram trilha de dataflow, mesmo com
+`--dataflow-traces`. O Semgrep Pro acrescenta análise entre arquivos, e
+`--entre-arquivos` a liga (`--pro` na invocação).
+
+**Ligar a flag não é reversível de graça.** Ela muda o conjunto de alertas que a
+camada simbólica emite, invalida o cache simbólico daquela população pelo eixo
+do motor, e torna a rodada **incomparável com as Rodadas 1–3**, que mediram o
+CE. Por isso ela vem desligada, e a invocação padrão monta exatamente a mesma
+linha de comando de antes de o modo existir.
+
+Pedir o modo sem um registro de viabilidade aprovado **aborta**, em vez de cair
+no CE em silêncio — o modo de falha a evitar é aquele em que a rodada produz
+números do CE rotulados como Pro, e nada no CSV denuncia. O registro vem de
+`scripts/verificar_pro.py` (ver `docs/SCRIPTS.md`).
+
+**O que a medição de 2026-09-15 encontrou**, com conta gratuita e Semgrep
+1.167.0:
+
+| | resultado |
+|---|---|
+| Disponibilidade no tier gratuito | **funciona** — projeto controlado: CE 0 trilhas entre arquivos, Pro 1 |
+| Trilhas em repositórios reais | 9, em 3 de 10 repositórios |
+| Custo | **4–6× mais lento** (`seaweedfs`: 124 s → 749 s) |
+| Ganho nos casos do gabarito | **nenhum em 6 casos medidos** (3 de CWE-22, 3 de CWE-918): o arquivo do gabarito não muda de veredito em nenhum. No `seaweedfs`, 849 alertas no repositório e **0** nos dois arquivos do caso, nos dois modos |
+
+Os casos continuaram `SEM_ALERTA` com `regras_nao_casadas=[]`, com o repositório
+inteiro em volta: **nenhuma regra olha aqueles arquivos**. Isso é cobertura de
+regra, não alcance — e alcance entre arquivos não conserta arquivo que regra
+nenhuma examina. A ressalva é o tamanho da amostra: 6 casos de 226, escolhidos
+por espaçamento e não por sorteio, com um sétimo (`gogs`) perdido por timeout.
+O enunciado vale para os casos avaliados, não para a população.
+
+Reproduzir: `python scripts/verificar_pro.py --etapa gabarito --casos-por-cwe 3`.
+
 ---
 
 ## Os Dois Fluxos de Entrada
@@ -535,6 +572,16 @@ Como a chave é imutável (repo + SHA + caminho), **o cache nunca invalida**: um
 vez preenchido, a pipeline roda offline e o experimento é reproduzível a partir de
 alguns MB. `repos/` deixou de ser obrigatório; se existir, é aproveitado.
 
+**A invariante é "buscar uma vez, congelar, reexecutar offline" — e não "sem
+rede".** A distinção importa porque a esteira tem três etapas que buscam: o
+cache de fontes (`raw.githubusercontent.com`), o cache do ruleset
+(`semgrep.dev/c/<config>`, busca anônima) e, se o modo entre-arquivos for
+ligado, o Semgrep Pro (busca **autenticada**: `semgrep login` e
+`semgrep install-semgrep-pro`). As três acontecem no PREENCHIMENTO. Nenhuma
+acontece na reexecução: com o cache simbólico completo, a rodada fecha sem
+login, sem download de binário e sem rede — verificado em 2026-09-15, 2328
+casos servidos do cache em 1 s, com o Semgrep não sendo invocado uma única vez.
+
 ```bash
 # Popula o cache a partir dos clones locais, sem rede (ANTES de apagar repos/)
 python scripts/preencher_cache.py --somente-local
@@ -549,9 +596,23 @@ python scripts/preencher_cache.py
 
 `src/cache_simbolico.py` persiste, por caso, o resultado das Fases 1 e 2:
 alerta do Semgrep, contexto hidratado, status, motivo da não-detecção e regras
-não casadas, mais a versão do ruleset e a da regra de pareamento. Chave:
+não casadas, mais **três eixos de invalidação** — a versão do ruleset, a da
+regra de pareamento e a identidade do motor. Chave:
 `(repo, commit, arquivo, CWE)`. Arquivos em
-`cache_simbolico/<owner>__<repo>/<commit>/<hash-do-caminho>__<cwe>.json`.
+`cache_simbolico/<owner>__<repo>/<commit>/<hash-do-caminho>__<cwe>[__pro].json`.
+
+Os três eixos variam por motivos independentes: o ruleset muda quando o Semgrep
+passa a enxergar coisas diferentes, a regra de pareamento quando a pipeline
+passa a aceitar como do caso um conjunto diferente de alertas, e o motor quando
+o alcance da análise muda. Espremer um dentro do outro faria o mesmo ruleset
+parecer duas coisas, e perderia a capacidade de responder "este alerta veio de
+qual motor?" sem reexecutar.
+
+Entrada gravada **antes** de a identidade do motor existir é lida como
+`ce, entre_arquivos=False` — é factualmente verdade, não havia outro motor
+quando ela foi escrita. É o **oposto** da regra de pareamento, que trata
+ausência como divergente: lá a ausência significa que o conteúdo pode estar
+errado sob a regra nova; aqui significa só que o campo não existia.
 
 Serve a dois propósitos, um de custo e um de validade:
 

@@ -189,6 +189,64 @@ python scripts/diag_gemini.py
 
 ---
 
+### `scripts/verificar_pro.py`
+
+**Propósito:** Portão de viabilidade do modo entre-arquivos do Semgrep. Mede, com
+evidência própria e datada, se o Semgrep Pro roda com conta gratuita e se ele
+produz trilha de dataflow **entre arquivos** em Go. A change que o introduziu não
+avançaria sem ele: a evidência de gratuidade vinha de `semgrep.dev/pricing`,
+página comercial, não de documentação técnica nem de termo de licença.
+
+⚠️ **Exige rede e login** (`semgrep login` + `semgrep install-semgrep-pro`, ou
+`SEMGREP_APP_TOKEN` no `.env`). É o único script da esteira com essa
+dependência. `--selftest` é a exceção: roda sem rede e sem credencial.
+
+Duas etapas, de custo crescente:
+
+1. `--etapa sintetica` — projeto Go mínimo escrito para este fim, com a fonte num
+   arquivo e o sumidouro em outro. Segundos. Pode devolver `indisponivel` e
+   encerrar o portão **sem clonar nada**.
+2. `--etapa real` — checkout raso de ~10 repositórios da população nos
+   `parent_commit`, metade de CWE-22 e metade de CWE-918. Custa disco e rede;
+   cada checkout é apagado assim que medido.
+
+**Por que o alvo não é o cache de fontes:** `cache/` guarda **um arquivo por
+caso** — 69 dos 226 casos de CWE-22/918 têm um único arquivo no diretório do
+commit. Análise entre arquivos sobre alvo assim devolve zero trilhas por
+construção, e a classificação descreveria a forma do cache, não o alcance do
+motor. Por isso alvo de arquivo isolado é **recusado**, não classificado.
+
+O projeto sintético inclui um **controle positivo** (fonte e sumidouro na mesma
+função), que o CE já detecta. Sem ele, "nenhuma trilha" seria ambíguo entre "o
+motor não atravessa arquivos" e "o alvo ou o ruleset estão errados".
+
+**Entradas:** `tp_pairs_osv_alcancavel.json`, `cache/`, e o Semgrep autenticado
+
+**Saídas:** `data/viabilidade_pro_<AAAAMMDD>.json` — etapa, edição obtida, versão
+do Semgrep, alertas por modo, quantos trazem trilha (e quantos **entre
+arquivos**), tempo por alvo, e a classificação: `viavel` | `inconclusivo` |
+`indisponivel`. É esse arquivo que `run_pipeline.py --entre-arquivos` exige; sem
+um `viavel`, a execução aborta.
+
+Não grava nem invalida entrada de cache simbólico, e não produz CSV de rodada.
+
+**Uso:**
+```bash
+python scripts/verificar_pro.py --selftest         # valida a lógica, sem rede
+python scripts/verificar_pro.py --etapa sintetica  # só a etapa barata
+python scripts/verificar_pro.py --etapa real       # só a etapa cara
+python scripts/verificar_pro.py                    # as duas, na ordem
+```
+
+> **Limitação conhecida do critério.** A classificação `viavel` exige ≥1 trilha
+> entre arquivos no alvo — isso mede a **capacidade do motor**, não o **ganho na
+> nossa população**. Na medição de 2026-09-15 o portão passou e, ainda assim, o
+> cruzamento manual do `seaweedfs` mostrou 0 alertas nos arquivos do gabarito nos
+> dois modos. Um portão futuro para troca de ruleset ou de motor deve ter como
+> critério a detecção **nos casos do gabarito**, não "a ferramenta funciona".
+
+---
+
 ### `scripts/medir_prompts.py`
 
 **Propósito:** Mede a distribuição de tamanho de prompt (em tokens estimados)
