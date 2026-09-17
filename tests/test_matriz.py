@@ -20,6 +20,7 @@ from run_pipeline import (
 from src.catalogo import Catalogo
 from src.fase1_semgrep import ALERTA_OUTRA_CWE, SEM_ALERTA
 from src.fase5_auditoria import CABECALHO, COLUNAS_PARTE2, inicializar_relatorio
+from src.prompts import TIPOS
 from src.provedores import RespostaLLM
 
 GEMINI = "gemini-2.5-flash-lite"
@@ -108,13 +109,16 @@ def test_cabecalho_tem_as_colunas_novas():
     assert set(COLUNAS_PARTE2) == {
         "Num_Locations", "Ficha_CWE", "Versao_Prompt", "Hash_Catalogo",
         "Tokens_Entrada", "Tokens_Saida", "Custo_USD",
-        "Motivo_Nao_Deteccao", "Regras_Nao_Casadas"}
+        "Motivo_Nao_Deteccao", "Regras_Nao_Casadas", "Procedencia"}
 
 
 def test_colunas_de_pareamento_vao_para_o_fim():
     """Ao fim, e não no meio: `registrar_resultado` escreve a linha
-    posicionalmente e `COLUNAS_PARTE2` é uma fatia do cabeçalho."""
-    assert CABECALHO[-2:] == ["Motivo_Nao_Deteccao", "Regras_Nao_Casadas"]
+    posicionalmente e `COLUNAS_PARTE2` é uma fatia do cabeçalho.
+
+    A de procedência entrou depois, pelo mesmo motivo e no mesmo lugar."""
+    assert CABECALHO[-3:] == ["Motivo_Nao_Deteccao", "Regras_Nao_Casadas",
+                              "Procedencia"]
 
 
 def test_colunas_novas_preenchidas_em_caso_detectado(tmp_path, catalogo,
@@ -512,14 +516,19 @@ def test_manifesto_completo(tmp_path, catalogo):
     assert m["semgrep"]["versao"] and m["semgrep"]["ruleset"]
     assert m["catalogo_cwe"]["sha256"] == catalogo.sha256
     assert len(m["catalogo_cwe"]["cwes_especificas"]) == 15
-    assert set(m["prompts"]) == {"baseline", "especialista"}
+    # O manifesto registra o hash de TODOS os tipos disponíveis, não só os dos
+    # braços da rodada: é o que permite, depois, provar que um template não
+    # usado também não mudou.
+    assert set(m["prompts"]) == set(TIPOS)
+    assert m["prompts"]["baseline"].startswith("baseline:")
     assert len(m["bracos"]) == 4
     assert m["precos"]["data_consulta"]
     assert GEMINI in m["precos"]["precos"]
     assert m["populacao"]["total"] == 848
     assert m["populacao"]["por_trilha"]["FP"] == 791
     assert m["inicio_utc"] and m["fim_utc"] and m["duracao_s"] >= 0
-    assert m["modo"] == {"sem_llm": False, "cache_simbolico_ativo": True}
+    assert m["modo"] == {"sem_llm": False, "cache_simbolico_ativo": True,
+                         "montagem": "filtro"}
 
 
 def test_rodadas_nao_se_sobrescrevem(tmp_path, catalogo, simbolico_dublado):
