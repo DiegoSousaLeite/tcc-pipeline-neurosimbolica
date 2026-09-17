@@ -250,9 +250,62 @@ aleatória, e o timeout do `gogs` mostra que repositórios grandes ficam
 sub-representados — justamente os que teriam mais camadas para atravessar. O
 enunciado honesto é sobre os casos avaliados, não sobre a população.
 
-**Encaminhamento.** O caminho que a evidência indica é `p/gosec` — regras
-sintáticas (`G304` para CWE-22, `G107` para CWE-918) que não dependem de rastro
-de fluxo. Ver a change `ruleset-gosec`.
+**Encaminhamento.** A hipótese era `p/gosec` — regras sintáticas (`G304` para
+CWE-22, `G107` para CWE-918) que não dependeriam de rastro de fluxo. **Ela foi
+medida e refutada em 2026-09-16: essas regras não existem.** Ver §3.6.
+
+---
+
+### 3.6 Os rulesets públicos não cobrem CWE-22 nem CWE-918 em Go (RESULTADO NEGATIVO, medido em 2026-09-16)
+
+O §3.5 encaminhava para o `p/gosec`, supondo que o registry do Semgrep publica
+as regras do gosec reescritas — `G304` para CWE-22 e `G107` para CWE-918 —, que
+seriam sintáticas e por isso alcançariam onde as regras de taint falham. **A
+suposição era falsa.**
+
+| medida | valor |
+|---|---|
+| Regras no `p/gosec` | 23 (todas rodam em Go; `missed: 0`) |
+| Já presentes no `p/default` | **22 de 23** |
+| Exclusivas | 1 — `use-of-unsafe-block`, CWE-242, ausente da população |
+| `gosec.G304-1` / `gosec.G107-1` | **não existem**, em nenhum ruleset alcançável |
+
+O `p/gosec` publicado não é o gosec reescrito: é um recorte das regras
+`go.lang.security.*` do próprio Semgrep. Nenhum identificador contém `gosec`,
+`G304` ou `G107`.
+
+Regras Go **novas** para as duas CWEs alvo, por ruleset consultado:
+
+| ruleset | CWE-22 | CWE-918 |
+|---|---|---|
+| `p/gosec` (23 regras) | 0 | 0 |
+| `p/trailofbits` (120 regras) | 0 | 0 |
+| `p/security-audit` (225 regras) | 0 | 0 |
+
+A única regra de CWE-22 do `p/gosec` é a mesma
+`path-traversal-inside-zip-extraction` que o `p/default` já tem. Confirmado
+também na execução: `semgrep --config p/default [--config p/gosec]` sobre 5
+arquivos de CWE-22 do cache deu **0 alertas nos dois casos**.
+
+**O que isso autoriza escrever.** *"A hipótese de que a não-detecção de CWE-22 e
+CWE-918 decorresse da ausência de regras sintáticas no ruleset configurado foi
+testada e rejeitada: nenhum dos rulesets públicos do registry do Semgrep
+consultados acrescenta regra Go para essas fraquezas além das já presentes no
+`p/default`."*
+
+**O que ainda não autoriza.** Afirmar que o Semgrep não detecta CWE-22 em Go. O
+medido é mais estreito e é sobre o **catálogo**, não sobre a ferramenta: os
+rulesets públicos alcançáveis não trazem regra nova. Uma regra escrita à mão
+poderia detectar — ao custo do viés de autoria, já que seria escrita olhando
+para esta população.
+
+**Consequência metodológica.** Fecha uma alternativa e reforça o §3.1: o teto de
+recall não é um parâmetro mal configurado, é cobertura de regra que não existe
+publicada para Go. Restam dois caminhos, ambos com custo próprio — regra própria
+(`regras-proprias-go`, assume o viés) ou mais alcance no motor
+(`semgrep-pro-entre-arquivos`, que o §3.5 já mediu como sem ganho em 6 casos).
+
+Medições em `openspec/changes/archive/2026-09-17-ruleset-gosec/design.md`.
 
 ---
 
