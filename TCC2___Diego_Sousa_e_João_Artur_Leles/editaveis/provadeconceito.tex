@@ -1,0 +1,256 @@
+\chapter{Prova de Conceito}
+\label{cap:poc}
+
+Este capítulo apresenta um teste piloto da arquitetura proposta no Capítulo~\ref{cap:metodologia}. A intenção não é gerar os resultados finais do experimento, que estão reservados ao TCC 2, e sim mostrar, na prática, que a esteira funciona de ponta a ponta: cada uma das cinco fases é executável e entrega o artefato esperado, até a geração das matrizes de classificação e das métricas. Vale enfatizar que os números aqui apresentados têm caráter ilustrativo e não medem a eficácia da abordagem: a amostra é pequena e, no piloto, todos os alertas que chegaram ao modelo eram falsos positivos (gabarito seguro), de modo que não há vulnerabilidades reais entre eles para calcular métricas como \textit{Recall} ou F1. Qualquer generalização estatística fica, portanto, reservada ao experimento completo do TCC 2. Para tornar o funcionamento concreto, cada fase é acompanhada de um exemplo real retirado da execução.
+
+\section{Objetivo e Escopo da Prova de Conceito}
+
+A pergunta que este capítulo busca responder é de viabilidade: partindo de um repositório real em Go e de um \textit{commit} específico do seu histórico, a arquitetura consegue reproduzir um alerta do analisador estático, enriquecê-lo com contexto, submetê-lo a um modelo de linguagem e registrar o veredito em uma base auditável?
+
+Para responder a essa pergunta, executou-se um subconjunto pequeno da base de validação, com os dois tipos de entrada já descritos na metodologia: amostras de falso positivo (vindas do \textit{dataset}) e pares de vulnerabilidade real (derivados de CVEs). Em todos os casos vale a regra de \textit{filtro puro}: o Semgrep analisa o código e o modelo de linguagem (Gemini) só é acionado quando existe um alerta a ser triado, conforme a Seção~\ref{subsec:classificacao}. Nesta etapa foi usado um único tipo de \textit{prompt}, o especialista; a comparação entre estratégias de \textit{prompt} é o experimento central do TCC 2. A arquitetura exercitada é a da Figura~\ref{fig:arquitetura}, operada por meio do ambiente de simulação da Seção~\ref{sec:simulacao} (Figura~\ref{fig:simulacao}).
+
+\section{Preparação do Ambiente e dos Dados}
+
+O experimento foi montado em uma máquina local, com os seguintes componentes: \texttt{Python} (versão 3.10 ou superior); a ferramenta \texttt{Semgrep}, instalada via \texttt{pip}; o cliente \texttt{git}, usado para clonar os repositórios e retornar ao \textit{commit} histórico desejado; e uma chave de acesso à API do Gemini. O Semgrep foi configurado com o conjunto de regras \texttt{p/default} e o modelo neural com a versão \texttt{gemini-2.5-flash-lite}.
+
+As duas trilhas de dados utilizadas no piloto são as mesmas descritas na Seção~\ref{subsec:base}: os falsos positivos do \textit{dataset} (gabarito seguro) e os pares de vulnerabilidade real derivados de CVEs (cada par com uma versão vulnerável e uma corrigida). Os pares já haviam sido produzidos previamente, em uma etapa preparatória e \textit{offline}, de modo que o piloto parte de dados prontos.
+
+Todo o fluxo é coordenado por um \textit{script} orquestrador, o \texttt{run\_pipeline.py}, que permite executar somente os falsos positivos ou somente os pares de CVE, limitar o número de amostras e retomar uma execução interrompida sem reprocessar os casos já concluídos.
+
+\section{Fase 1: Análise Simbólica com Semgrep}
+
+A primeira fase recria o cenário histórico e roda o analisador estático. O orquestrador clona o repositório (caso ainda não esteja em disco), retorna ao \textit{commit} exato da amostra e executa o Semgrep sobre o arquivo indicado:
+
+\begin{verbatim}
+semgrep --config p/default --sarif --quiet <arquivo>
+\end{verbatim}
+
+O resultado é um relatório no formato SARIF. A partir dele, o sistema localiza o alerta cuja regra corresponde à CWE da amostra (essa correspondência é identificada pelas \textit{tags} da regra). Por exemplo, ao reanalisar o arquivo \texttt{server/logout/logout.go} do repositório \textit{argo-cd}, o Semgrep reproduziu o seguinte alerta:
+
+\begin{verbatim}
+check_id : cookie-missing-httponly
+arquivo  : server/logout/logout.go
+linha    : 93
+CWE      : CWE-1004
+mensagem : A session cookie was detected without setting the
+           'HttpOnly' flag. [...] Set the 'HttpOnly' flag by
+           setting 'HttpOnly' to 'true'.
+\end{verbatim}
+
+Se nenhuma regra correspondente à CWE dispara, a amostra recebe o \textit{status} \texttt{NAO\_DETECTADO} e o fluxo é encerrado ali mesmo, sem acionar o modelo de linguagem. Esse caso é contabilizado apenas na matriz de cobertura e representa um ponto cego do analisador, conforme discutido na Seção~\ref{subsec:classificacao}.
+
+\section{Fase 2: Middleware de Hidratação de Contexto}
+
+Um alerta isolado aponta apenas uma linha, o que costuma ser pouco para julgar se há de fato uma vulnerabilidade. Por isso, a segunda fase realiza a \textit{hidratação de contexto}: um \textit{middleware} em \texttt{Python} parte da linha do alerta e extrai a função inteira que a contém, delimitando-a pelo balanceamento de chaves do código. O texto entregue ao modelo passa a reunir, então, o cabeçalho do alerta (regra, CWE e mensagem) e o corpo completo dessa função. O objetivo é fornecer ao modelo o contexto que o analisador estático costuma ignorar, como importações, validações e funções de sanitização, reduzindo o risco de o modelo produzir uma resposta sem fundamento (alucinação).
+
+\section{Fases 3 e 4: Inferência Neural com Gemini}
+
+De posse do contexto, o sistema monta o \textit{prompt} especialista, que reúne as diretrizes de triagem, a descrição da CWE e o trecho de código, e o envia à API do Gemini. Para tornar a resposta estável e fácil de processar, a chamada usa temperatura zero e exige um retorno em JSON com dois campos: o veredito e a justificativa. O veredito é VP quando o modelo julga tratar-se de uma vulnerabilidade real, e FP quando o julga um falso positivo.
+
+Os dois exemplos a seguir, retirados do piloto, mostram os dois desfechos possíveis. No primeiro, o modelo acerta ao descartar um falso positivo; no segundo, ele erra, mantendo como vulnerável um alerta que o gabarito considera seguro:
+
+\begin{verbatim}
+CWE-115 (argo-cd) -> veredito: FP  (acerto)
+"O alerta indica que o ReverseProxy.Director pode remover
+ headers. [...] os headers são definidos explicitamente e
+ não há um 'Sink' inseguro; não há evidência de sanitização
+ ignorada."
+
+CWE-1004 (argo-cd) -> veredito: VP  (ruído mantido)
+"[...] ao criar o http.Cookie, o campo HttpOnly não é
+ definido como true. Por padrão é false em Go, portanto o
+ cookie de autenticação é enviado sem a flag HttpOnly."
+\end{verbatim}
+
+O segundo caso é instrutivo. A observação do modelo está tecnicamente correta, pois a \textit{flag} \texttt{HttpOnly} realmente não é definida; o gabarito, porém, classifica a amostra como falso positivo, porque o \textit{cookie} em questão está apenas sendo esvaziado durante uma rotina de \textit{logout}. Distinguir esse tipo de nuance é justamente o que o trabalho se propõe a estudar.
+
+\section{Fase 5: Auditoria e Consolidação das Matrizes}
+
+A última fase registra cada caso em uma planilha (arquivo CSV), com os campos que permitem rastrear e auditar a decisão: identificador, repositório, CWE, origem, modelo, tipo de \textit{prompt}, gabarito, \textit{status} do Semgrep, classificação na matriz de cobertura, veredito do LLM, classificação na matriz de acerto, tempo de execução e justificativa. A título de exemplo, a Tabela~\ref{tab:poc-registro} mostra, de forma resumida, como o
+caso usado para ilustrar as fases anteriores é registrado nesse relatório (cada linha
+corresponde a um campo do CSV e ao seu respectivo valor).
+
+\begin{table}[htpb]
+    \centering
+    \caption{Exemplo de um registro consolidado no relatório (CSV)}
+    \label{tab:poc-registro}
+    \begin{tabular}{|l|p{9.2cm}|}
+        \hline
+        \textbf{Campo} & \textbf{Valor} \\
+        \hline
+        ID do caso & \texttt{18ce5c27:CWE-1004:false\_positive} \\
+        \hline
+        Repositório & \texttt{argoproj/argo-cd} \\
+        \hline
+        CWE & CWE-1004 \\
+        \hline
+        Origem & FP (falso positivo) \\
+        \hline
+        Modelo & \texttt{gemini-2.5-flash-lite} \\
+        \hline
+        Tipo de \textit{prompt} & especialista \\
+        \hline
+        Gabarito & seguro \\
+        \hline
+        \textit{Status} do Semgrep & DETECTADO \\
+        \hline
+        Classificação (cobertura) & Semgrep FP (ruído sobre código seguro) \\
+        \hline
+        Veredito do LLM & VP \\
+        \hline
+        Classificação (acerto) & Falso Positivo (Ruído Mantido) \\
+        \hline
+        Tempo de execução & 11,21 s \\
+        \hline
+        Justificativa & ``[...] ao criar o \texttt{http.Cookie}, o campo \texttt{HttpOnly} não é definido como \texttt{true}; portanto o cookie de autenticação é enviado sem a \textit{flag}.'' \\
+        \hline
+    \end{tabular}
+    \fontepesquisa
+\end{table}
+
+A partir desse arquivo, o \textit{script} \texttt{metricas.py} calcula automaticamente as duas matrizes de confusão e as métricas associadas, segundo as fórmulas da Seção~\ref{sec:metricas}.
+
+A Figura~\ref{fig:exemplo} recapitula o caminho completo desse caso (o alerta CWE-1004 do \textit{argo-cd}) ao longo das cinco fases, do alerta inicial até a linha final no relatório.
+
+\begin{figure}[htpb]
+    \centering
+    \caption{Percurso de um caso real (\textit{argo-cd}, CWE-1004) pelas fases da pipeline}
+    \label{fig:exemplo}
+    \resizebox{\textwidth}{!}{
+    \begin{tikzpicture}[
+        font=\scriptsize,
+        box/.style={draw, rounded corners, align=center, text width=38mm,
+                    minimum height=16mm, inner sep=2pt},
+        arr/.style={-{Latex[length=2.5mm]}, thick}
+    ]
+        \node[box, fill=blue!8] (a) {\textbf{Fase 1}\\\scriptsize alerta SARIF\\\texttt{cookie-missing-httponly}\\CWE-1004, linha 93};
+        \node[box, fill=blue!8, right=10mm of a] (b) {\textbf{Fase 2}\\\scriptsize função hidratada\\(rotina de \textit{logout})};
+        \node[box, fill=blue!8, right=10mm of b] (c) {\textbf{Fases 3/4}\\\scriptsize Gemini avalia\\(temperatura 0, JSON)};
+        \node[box, fill=orange!12, right=10mm of c] (d) {\textbf{Fase 5}\\\scriptsize veredito: VP\\(ruído mantido)\\linha no CSV};
+        \draw[arr] (a)--(b); \draw[arr] (b)--(c); \draw[arr] (c)--(d);
+    \end{tikzpicture}
+    }
+    \fonteautores
+\end{figure}
+
+\section{Execução Piloto e Resultados Preliminares}
+
+Antes de interpretar os números, convém relembrar a distinção apresentada na Seção~\ref{subsec:classificacao}: o experimento produz duas matrizes independentes. A matriz de cobertura avalia o Semgrep, isto é, se ele consegue (ou não) reproduzir o achado catalogado. A matriz de acerto avalia o LLM, isto é, se ele classifica corretamente os alertas que recebe. Como medem motores diferentes, não devem ser confundidas.
+
+O piloto compreendeu 6 amostras de falso positivo (do repositório \textit{argo-cd}) e 3 pares de vulnerabilidade real da trilha ouro (dos repositórios \textit{argoproj/gitops-engine}, \textit{ctfer-io/chall-manager} e \textit{go-vela/server}), totalizando 12 amostras submetidas ao Semgrep. Os comandos executados foram:
+
+\begin{verbatim}
+python run_pipeline.py --fp-only --amostra 6
+python run_pipeline.py --tp-only --amostra 6
+python src/metricas.py poc_resultados.csv
+\end{verbatim}
+
+A Figura~\ref{fig:execucao} traz um trecho real do \textit{log} da execução, com os dois desfechos possíveis: um falso positivo que chega ao LLM (caso \textit{argo-cd}) e um ponto cego do Semgrep, em que o fluxo é interrompido antes da inferência (caso \textit{gitops-engine}).
+
+\begin{figure}[htpb]
+    \centering
+    \caption{Trecho real da execução do orquestrador no piloto}
+    \label{fig:execucao}
+\begin{verbatim}
+[1/6] FP | argo-cd | CWE-1004 | seguro
+    -> Fase 1: executando Semgrep...
+    -> Fase 3: consultando LLM...
+    [Cobertura Semgrep] Semgrep FP (ruído sobre código seguro)
+    [Acerto LLM]        Falso Positivo (Ruído Mantido) | 11.21s
+
+[1/6] TP_ouro | gitops-engine | CWE-200 | vulneravel
+    -> Fase 1: executando Semgrep...
+    [!] Semgrep não detectou esta CWE (NAO_DETECTADO).
+    [Cobertura Semgrep] Semgrep FN (ponto cego simbólico)
+    [Acerto LLM]        N/A (Semgrep não detectou) | 6.70s
+\end{verbatim}
+    \fontepesquisa
+\end{figure}
+
+\subsection{Cobertura do Motor Simbólico}
+
+A Tabela~\ref{tab:poc-cobertura} apresenta a matriz de cobertura do Semgrep sobre as 12 amostras. O analisador emitiu alerta em todas as 6 amostras de falso positivo (o ruído esperado) e permaneceu corretamente em silêncio nas 3 versões corrigidas. Nas 3 versões vulneráveis, porém, o Semgrep não reproduziu o alerta, o que configura 3 falsos negativos, ou seja, três pontos cegos.
+
+\begin{table}[htpb]
+    \centering
+    \caption{Matriz de cobertura do Semgrep no piloto (n = 12)}
+    \label{tab:poc-cobertura}
+    \begin{tabular}{|l|c|c|}
+        \hline
+        \textbf{Gabarito} & \textbf{Semgrep detectou} & \textbf{Semgrep não detectou} \\
+        \hline
+        Vulnerável & 0 (VP) & 3 (FN -- ponto cego) \\
+        \hline
+        Seguro & 6 (FP -- ruído) & 3 (VN -- silêncio correto) \\
+        \hline
+    \end{tabular}
+    \fontepesquisa
+\end{table}
+
+O dado mais relevante desta matriz é o \textit{recall} nulo do Semgrep sobre as vulnerabilidades reais (0 de 3 detectadas), com coeficiente de correlação de Matthews negativo ($\mathrm{MCC} = -0{,}58$). Esse resultado não invalida a abordagem; pelo contrário, ele confirma empiricamente a premissa que motiva o trabalho, pois mostra que ferramentas de SAST têm pontos cegos diante de vulnerabilidades reais em Go, sobretudo as de natureza lógica e arquitetural, como as três CVEs avaliadas (CWE-200, CWE-405 e CWE-290).
+
+\subsection{Acerto do Motor Neural}
+
+Pela regra de filtro puro (Seção~\ref{subsec:classificacao}), o LLM só é consultado sobre os alertas efetivamente emitidos pelo Semgrep. Na prática, isso significa que a matriz de acerto é construída sobre a coluna ``Semgrep detectou'' da Tabela~\ref{tab:poc-cobertura}: 0 amostra vulnerável mais 6 amostras seguras, totalizando os 6 alertas emitidos. As 3 vulnerabilidades reais e as 3 versões corrigidas compõem a coluna ``Semgrep não detectou'' e encerram-se na matriz de cobertura, sem jamais chegar ao modelo. A Tabela~\ref{tab:poc-acerto} apresenta a matriz de acerto resultante.
+
+\begin{table}[htpb]
+    \centering
+    \caption{Matriz de acerto do LLM no piloto (n = 6 alertas emitidos)}
+    \label{tab:poc-acerto}
+    \begin{tabular}{|l|c|c|}
+        \hline
+        \textbf{Gabarito} & \textbf{LLM: vulnerável (VP)} & \textbf{LLM: seguro (FP)} \\
+        \hline
+        Vulnerável & 0 (VP) & 0 (FN) \\
+        \hline
+        Seguro & 5 (FP -- ruído mantido) & 1 (VN -- acerto) \\
+        \hline
+    \end{tabular}
+    \fontepesquisa
+\end{table}
+
+Dos 6 falsos positivos, o modelo descartou corretamente apenas 1, o que corresponde a uma proporção de falsos positivos filtrados de $16{,}7\%$; os outros 5 foram mantidos como vulneráveis. Como todas as amostras que chegaram ao LLM tinham gabarito \textit{seguro}, a matriz contém uma única classe, e por isso as métricas que dependem de verdadeiros positivos (\textit{Recall}, F1 e MCC) não ficam definidas nesta amostra. Trata-se de uma limitação do tamanho e da composição do piloto, e não da esteira. Ainda assim, o sinal preliminar é informativo: com o \textit{prompt} especialista, o modelo tende a confirmar o alerta do Semgrep em vez de filtrá-lo. Medir e contrastar esse comportamento com um \textit{prompt} de controle é, precisamente, o objeto do experimento do TCC 2.
+
+\subsection{Síntese das Métricas}
+
+A Tabela~\ref{tab:poc-metricas} reúne as métricas calculadas pelo \texttt{metricas.py} para as duas matrizes do piloto. Vale lembrar o significado das principais: o \textit{Recall} indica a fração de vulnerabilidades reais detectadas; a TRA (Taxa de Redução de Alertas) indica a fração de alertas descartados como seguros sobre o total analisado; a \textit{Proporção de FP filtrados} indica quantos falsos positivos foram corretamente descartados; e a TFN (Taxa de Falsos Negativos) indica quantas vulnerabilidades reais escaparam. As definições formais estão na Seção~\ref{sec:metricas}.
+
+\begin{table}[htpb]
+    \centering
+    \caption{Métricas consolidadas do piloto}
+    \label{tab:poc-metricas}
+    \begin{tabular}{|l|c|c|}
+        \hline
+        \textbf{Métrica} & \textbf{Cobertura (Semgrep)} & \textbf{Acerto (LLM)} \\
+        \hline
+        VP / VN / FP / FN & 0 / 3 / 6 / 3 & 0 / 1 / 5 / 0 \\
+        \hline
+        \textit{Recall} & 0,00 & N/A \\
+        \hline
+        MCC & $-0{,}58$ & N/A \\
+        \hline
+        TRA & 0,50 & 0,17 \\
+        \hline
+        Prop. FP filtrados & 0,33 & 0,17 \\
+        \hline
+        TFN & 1,00 & N/A \\
+        \hline
+    \end{tabular}
+    \fontepesquisa
+\end{table}
+
+\section{Desafios e Lições do Piloto}
+
+A execução do piloto trouxe aprendizados que orientarão a coleta completa no TCC 2:
+
+\begin{itemize}
+    \item \textbf{Cobertura do conjunto de regras:} a escolha do \textit{ruleset} do Semgrep afeta diretamente a reprodução dos alertas. Um conjunto enxuto deixa de emitir alertas para diversas categorias de CWE; por isso adotou-se o \texttt{p/default}, mais abrangente, o que é coerente com a literatura sobre a limitação de cobertura das ferramentas de SAST \cite{bennett2024semgrep}.
+
+    \item \textbf{Restrições de cota da API:} o nível gratuito do modelo de linguagem impõe um teto diário de requisições, insuficiente para processar a base completa em uma única execução. O \textit{checkpoint} do orquestrador atenua o problema ao permitir a retomada incremental, e a coleta final do TCC 2 contemplará a execução em lotes ou o uso de cota paga.
+
+    \item \textbf{Pontos cegos como resultado, não como falha:} o fato de o Semgrep não reproduzir as vulnerabilidades reais reforça a relevância da camada neural e, ao mesmo tempo, expõe um limite da arquitetura de filtro puro: o que o SAST não levanta não chega ao LLM. Essa observação delimita o alcance da triagem neuro-simbólica e será aprofundada na análise final.
+
+    \item \textbf{Escopo do piloto frente ao experimento completo:} o piloto exercitou um único modelo neural (Gemini) e o \textit{prompt} especialista. O experimento do TCC 2 ampliará a coleta para o desenho fatorial completo previsto na metodologia --- contrastando os modelos Gemini e GPT com os \textit{prompts} de controle (\textit{baseline}) e especialista ---, cuja execução sobre a base integral depende da estratégia de cota paga ou de lotes discutida acima.
+\end{itemize}
+
+Em síntese, a prova de conceito cumpriu o seu propósito: validou que a arquitetura proposta opera de ponta a ponta sobre dados reais, produzindo as duas matrizes de classificação e as métricas que sustentarão a investigação empírica completa do TCC 2.

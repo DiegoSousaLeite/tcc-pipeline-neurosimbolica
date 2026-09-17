@@ -1,0 +1,35 @@
+# Saída do build LaTeX. Tudo aqui é recriável com `make` e nenhum produz diff
+# útil — versioná-los encheria o histórico de ruído binário e esconderia as
+# mudanças de texto, que são a razão de este diretório ter passado a ser
+# versionado.
+
+# Alvo final (Makefile: TARGET = TCC_FGA.pdf) e os intermediários da rota
+# latex -> dvips -> ps2pdf.
+TCC_FGA.pdf
+*.dvi
+*.ps
+
+# Conversão automática de EPS feita pelo próprio LaTeX a cada compilação.
+*-eps-converted-to.pdf
+
+# Auxiliares de compilação, bibliografia, índices e listas automáticas.
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.bbl
+*.blg
+*.brf
+*.idx
+*.ind
+*.ilg
+*.nav
+*.snm
+*.vrb
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+*.xdv
