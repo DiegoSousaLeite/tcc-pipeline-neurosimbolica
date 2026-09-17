@@ -219,7 +219,7 @@ def semgrep_contado(monkeypatch, tmp_path):
     def _obter(repo, commit, arquivo):
         return str(alvo)
 
-    def _semgrep(caminho, cwe):
+    def _semgrep(caminho, cwe, entre_arquivos=False):
         chamadas["semgrep"] += 1
         return ResultadoFase1(ALERTA, MOTIVO_NA, [])
 
@@ -248,7 +248,7 @@ def test_segunda_execucao_nao_invoca_semgrep(cache, caso, semgrep_contado):
 
 def _nao_detecta(contador, motivo=SEM_ALERTA, regras=()):
     """Dublê de Fase 1 que não emparelha nada e conta as invocações."""
-    def _semgrep(caminho, cwe):
+    def _semgrep(caminho, cwe, entre_arquivos=False):
         contador["semgrep"] += 1
         return ResultadoFase1(None, motivo, list(regras))
     return _semgrep
