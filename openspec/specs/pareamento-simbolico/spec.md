@@ -17,6 +17,8 @@ O casamento SHALL ser por identificador completo de CWE, e não por prefixo text
 
 Quando mais de um alerta casa com a CWE do gabarito, o sistema SHALL escolher de forma determinística, para que duas execuções sobre o mesmo arquivo e o mesmo ruleset produzam o mesmo alerta.
 
+A ausência de emparelhamento SHALL continuar determinando o status `NAO_DETECTADO` e SHALL continuar impedindo a chamada de LLM **no modo de montagem `filtro`**. No modo `triagem`, a ausência de emparelhamento continua produzindo `NAO_DETECTADO` — é verdade sobre o motor simbólico e não é sobrescrita —, mas deixa de ser o que decide se o caso chega ao LLM: para caso de gabarito vulnerável, o candidato passa a ser montado a partir do gabarito. A regra de emparelhamento em si não muda; muda apenas o que a sua ausência implica a jusante.
+
 #### Scenario: Alerta com a CWE do gabarito é emparelhado
 - **WHEN** o arquivo produz um alerta cuja regra traz a tag da CWE do gabarito
 - **THEN** esse alerta é emparelhado ao caso e o status é `DETECTADO`
@@ -45,9 +47,17 @@ Quando mais de um alerta casa com a CWE do gabarito, o sistema SHALL escolher de
 - **WHEN** mais de um alerta vem de regra com a tag da CWE do gabarito
 - **THEN** o alerta escolhido é o mesmo em execuções repetidas sobre o mesmo arquivo e ruleset
 
-#### Scenario: Sem emparelhamento, o LLM não é consultado
-- **WHEN** nenhum alerta é emparelhado ao caso
+#### Scenario: Sem emparelhamento, o LLM não é consultado no modo filtro
+- **WHEN** nenhum alerta é emparelhado ao caso e o modo de montagem é `filtro`
 - **THEN** nenhum braço da matriz faz chamada de LLM para esse caso, preservando o desenho em que o LLM é filtro puro do Semgrep
+
+#### Scenario: Sem emparelhamento, o status permanece NAO_DETECTADO em qualquer modo
+- **WHEN** nenhum alerta é emparelhado ao caso e o modo de montagem é `triagem`
+- **THEN** o status registrado continua sendo `NAO_DETECTADO` com o motivo preservado, ainda que o caso receba veredito de LLM
+
+#### Scenario: Emparelhamento tem precedência sobre injeção
+- **WHEN** um caso de gabarito vulnerável tem alerta emparelhado e o modo de montagem é `triagem`
+- **THEN** o candidato vem do alerta, com procedência `alerta`, e nenhum candidato é montado a partir do gabarito para o mesmo caso
 
 ### Requirement: Motivo da não-detecção
 O sistema SHALL distinguir dois motivos de não-detecção, antes fundidos num único `NAO_DETECTADO`: `SEM_ALERTA`, quando o Semgrep não emitiu alerta algum sobre o arquivo, e `ALERTA_OUTRA_CWE`, quando emitiu alertas mas nenhum casa com a CWE do gabarito.
