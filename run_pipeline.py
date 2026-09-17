@@ -69,7 +69,16 @@ from src.fase1_semgrep import (
     SemgrepTimeoutError,
     executar_semgrep,
 )
-from src.fase2_middleware import extrair_e_hidratar_contexto
+from src.fase2_middleware import (
+    ALERTA,
+    MODO_FILTRO,
+    MODO_TRIAGEM,
+    MODOS_MONTAGEM,
+    PROCEDENCIA_NA,
+    candidato_de_alerta,
+    candidato_de_gabarito,
+    extrair_e_hidratar_contexto,
+)
 from src.fase5_auditoria import CATEGORIAS_ERRO, inicializar_relatorio, registrar_resultado
 from src.fases3_4_llm import avaliar
 from src.fonte import (
@@ -147,6 +156,13 @@ class Caso:
     cwe_name: str = ""
     description: str = ""
     num_locations: int = 1
+    # Linha inicial da função declarada como vulnerável pelo gabarito, quando o
+    # gabarito a declara. É insumo do RECORTE no braço de triagem — a hidratação
+    # extrai a função que contém a linha —, e não critério de acerto: a
+    # avaliação continua por arquivo (`populacao-classe-positiva`). `None` em
+    # caso seguro, em location de escopo de arquivo e nas trilhas que não
+    # declaram função; sem ela não há candidato injetado (D6).
+    linha_gabarito: int | None = None
 
     # Compatibilidade com o acesso por chave usado antes da dataclass
     # (scripts/ e código de análise antigos indexam o caso como dict).
@@ -294,6 +310,14 @@ def construir_casos_tp_dataset(dataset, todas_locations=True, so_go=True):
                 description=alerta["to_analyzer"].get("description", ""),
                 gabarito="vulneravel",
                 num_locations=len(todas),
+                # Aqui as locations são por FUNÇÃO alterada no commit de fix, e
+                # `line_start` é o início dela. `FILE_SCOPE` marca a location
+                # que cobre o arquivo inteiro: não é localização de função, e
+                # tratá-la como tal faria o recorte cair na primeira função do
+                # arquivo. Sem linha não há candidato injetado (D6).
+                linha_gabarito=(local.get("line_start")
+                                if local.get("function") not in
+                                ("FILE_SCOPE", "", None) else None),
             ))
     return casos
 
@@ -368,6 +392,11 @@ def construir_casos_tp(tp_pairs_file, origem_label, cwe_meta, prefixo_id=""):
             discriminador = hashlib.sha256(
                 (arquivo or "").encode("utf-8")).hexdigest()[:8]
             base_id = f"{base_id}:{discriminador}"
+        # O bloco `vulneravel` do par traz o recorte da função no
+        # `parent_commit`, com `linha_inicio` real naquele arquivo. Ele NÃO vale
+        # para a versão `fix`: o commit de correção move as linhas, e o caso
+        # `fix` é de gabarito seguro, que nunca é injetado.
+        linha_vuln = (par.get("vulneravel") or {}).get("linha_inicio")
         for versao, commit, gabarito in [
             ("vuln", par.get("parent_commit"), "vulneravel"),
             ("fix", par.get("fix_commit"), "seguro"),
@@ -389,6 +418,7 @@ def construir_casos_tp(tp_pairs_file, origem_label, cwe_meta, prefixo_id=""):
                 # Um par TP aponta um arquivo por commit: a entrada de origem
                 # não é agregada, então num_locations vale 1 por construção.
                 num_locations=1,
+                linha_gabarito=linha_vuln if versao == "vuln" else None,
             ))
     return casos
 
@@ -589,6 +619,23 @@ def versao_semgrep() -> str:
         return "desconhecida"
 
 
+def modo_da_rodada(dir_rodada: str):
+    """Modo de montagem registrado no manifesto da rodada, ou None.
+
+    None quando não há manifesto (rodada nova) ou quando ele é anterior a este
+    campo — e manifesto anterior ao campo é, por construção, de uma rodada de
+    filtro, que é o padrão; por isso o `MODO_FILTRO` em vez de `None` ali.
+    """
+    destino = os.path.join(dir_rodada, "manifesto.json")
+    if not os.path.exists(destino):
+        return None
+    try:
+        with open(destino, encoding="utf-8") as f:
+            return json.load(f).get("modo", {}).get("montagem", MODO_FILTRO)
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return None
+
+
 def novo_run_id() -> str:
     """`<timestamp UTC>-<commit curto>`: ordenável e rastreável ao código."""
     agora = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -597,7 +644,7 @@ def novo_run_id() -> str:
 
 def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
                      inicio, fim, catalogo, sem_llm, cache_ativo, argv,
-                     sondagens=None):
+                     sondagens=None, modo=MODO_FILTRO):
     """Registra a configuração completa da rodada.
 
     É o que permite, meses depois, dizer de qual código, ruleset, catálogo e
@@ -636,6 +683,11 @@ def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
         "modo": {
             "sem_llm": sem_llm,
             "cache_simbolico_ativo": cache_ativo,
+            # Modo de MONTAGEM do candidato, uniforme na rodada. Sem ele no
+            # manifesto, duas rodadas com o mesmo ruleset e os mesmos braços
+            # seriam indistinguíveis no disco, e a de triagem passaria por
+            # resultado do sistema em operação.
+            "montagem": modo,
         },
     }
     destino = os.path.join(dir_rodada, "manifesto.json")
@@ -710,6 +762,70 @@ def resolver_simbolico(caso, cache_simbolico=None):
     return ResultadoSimbolico(status, alerta, contexto, motivo, regras)
 
 
+class Candidatura(NamedTuple):
+    """O candidato que vai ao LLM, o contexto que ele recebe e de onde veio.
+
+    `candidato is None` significa que este caso não produz chamada de LLM em
+    braço nenhum.
+    """
+
+    candidato: object
+    contexto: str
+    procedencia: str
+
+
+def montar_candidatura(caso, simbolico, modo=MODO_FILTRO):
+    """Decide QUAL candidato o LLM vai julgar neste caso, e com que contexto.
+
+    É o único ponto em que o modo de montagem tem efeito. No modo `filtro` o
+    comportamento é o de sempre: candidato só existe se o Semgrep emitiu alerta
+    emparelhado, e o contexto é o byte-a-byte que as Fases 1-2 produziram (e que
+    o cache simbólico guarda).
+
+    No modo `triagem`:
+
+    - **o emparelhamento tem precedência sobre a injeção** (D3): caso com alerta
+      emparelhado continua vindo do alerta, com procedência `alerta`. São eles
+      que formam o grupo de controle, e injetar por cima deles o destruiria;
+    - caso de gabarito **vulnerável** sem alerta emparelhado tem o candidato
+      montado a partir da linha declarada no gabarito;
+    - caso de gabarito **seguro** nunca é injetado: a classe negativa existe
+      porque o Semgrep a emitiu, e é esse ruído que o braço neural filtra;
+    - falha de esteira nunca vira candidato — o arquivo-alvo pode nem ter sido
+      resolvido, e um contexto vazio viraria veredito sobre nada.
+
+    O contexto é REHIDRATADO aqui, e não lido do cache: no modo triagem ele é
+    normalizado ao código para que a procedência não chegue ao prompt (D7), e o
+    cache guarda a forma do modo filtro.
+    """
+    if modo == MODO_FILTRO:
+        if simbolico.alerta is None:
+            return Candidatura(None, "", PROCEDENCIA_NA)
+        return Candidatura(candidato_de_alerta(simbolico.alerta),
+                           simbolico.contexto, ALERTA)
+
+    if simbolico.status in CATEGORIAS_ERRO:
+        return Candidatura(None, "", PROCEDENCIA_NA)
+
+    if simbolico.alerta is not None:
+        candidato = candidato_de_alerta(simbolico.alerta)
+    elif caso["gabarito"] == "vulneravel":
+        candidato = candidato_de_gabarito(caso["linha_gabarito"])
+    else:
+        candidato = None
+    if candidato is None:
+        return Candidatura(None, "", PROCEDENCIA_NA)
+
+    caminho_arquivo = obter_arquivo(caso["repo_name"], caso["commit"],
+                                    caso["arquivo"])
+    contexto = extrair_e_hidratar_contexto(candidato, caminho_arquivo,
+                                           modo=MODO_TRIAGEM)
+    if not contexto:
+        # Arquivo ilegível ou recorte vazio: sem contexto não há o que julgar.
+        return Candidatura(None, "", PROCEDENCIA_NA)
+    return Candidatura(candidato, contexto, candidato.procedencia)
+
+
 ERRO_POR_EXCECAO = [
     (ArquivoInexistente, "SEMGREP_FILE_NOT_FOUND"),
     (FetchError, "FETCH_FAIL"),
@@ -728,7 +844,7 @@ def _categoria_de_erro(exc) -> str:
 
 def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
                    sem_llm=False, cache_simbolico=None, provedores=None,
-                   catalogo=None):
+                   catalogo=None, modo=MODO_FILTRO):
     """Processa um caso em TODOS os braços da matriz.
 
     As Fases 1 e 2 rodam uma vez só, por fora do laço de braços: é isso que
@@ -736,8 +852,13 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
     comparação pareada) e que corta o custo de parede, já que o Semgrep é o
     gasto dominante e roda inclusive nos `NAO_DETECTADO`.
 
-    O LLM continua sendo filtro puro do Semgrep: `NAO_DETECTADO` não dispara
-    chamada em braço nenhum. Com `sem_llm`, nem os `DETECTADO` disparam.
+    No modo de montagem `filtro` — o padrão — o LLM continua sendo filtro puro
+    do Semgrep: `NAO_DETECTADO` não dispara chamada em braço nenhum. No modo
+    `triagem`, caso de gabarito vulnerável em `NAO_DETECTADO` recebe candidato
+    montado a partir do gabarito e é submetido; o `Status_Semgrep` gravado
+    continua `NAO_DETECTADO`, com o motivo preservado, porque é afirmação sobre
+    o motor simbólico e não sobre o LLM. Com `sem_llm`, nem os `DETECTADO`
+    disparam.
     """
     caso_id = caso["id"]
     ficha = (catalogo or catalogo_padrao()).ficha(caso["cwe"], caso["cwe_name"])
@@ -753,7 +874,7 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
         return 0
 
     def _registrar(braco, status, tempo, resposta=None, erro=None, resp_llm=None,
-                   motivo=MOTIVO_NA, regras=()):
+                   motivo=MOTIVO_NA, regras=(), procedencia=PROCEDENCIA_NA):
         registrar_resultado(
             csvs_por_braco[braco], caso_id, caso["repo_name"], caso["cwe"],
             caso["origem"], caso["gabarito"],
@@ -769,11 +890,18 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
             custo_usd=resp_llm.custo_usd if resp_llm else 0.0,
             motivo_nao_deteccao=motivo,
             regras_nao_casadas=regras,
+            procedencia=procedencia,
         )
+
+    # `--sem-llm` mede cobertura simbólica, e não há veredito a produzir: o
+    # braço de triagem não tem o que injetar. A CLI já recusa a combinação; esta
+    # linha garante que nenhum chamador direto a produza.
+    modo = MODO_FILTRO if sem_llm else modo
 
     t0 = time.time()
     try:
         simbolico = resolver_simbolico(caso, cache_simbolico)
+        candidatura = montar_candidatura(caso, simbolico, modo)
     except Exception as e:                       # falha de esteira
         categoria = _categoria_de_erro(e)
         log.info("    [FALHA] %s: %s", categoria, str(e)[:120])
@@ -781,10 +909,10 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
             _registrar(braco, categoria, time.time() - t0, erro=str(e))
         return 0
 
-    status_simbolico, contexto = simbolico.status, simbolico.contexto
+    status_simbolico, contexto = simbolico.status, candidatura.contexto
     tempo_simbolico = time.time() - t0
 
-    if status_simbolico == "NAO_DETECTADO":
+    if status_simbolico == "NAO_DETECTADO" and candidatura.candidato is None:
         # O status continua um só nos dois motivos: quem compara a string
         # `NAO_DETECTADO` — checkpoint, cache e métricas — segue enxergando o
         # caso como resolvido, e o motivo viaja em coluna própria.
@@ -796,20 +924,27 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
                        regras=simbolico.regras_nao_casadas)
         return 0
 
+    if status_simbolico == "NAO_DETECTADO":
+        log.info("    [TRIAGEM] injetado do gabarito (linha %s); "
+                 "Status_Semgrep permanece NAO_DETECTADO (%s).",
+                 candidatura.candidato.linha, simbolico.motivo)
+
     if status_simbolico == "HIDRATACAO_FALHOU":
         for braco in pendentes:
             _registrar(braco, "DETECTADO", tempo_simbolico,
                        resposta={"verdict": "ERROR",
-                                 "reasoning": "Hidratação falhou (arquivo ilegível)."})
+                                 "reasoning": "Hidratação falhou (arquivo ilegível)."},
+                       procedencia=candidatura.procedencia)
         return 0
 
     if sem_llm:
         log.info("    [DETECTADO] (medição simbólica; LLM não consultado)")
         for braco in pendentes:
-            _registrar(braco, "DETECTADO", tempo_simbolico,
+            _registrar(braco, status_simbolico, tempo_simbolico,
                        resposta={"verdict": "N/A",
                                  "reasoning": "Medição de cobertura simbólica "
-                                              "(--sem-llm): LLM não consultado."})
+                                              "(--sem-llm): LLM não consultado."},
+                       procedencia=candidatura.procedencia)
         return 0
 
     chamadas = 0
@@ -827,18 +962,31 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
                        tempo_simbolico + time.time() - t_braco, erro=str(e))
             continue
         chamadas += 1
-        status = "API_ERROR" if resposta.veredito == "ERROR" else "DETECTADO"
+        # O status simbólico é PRESERVADO: um caso injetado sai `NAO_DETECTADO`
+        # mesmo tendo recebido veredito. Sobrescrevê-lo apagaria a medição de
+        # cobertura do motor, que é resultado por si só (D2).
+        status = ("API_ERROR" if resposta.veredito == "ERROR"
+                  else status_simbolico)
         _registrar(braco, status, tempo_simbolico + time.time() - t_braco,
                    resposta=resposta.como_dict(),
                    erro=resposta.justificativa if status == "API_ERROR" else None,
-                   resp_llm=resposta)
+                   resp_llm=resposta,
+                   motivo=simbolico.motivo,
+                   regras=simbolico.regras_nao_casadas,
+                   procedencia=candidatura.procedencia)
     return chamadas
 
 
 def executar_matriz(casos, bracos, dir_rodada, sem_llm=False,
                     cache_simbolico=None, catalogo=None,
-                    incluir_anteriores=False):
-    """Roda a população inteira em cada braço, gravando um CSV por braço."""
+                    incluir_anteriores=False, modo=MODO_FILTRO):
+    """Roda a população inteira em cada braço, gravando um CSV por braço.
+
+    `modo` é o eixo de montagem do candidato, e é UNIFORME na rodada: braços de
+    modos diferentes cobrem conjuntos de `ID_Caso` diferentes, e a comparação
+    pareada entre braços — que é o que sustenta o McNemar — exige que todos vejam
+    exatamente o mesmo conjunto.
+    """
     catalogo = catalogo or catalogo_padrao()
     processados = carregar_processados(
         None, dir_rodada, incluir_anteriores)
@@ -872,7 +1020,7 @@ def executar_matriz(casos, bracos, dir_rodada, sem_llm=False,
         chamadas += processar_caso(
             caso, csvs_por_braco, bracos, idx, total, processados,
             sem_llm=sem_llm, cache_simbolico=cache_simbolico,
-            provedores=provedores, catalogo=catalogo)
+            provedores=provedores, catalogo=catalogo, modo=modo)
 
         decorrido = time.time() - inicio
         medio = decorrido / idx
@@ -995,6 +1143,17 @@ def main():
     ap.add_argument("--matriz", action="store_true",
                     help=f"Matriz 2x2 completa: {MODELO_GEMINI_PADRAO} e "
                          f"{MODELO_OPENAI_PADRAO} x {BASELINE} e {ESPECIALISTA}.")
+    ap.add_argument("--modo-montagem", choices=MODOS_MONTAGEM,
+                    default=MODO_FILTRO, metavar="MODO",
+                    help=f"Como o candidato chega ao LLM ({'|'.join(MODOS_MONTAGEM)}). "
+                         f"Padrão: {MODO_FILTRO} — o LLM é filtro puro do "
+                         f"Semgrep e caso NAO_DETECTADO não vira chamada. Em "
+                         f"'{MODO_TRIAGEM}', caso de gabarito VULNERÁVEL sem "
+                         f"alerta emparelhado também é submetido, com o "
+                         f"candidato montado a partir da localização do "
+                         f"gabarito; o negativo continua vindo só do Semgrep e "
+                         f"o Status_Semgrep não muda. Multiplica as chamadas de "
+                         f"LLM: dimensione a cota antes.")
     ap.add_argument("--run-id", metavar="ID",
                     help="Reaproveita um run_id existente (retoma a rodada).")
     ap.add_argument("--reaproveitar-anteriores", action="store_true",
@@ -1011,6 +1170,12 @@ def main():
         ap.error("Informe um modo: --amostra N, --tudo, --fp-only ou --tp-only")
     if args.matriz and (args.modelo or args.prompt):
         ap.error("--matriz já define os braços; não combine com --modelo/--prompt")
+    # `--sem-llm` mede cobertura simbólica; o braço de triagem existe para
+    # produzir veredito. Juntos não fazem nada além de gastar Semgrep.
+    if args.sem_llm and args.modo_montagem == MODO_TRIAGEM:
+        ap.error(f"--sem-llm não faz sentido com --modo-montagem "
+                 f"{MODO_TRIAGEM}: o braço de triagem existe para submeter ao "
+                 f"LLM os casos que o Semgrep não detectou.")
 
     with open(DATASET_PATH, encoding="utf-8") as f:
         dataset = json.load(f)
@@ -1086,8 +1251,27 @@ def main():
     os.makedirs(dir_rodada, exist_ok=True)
     log.info("[+] Rodada: results/%s/", run_id)
 
+    # Retomar uma rodada com o modo de montagem TROCADO misturaria, no mesmo
+    # diretório, braços que cobrem conjuntos de `ID_Caso` diferentes — e o
+    # manifesto, que é reescrito ao fim, registraria só o último modo. O
+    # McNemar sairia pareado sobre um conjunto que nunca existiu. Como a
+    # retomada é justamente o que se usa depois de uma interrupção, o erro
+    # aconteceria sem que nada denunciasse.
+    modo_anterior = modo_da_rodada(dir_rodada)
+    if modo_anterior is not None and modo_anterior != args.modo_montagem:
+        ap.error(f"a rodada {run_id} foi gravada com modo de montagem "
+                 f"'{modo_anterior}' e está sendo retomada com "
+                 f"'{args.modo_montagem}'. O modo é uniforme na rodada: use "
+                 f"--modo-montagem {modo_anterior} ou um --run-id novo.")
+
     if args.sem_llm:
         log.info("[+] Modo --sem-llm: só cobertura simbólica (nenhuma chamada de API).")
+    log.info("[+] Modo de montagem: %s", args.modo_montagem)
+    if args.modo_montagem == MODO_TRIAGEM:
+        log.info("    [!] Positivos NAO_DETECTADO serão injetados a partir do "
+                 "gabarito.")
+        log.info("    [!] Os números desta rodada NÃO descrevem o sistema em "
+                 "operação: num uso real esses positivos não existiriam.")
     cache_simbolico = CacheSimbolico(ativo=not args.sem_cache_simbolico)
     log.info("[+] Cache simbólico: %s (ruleset %s)",
              "ativo" if cache_simbolico.ativo else "DESATIVADO",
@@ -1098,14 +1282,16 @@ def main():
     try:
         executar_matriz(casos, bracos, dir_rodada, sem_llm=args.sem_llm,
                         cache_simbolico=cache_simbolico, catalogo=catalogo,
-                        incluir_anteriores=args.reaproveitar_anteriores)
+                        incluir_anteriores=args.reaproveitar_anteriores,
+                        modo=args.modo_montagem)
     finally:
         # O manifesto é gravado mesmo em rodada interrompida: sem ele os CSVs
         # parciais ficam sem procedência.
         destino = gravar_manifesto(
             dir_rodada, run_id, bracos, por_trilha, len(casos), inicio,
             datetime.now(timezone.utc), catalogo, args.sem_llm,
-            cache_simbolico.ativo, " ".join(sys.argv), sondagens)
+            cache_simbolico.ativo, " ".join(sys.argv), sondagens,
+            modo=args.modo_montagem)
         log.info("[+] Manifesto: %s", os.path.relpath(destino, BASE))
 
 

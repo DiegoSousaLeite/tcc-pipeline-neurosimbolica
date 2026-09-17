@@ -359,6 +359,8 @@ def test_exporta_os_dois_tex(rodada):
     bracos = carregar(str(rodada))
     comparacoes = [mcnemar(bracos[0], bracos[1])]
     caminhos = exportar_latex(bracos, comparacoes, str(rodada))
+    # `tabela_procedencias.tex` só sai quando há procedência nas linhas; esta
+    # rodada é do braço de filtro anterior à coluna, então não há o que exportar.
     assert [os.path.basename(c) for c in caminhos] == ["tabela_bracos.tex",
                                                        "tabela_mcnemar.tex"]
     for c in caminhos:

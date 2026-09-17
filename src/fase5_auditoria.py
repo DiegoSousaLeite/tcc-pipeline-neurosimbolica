@@ -37,6 +37,12 @@ CABECALHO = [
     # posicionalmente e `COLUNAS_PARTE2` é definido por fatia.
     "Motivo_Nao_Deteccao",     # SEM_ALERTA | ALERTA_OUTRA_CWE | N/A
     "Regras_Nao_Casadas",      # check_id separados por ';', ordem alfabética
+    # Como o candidato submetido ao LLM foi montado. Sem esta coluna, um CSV do
+    # braço de triagem não sabe dizer quais vereditos descrevem a capacidade do
+    # sistema implantado (`alerta`) e quais descrevem a do componente neural
+    # isolado (`gabarito`) — duas afirmações diferentes, e a diferença entre
+    # elas é o resultado que o braço de triagem existe para produzir.
+    "Procedencia",             # alerta | gabarito | N/A
 ]
 
 # Colunas que os CSVs da Parte 1 não têm — e às quais as duas de pareamento se
@@ -114,12 +120,17 @@ def registrar_resultado(
     custo_usd: float = 0.0,
     motivo_nao_deteccao: str = "N/A",
     regras_nao_casadas=(),
+    procedencia: str = "N/A",
 ):
     """Consolida um caso no relatório, mantendo as duas matrizes separadas.
 
     - status_semgrep == "DETECTADO":    preenche cobertura Semgrep E acerto LLM.
-    - status_semgrep == "NAO_DETECTADO": preenche só a cobertura (LLM = N/A) e
-      registra qual dos dois motivos produziu a não-detecção.
+    - status_semgrep == "NAO_DETECTADO": preenche só a cobertura e registra qual
+      dos dois motivos produziu a não-detecção. O acerto do LLM sai `N/A`, a
+      menos que venha `resposta_llm` — o que só acontece no braço de triagem,
+      com candidato montado a partir do gabarito. O status NÃO muda: é uma
+      afirmação sobre o motor simbólico, verdadeira independentemente de o LLM
+      ter opinado, e sobrescrevê-la apagaria a medição de cobertura.
     - status_semgrep em CATEGORIAS_ERRO: falha de esteira, fora das duas matrizes.
     """
     tempo_fmt = f"{tempo_exec:.2f}"
@@ -137,12 +148,20 @@ def registrar_resultado(
 
     elif status_semgrep == "NAO_DETECTADO":
         classificacao_semgrep = classificar_cobertura_semgrep(gabarito, detectado=False)
-        veredito_llm = "N/A"
-        classificacao_llm = "N/A (Semgrep nao detectou)"
-        justificativa = "Semgrep nao emitiu alerta para esta CWE (cobertura simbolica)."
         motivo = motivo_nao_deteccao or "N/A"
         regras = (regras_nao_casadas if isinstance(regras_nao_casadas, str)
                   else ";".join(regras_nao_casadas))
+        if resposta_llm is None:
+            veredito_llm = "N/A"
+            classificacao_llm = "N/A (Semgrep nao detectou)"
+            justificativa = ("Semgrep nao emitiu alerta para esta CWE "
+                             "(cobertura simbolica).")
+        else:
+            # Braço de triagem: o candidato veio do gabarito e o LLM opinou. A
+            # cobertura simbólica acima continua registrando o ponto cego.
+            veredito_llm = resposta_llm.get("verdict", "ERROR")
+            classificacao_llm = classificar_acerto_llm(gabarito, veredito_llm)
+            justificativa = resposta_llm.get("reasoning", "")
 
     else:  # DETECTADO
         classificacao_semgrep = classificar_cobertura_semgrep(gabarito, detectado=True)
@@ -173,6 +192,7 @@ def registrar_resultado(
             f"{custo_usd:.8f}",
             motivo,
             regras,
+            procedencia,
         ])
 
     log.info("    [Cobertura Semgrep] %s", classificacao_semgrep)

@@ -13,6 +13,8 @@ USO
   python src/metricas.py results/<run_id>              # tabela dos braços
   python src/metricas.py results/<run_id> --mcnemar    # + comparação pareada
   python src/metricas.py results/<run_id> --estratificar
+  # A comparação por procedência do candidato — o grupo de controle do braço de
+  # triagem — sai sozinha sempre que as duas procedências convivem na rodada.
   python src/metricas.py results/<run_id> --latex      # exporta os .tex
   python src/metricas.py resultados_tcc.csv            # CSV avulso (Parte 1)
   python src/metricas.py resultados_tcc.csv --por-cwe
@@ -31,6 +33,13 @@ LIMIAR_EXATO = 25
 # Abaixo deste número de amostras vulneráveis avaliadas, qualquer p-valor é
 # reportado com aviso: o teste não tem poder para distinguir nada.
 MINIMO_VULNERAVEIS = 30
+
+# Mesmo limiar aplicado ao GRUPO DE CONTROLE do braço de triagem — as
+# vulneráveis que o Semgrep de fato detectou, e que por isso chegam ao LLM com
+# procedência `alerta`. O controle existe para mostrar que a injeção não criou
+# artefato; um controle pequeno que acusa diferença grande ainda é informativo,
+# mas apresentá-lo sem o aviso o faria passar por conclusivo.
+MINIMO_CONTROLE = MINIMO_VULNERAVEIS
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +61,22 @@ def _categoria_llm(cls):
     if "Falso Positivo" in cls or "False Positive" in cls:
         return "FP"
     return None  # erros / N/A
+
+
+# CSVs anteriores à coluna de procedência não sabem dizer como o candidato foi
+# montado — mas são todos do braço de filtro, onde só existe uma procedência.
+PROCEDENCIA_INDISPONIVEL = "indisponível"
+
+
+def _procedencia(linha):
+    """Coluna `Procedencia` → `alerta` | `gabarito` | rótulo de indisponível.
+
+    `N/A` é o valor das linhas que não produziram candidato algum (não-detecção
+    no modo filtro, falha de esteira) e vale como indisponível aqui: não há
+    veredito de LLM nelas para atribuir a procedência nenhuma.
+    """
+    bruto = (linha.get("Procedencia") or "").strip()
+    return bruto if bruto and bruto != "N/A" else PROCEDENCIA_INDISPONIVEL
 
 
 def _categoria_semgrep(cls):
@@ -313,6 +338,10 @@ ESTRATOS = {
     "trilha": lambda linha: linha.get("Origem", "?"),
     "num_locations": _faixa_locations,
     "ficha_cwe": lambda linha: linha.get("Ficha_CWE") or "indisponível",
+    # Como o candidato foi montado. No braço de filtro há uma procedência só e o
+    # estrato é degenerado; no de triagem é ele que separa o que mede o sistema
+    # implantado do que mede o componente neural isolado.
+    "procedencia": _procedencia,
 }
 
 
@@ -321,6 +350,64 @@ def estratificar(linhas, chave, matriz="llm"):
     for linha in linhas:
         grupos[ESTRATOS[chave](linha)].append(linha)
     return {g: contar(ls, matriz) for g, ls in sorted(grupos.items())}
+
+
+# ---------------------------------------------------------------------------
+# Grupo de controle: acerto por procedência
+# ---------------------------------------------------------------------------
+
+def comparar_procedencias(linhas):
+    """Acerto do LLM sobre as VULNERÁVEIS, discriminado por procedência.
+
+    É o grupo de controle do braço de triagem. Se o modelo acertar
+    sistematicamente mais nos candidatos injetados (`gabarito`) do que nos que o
+    Semgrep detectou (`alerta`), a diferença não vem do código — vem de alguma
+    propriedade da montagem, e o número do braço de triagem não pode ser
+    reportado como está.
+
+    Só entram as vulneráveis com veredito válido: as células VP e FN são as
+    únicas em que o gabarito é `vulneravel`, então `acerto` aqui é o Recall
+    daquele grupo. As seguras ficam de fora de propósito — elas nunca são
+    injetadas, e incluí-las faria o grupo `alerta` parecer maior do que o
+    controle realmente é.
+    """
+    grupos = defaultdict(lambda: {"VP": 0, "FN": 0})
+    for linha in linhas:
+        if linha.get("Gabarito") != "vulneravel":
+            continue
+        cat = _categoria_llm(linha.get("Classificacao_LLM", ""))
+        if cat not in ("VP", "FN"):
+            continue
+        grupos[_procedencia(linha)][cat] += 1
+
+    saida = {}
+    for proc, c in grupos.items():
+        n = c["VP"] + c["FN"]
+        saida[proc] = {
+            "n": n, "VP": c["VP"], "FN": c["FN"],
+            "acerto": c["VP"] / n if n else float("nan"),
+        }
+    return dict(sorted(saida.items()))
+
+
+def ha_comparacao_de_procedencias(bracos):
+    """Há o que comparar apenas quando duas procedências convivem num braço.
+
+    Uma procedência só — ou nenhuma, nos CSVs anteriores à coluna — é rodada do
+    braço de filtro: não houve injeção, e não há artefato a controlar.
+    """
+    return any(len(comparar_procedencias(br.linhas)) >= 2 for br in bracos)
+
+
+def tabela_procedencias(bracos):
+    """Uma linha por (braço, procedência), com o acerto sobre as vulneráveis."""
+    cabecalho = ["Modelo", "Prompt", "Procedência", "n", "VP", "FN", "Acerto"]
+    linhas = []
+    for br in bracos:
+        for proc, m in comparar_procedencias(br.linhas).items():
+            linhas.append([br.modelo, br.prompt, proc, m["n"], m["VP"],
+                           m["FN"], _fmt(m["acerto"])])
+    return cabecalho, linhas
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +496,11 @@ def _tabular(cabecalho, linhas, alinhamento=None):
 
 
 def exportar_latex(bracos, comparacoes, destino):
-    """Grava `tabela_bracos.tex` e `tabela_mcnemar.tex` prontos para `\\input{}`.
+    """Grava as tabelas da rodada prontas para `\\input{}`.
+
+    `tabela_bracos.tex` e `tabela_mcnemar.tex` sempre; `tabela_procedencias.tex`
+    só quando as duas procedências convivem num braço — numa rodada de filtro
+    não houve injeção, e não há comparação a exportar.
 
     Só o ambiente `tabular`: quem inclui escolhe `table`, legenda e rótulo, e
     o arquivo compila sem exigir pacote nenhum além dos padrão.
@@ -430,6 +521,15 @@ def exportar_latex(bracos, comparacoes, destino):
         c["so_a_acerta"], c["so_b_acerta"], c["ambos_erram"],
         c["teste"], f"{c['estatistica']:.3f}", f"{c['p_valor']:.4f}",
     ] for c in comparacoes]
+
+    if ha_comparacao_de_procedencias(bracos):
+        cab_proc, linhas_proc = tabela_procedencias(bracos)
+        p = os.path.join(destino, "tabela_procedencias.tex")
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
+            f.write("% Gerado por src/metricas.py — não editar à mão.\n")
+            f.write(_tabular(cab_proc, linhas_proc,
+                             alinhamento="lll" + "r" * 4))
+        caminhos.append(p)
 
     p = os.path.join(destino, "tabela_mcnemar.tex")
     with open(p, "w", encoding="utf-8", newline="\n") as f:
@@ -466,6 +566,30 @@ def avisos(bracos):
                 f"(mínimo sugerido: {MINIMO_VULNERAVEIS}). Recall, F1, MCC e "
                 f"qualquer p-valor sobre este braço são indicativos, não "
                 f"conclusivos.")
+
+    # Grupo de controle: só faz sentido avisar quando há o que controlar, isto é,
+    # quando as duas procedências convivem no mesmo braço (rodada de triagem).
+    for br in bracos:
+        comp = comparar_procedencias(br.linhas)
+        if len(comp) < 2:
+            continue
+        n_controle = comp.get("alerta", {}).get("n", 0)
+        if n_controle < MINIMO_CONTROLE:
+            saida.append(
+                f"TRA CONTAMINADA POR COMPOSIÇÃO em [{br.rotulo}]: esta é uma "
+                f"rodada de triagem, e a coluna TRA da tabela de braços divide "
+                f"pelos casos AVALIADOS, que aqui incluem candidatos injetados "
+                f"— e injetado nunca foi alerta. A taxa de redução de alertas "
+                f"só é interpretável sobre a pilha real: use a estratificação "
+                f"por procedência (`--estratificar`), a linha `alerta`, ou "
+                f"`scripts/comparar_filtro_triagem.py`.")
+            saida.append(
+                f"CONTROLE PEQUENO em [{br.rotulo}]: o grupo de procedência "
+                f"`alerta` tem apenas {n_controle} vulneráveis com veredito "
+                f"válido (mínimo sugerido: {MINIMO_CONTROLE}). A comparação "
+                f"entre procedências é INDICATIVA: uma diferença grande ainda "
+                f"informa, mas a ausência de diferença não demonstra que a "
+                f"injeção não criou artefato.")
     return saida
 
 
@@ -497,6 +621,15 @@ def relatorio(alvo, por_cwe=False, com_mcnemar=False, com_estratos=False,
     motivos = contar_motivos(unicas)
     if motivos:
         print(f"    NAO_DETECTADO por motivo: {motivos}")
+
+    if ha_comparacao_de_procedencias(bracos):
+        print("\n--- Grupo de controle: acerto por procedência do candidato ---")
+        print("    Só vulneráveis com veredito válido. `alerta` = o Semgrep "
+              "detectou;")
+        print("    `gabarito` = candidato injetado a partir da localização "
+              "declarada no gabarito, sem exigir alerta.")
+        print()
+        _tabela(*tabela_procedencias(bracos))
 
     if com_estratos:
         print("\n--- Estratificação (matriz de ACERTO do LLM) ---")
