@@ -67,38 +67,38 @@ revisado; o que falta é implementação.
       Verificar: teste que a segunda invocação falha com erro explícito.
 - [x] 3.4 Executar e gravar a partição em `data/particao_avaliacao.json`.
       Verificar: cada CWE alvo tem casos nas duas partições.
-- [ ] 3.5 **Commitar a partição sozinha, antes de qualquer regra.** Verificar:
+- [x] 3.5 **Commitar a partição sozinha, antes de qualquer regra.** Verificar:
       `git log` mostra este commit sem nenhum arquivo sob `regras/go/`.
 
 ## 4. Carregamento e validação do ruleset local
 
-- [ ] 4.1 Criar `regras/go/` com uma regra de exemplo completa — `metadata.cwe`
+- [x] 4.1 Criar `regras/go/` com uma regra de exemplo completa — `metadata.cwe`
       casável, `metadata.subcategory`, proveniência declarada. Verificar: a regra
       carrega e dispara sobre um arquivo construído para ela.
-- [ ] 4.2 Validar proveniência no carregamento: ausente ou de vocabulário
+- [x] 4.2 Validar proveniência no carregamento: ausente ou de vocabulário
       desconhecido derruba. Verificar: dois testes, um por condição, nomeando a
       regra na mensagem.
-- [ ] 4.3 Validar `metadata.cwe` no carregamento, exigindo formato aceito pela
+- [x] 4.3 Validar `metadata.cwe` no carregamento, exigindo formato aceito pela
       comparação por identificador completo já vigente. Verificar: teste que CWE
       em formato não casável derruba o carregamento.
-- [ ] 4.4 Validar `metadata.subcategory` no carregamento. Verificar: teste que
+- [x] 4.4 Validar `metadata.subcategory` no carregamento. Verificar: teste que
       ausência derruba — e não é tratada como auditoria, ao contrário do que vale
       para ruleset de terceiros.
-- [ ] 4.5 Registrar no manifesto cada regra local usada, sua proveniência e o
+- [x] 4.5 Registrar no manifesto cada regra local usada, sua proveniência e o
       commit corrente do repositório. Verificar: rodar um caso e inspecionar o
       manifesto.
 
 ## 5. Regras derivadas da definição — sem abrir a população
 
-- [ ] 5.1 Escrever as regras `definicao` para as CWEs alvo, a partir da definição
+- [x] 5.1 Escrever as regras `definicao` para as CWEs alvo, a partir da definição
       da CWE e do idioma de Go. **Não abrir nenhum arquivo da população durante
       esta tarefa.** Preferir padrão sintático a `mode: taint`, por D5. Verificar:
       cada regra dispara sobre um arquivo de exemplo escrito à mão para ela, e não
       dispara sobre a versão segura do mesmo exemplo.
-- [ ] 5.2 Registrar, junto de cada regra, de qual fonte a definição veio —
+- [x] 5.2 Registrar, junto de cada regra, de qual fonte a definição veio —
       descrição da CWE, documentação de `os`/`net/http`/`path/filepath`.
       Verificar: comentário no YAML de cada regra.
-- [ ] 5.3 Escrever `scripts/medir_regras_locais.py`, que mede a detecção por
+- [x] 5.3 Escrever `scripts/medir_regras_locais.py`, que mede a detecção por
       partição e recusa o agregado quando houver regra `desenvolvimento`
       carregada. Verificar: `--selftest` cobre as duas situações.
 - [ ] 5.4 Medir as regras `definicao` sobre a **população inteira** — permitido,

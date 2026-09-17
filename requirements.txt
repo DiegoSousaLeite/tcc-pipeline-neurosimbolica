@@ -1,4 +1,7 @@
 requests==2.31.0
 python-dotenv==1.0.1
+# PyYAML: já vem com o Semgrep; declarado porque src/regras_locais.py o importa
+# diretamente para validar as regras de regras/go/.
+pyyaml>=6.0
 # Semgrep: pip install semgrep
 # CodeQL (legado, opcional): veja legacy/README.md
