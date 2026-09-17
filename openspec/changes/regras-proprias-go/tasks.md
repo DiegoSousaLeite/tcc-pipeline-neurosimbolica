@@ -135,18 +135,19 @@ revisado; o que falta é implementação.
 
 ## 7. Documentação e mapa do LaTeX
 
-- [ ] 7.1 Documentar `regras/go/`, o protocolo de partição e os dois scripts em
+- [x] 7.1 Documentar `regras/go/`, o protocolo de partição e os dois scripts em
       `docs/SCRIPTS.md`, no formato das demais entradas.
-- [ ] 7.2 Documentar em `docs/PIPELINE.md` que a taxa de redução de alertas não é
+- [x] 7.2 Documentar em `docs/PIPELINE.md` que a taxa de redução de alertas não é
       comparável entre conjuntos de rulesets, e que o ruleset local é o único
       imune à deriva do lado do servidor.
-- [ ] 7.3 **Escrever em `docs/MAPA-TCC-O-QUE-REESCREVER.md`**: que a contribuição
+- [x] 7.3 **Escrever em `docs/MAPA-TCC-O-QUE-REESCREVER.md`** (§3.7): que a contribuição
       é a análise de lacunas e não as regras; que o número reportado sai da
       partição de avaliação quando houver regra `desenvolvimento`; que os hashes
       de commit da partição e das regras devem ir para um apêndice, permitindo ao
       leitor verificar que a partição precedeu as regras; e a ameaça à validade
       residual. Verificar: a entrada existe com os quatro pontos.
-- [ ] 7.4 Declarar na mesma entrada que a redação do `.tex` acontece em **branch
-      separada**, e não nesta. Verificar: a frase está lá.
-- [ ] 7.5 Confirmar que nenhum arquivo `.tex` foi tocado. Verificar:
-      `git diff --name-only` contra o ponto de partida não lista nenhum `.tex`.
+- [x] 7.4 Declarar na mesma entrada que a redação do `.tex` acontece em **branch
+      separada**, e não nesta. Está na última linha de §3.7.
+- [x] 7.5 Confirmar que nenhum arquivo `.tex` foi tocado. **Verificado:**
+      `git diff --name-only 81edf6b..HEAD` lista 0 arquivos `.tex`, e a árvore de
+      trabalho também não tem nenhum modificado.
