@@ -538,6 +538,25 @@ fluxo dentro de um arquivo, e é essa limitação que deixou CWE-22 e CWE-918 se
 Regra de taint rodando sob o motor que não a alcança repetiria o defeito. O custo
 é ruído — que é precisamente o que o braço neural existe para filtrar.
 
+**As quatro regras, e sob qual protocolo cada uma foi escrita:**
+
+| regra | CWE | proveniência |
+|---|---|---|
+| `caminho-de-entrada-externa-sem-restricao` | CWE-22 | `definicao` |
+| `requisicao-a-url-de-entrada-externa` | CWE-918 | `definicao` |
+| `extracao-de-compactado-sem-prender-a-base` | CWE-22 | `desenvolvimento` |
+| `url-de-campo-de-struct-em-cliente-http` | CWE-918 | `desenvolvimento` |
+
+Com qualquer regra `desenvolvimento` carregada, o número reportável passa a ser o
+da **partição de avaliação** — a medição recusa o agregado. Medido em 2026-09-17:
+CWE-22 4/60 (6,7 %) e CWE-918 1/57 (1,8 %) na avaliação. Só com as `definicao`,
+sobre a população inteira: 2/114 (1,8 %) e 1/112 (0,9 %).
+
+**As regras não são a contribuição.** A contribuição é a análise de lacunas que
+elas tornaram possível — ~30 % dos arquivos rotulados não contêm a operação
+perigosa, e outros 26–44 % só a expõem atrás de abstração. Ver
+`docs/MAPA-TCC-O-QUE-REESCREVER.md` §3.7.
+
 ---
 
 ### `src/fase2_middleware.py`

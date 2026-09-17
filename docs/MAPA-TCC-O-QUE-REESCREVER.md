@@ -309,6 +309,97 @@ Medições em `openspec/changes/archive/2026-09-17-ruleset-gosec/design.md`.
 
 ---
 
+### 3.7 Regra própria melhora pouco, e a análise de por quê é a contribuição (medido em 2026-09-17)
+
+O §3.6 fechou a alternativa barata: nenhum ruleset público traz regra Go para
+CWE-22 ou CWE-918. Restava escrever regra — com o viés de autoria declarado. Foi
+escrito, medido, e o resultado é mais interessante que o número.
+
+**A contribuição é a análise de lacunas, não as regras.** Este é o ponto que o
+texto precisa deixar explícito, no modelo do Semgrep\* (EASE 2024), cuja
+contribuição publicada foi a investigação dos padrões ausentes dos rulesets, não
+o ruleset resultante. Apresentar "escrevemos quatro regras" como resultado seria
+apresentar a evidência no lugar do achado.
+
+**O achado.** Aberta apenas a partição de desenvolvimento (54 casos de CWE-22,
+55 de CWE-918, todos vulneráveis):
+
+| | CWE-22 | CWE-918 |
+|---|---:|---:|
+| Operação perigosa na forma que uma regra sintática nomeia (`os.Open`, `http.Get`, …) | 23/54 (42,6 %) | 15/55 (27,3 %) |
+| Operação atrás de abstração ou método de receptor (`afero`, `billy`, `fs.FS`, `cliente.Do`) | 14/54 (25,9 %) | 24/55 (43,6 %) |
+| **Nenhuma operação perigosa no arquivo rotulado** | **17/54 (31,5 %)** | **16/55 (29,1 %)** |
+| Arquivo contém acessor HTTP (`r.URL.Query().Get`, `FormValue`, …) | 6/54 (11,1 %) | 13/55 (23,6 %) |
+| Entrada vem de campo de struct (`args.InnerPath`, `req.Signature`, `m.state.SrcUri`) | 23/54 (42,6 %) | 37/55 (67,3 %) |
+| Marcas de extração de arquivo compactado | 11/54 (20,4 %) | 0/55 |
+
+**O que isso autoriza escrever.** *"Cerca de 30 % dos casos da classe positiva
+não contêm, no arquivo rotulado, a operação que a fraqueza descreve. Para esses
+casos nenhuma regra sintática — de qualquer ruleset — pode detectar a
+vulnerabilidade no arquivo em que ela está anotada, porque o gabarito é por
+arquivo e o arquivo que o commit de correção toca é frequentemente o da
+verificação acrescentada, não o do ponto perigoso."*
+
+Outros 26 % (CWE-22) e 44 % (CWE-918) só expõem a operação atrás de uma
+abstração de sistema de arquivos ou de um método de receptor, onde regra que
+nomeia a biblioteca padrão não morde. E a origem da entrada quase nunca é a que
+a definição da CWE sugere: a CWE-22 desta população é, em boa parte, **zip-slip**
+— a entrada externa é o nome de uma entrada de arquivo compactado.
+
+**Isso reordena o §3.1 e o §3.5.** O teto de recall não é parâmetro mal
+configurado (§3.6), não é alcance do motor (§3.5) e não é cobertura de ruleset
+que alguém poderia publicar: é **granularidade do rótulo** somada a **abstração
+do código real**. As três hipóteses anteriores foram testadas e rejeitadas nessa
+ordem, e esta é a quarta — a primeira que explica os números.
+
+**Os números das regras, e qual deles é reportável.**
+
+| CWE | regras `definicao`, população inteira | todas as regras, **partição de avaliação** | partição de desenvolvimento (diagnóstico) |
+|-----|--------------------------------------:|-------------------------------------------:|------------------------------------------:|
+| CWE-22 | 2/114 (1,8 %) | **4/60 (6,7 %)** | 4/54 (7,4 %) |
+| CWE-918 | 1/112 (0,9 %) | **1/57 (1,8 %)** | 3/55 (5,5 %) |
+
+**O número reportado sai da partição de avaliação** sempre que houver regra de
+proveniência `desenvolvimento` carregada — a coluna do meio. A primeira coluna é
+reportável sobre a população inteira porque aquelas regras foram escritas apenas
+a partir da definição da CWE e da documentação de Go, sem que nenhum caso fosse
+inspecionado. A terceira **nunca** é resultado: é diagnóstico interno, e o script
+de medição recusa somá-la às demais.
+
+A distância entre a segunda e a terceira colunas é o que só a partição torna
+visível. Em CWE-22 elas quase coincidem — a regra de zip-slip descreve um idioma
+e generaliza. Em CWE-918 o desenvolvimento é **três vezes** a avaliação: ali a
+regra descreve mais os casos vistos que a fraqueza. Num número único, essa
+diferença desapareceria.
+
+**Apêndice de verificabilidade (a escrever).** O protocolo depende da ordem —
+partição antes de regra — e a ordem é auditável no histórico do Git. O texto
+deve trazer os hashes, para que o leitor confirme sem depender da nossa palavra:
+
+| artefato | commit |
+|---|---|
+| Partição de desenvolvimento/avaliação, sozinha, sem nenhuma regra | `cc87274` |
+| Primeiras regras locais (`definicao`) | `ec37322` |
+| Regras informadas pela partição (`desenvolvimento`) | `fa7eb31` |
+
+`cc87274` não contém um único arquivo sob `regras/go/` — é o que torna a
+afirmação "as regras não informaram a partição" verificável em vez de assertiva.
+
+**Ameaça à validade residual, e ela não é pequena.** A separação estrutural
+impede que o *número* seja contaminado; não impede que a *escolha do problema*
+seja. As CWEs alvo foram escolhidas por serem onde a classe positiva se perde, e
+essa escolha veio de olhar a população agregada. O que a partição protege é a
+medida, não a agenda. Some-se a isso o tamanho: 60 e 57 casos na avaliação, com
+4 e 1 detecções — intervalos de confiança largos o bastante para que a diferença
+entre 6,7 % e 3,3 % não suporte teste de hipótese. Os números servem para
+descrever ordem de grandeza e sustentar a análise de lacunas; não para afirmar
+superioridade de uma configuração sobre outra.
+
+**A redação do `.tex` acontece em branch separada, e não na branch desta
+change.** Nenhum arquivo `.tex` foi tocado por `regras-proprias-go`.
+
+---
+
 ### 3.4 Ameaças à validade a acrescentar
 
 | ameaça | evidência |
@@ -319,6 +410,8 @@ Medições em `openspec/changes/archive/2026-09-17-ruleset-gosec/design.md`.
 | Concorrência de memória em máquina única | Semgrep e `llama-server` disputam RAM; 488 casos falharam com `STATUS_DLL_INIT_FAILED`. Contornado separando Fase 1 das fases neurais. |
 | Falha de esteira reprodutível | 2 casos (`harness/harness`, CWE-79) em laço degenerativo do modelo quantizado, em todas as rodadas. |
 | Classe positiva pequena | 19 amostras; impede Recall/F1/MCC/TFN neurais. |
+| **Granularidade do rótulo** | O gabarito é por ARQUIVO, e ~30 % dos arquivos rotulados de CWE-22/918 não contêm a operação perigosa (§3.7). Para esses casos a não-detecção não informa nada sobre o motor: a fraqueza não está onde o rótulo aponta. |
+| **Escolha do problema, não da medida** | A separação desenvolvimento/avaliação protege o número das regras locais, mas as CWEs alvo foram escolhidas por olhar a população agregada. O viés de agenda permanece e precisa ser declarado (§3.7). |
 
 ---
 
