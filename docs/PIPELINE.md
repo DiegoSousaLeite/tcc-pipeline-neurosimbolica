@@ -324,8 +324,89 @@ Avalia o motor neural vs. o gabarito. Responde: *o LLM está triando corretament
 | `gabarito=vulneravel` | **VP (Acerto)** | **FN (Falha Crítica)** |
 | `gabarito=seguro`  | **FP (Ruído Mantido)** | **VN (Acerto)** |
 
-Aplica-se aos casos em que o LLM foi chamado — ou seja, `Status_Semgrep =
-DETECTADO`. Casos `NAO_DETECTADO` só aparecem na matriz 1.
+Aplica-se aos casos em que o LLM foi chamado. **No modo de montagem `filtro`
+— o padrão — isso equivale a `Status_Semgrep = DETECTADO`**, e casos
+`NAO_DETECTADO` só aparecem na matriz 1. No modo `triagem` não equivale: um caso
+`NAO_DETECTADO` de gabarito vulnerável também recebe veredito, e aparece nas
+duas matrizes — como ponto cego na primeira e como VP ou FN na segunda. Ver
+abaixo.
+
+---
+
+## Modo de Montagem do Candidato (`--modo-montagem`)
+
+Eixo da matriz, ortogonal a modelo e tipo de prompt, e **uniforme dentro de uma
+rodada**. Decide COMO o candidato submetido ao LLM é montado — não quais braços
+existem.
+
+| Modo | Negativo (`gabarito=seguro`) | Positivo (`gabarito=vulneravel`) |
+|---|---|---|
+| `filtro` (padrão) | alerta emparelhado do Semgrep | alerta emparelhado do Semgrep |
+| `triagem` | alerta emparelhado do Semgrep | alerta emparelhado **ou**, na falta dele, a localização do gabarito |
+
+### Por que o modo existe
+
+Na Rodada 3, de 797 casos de gabarito vulnerável apenas **19 (2,61 %)** chegaram
+ao LLM: os outros 778 morreram em `NAO_DETECTADO`, e no modo filtro sem alerta
+não há chamada. Com n=19 não há Recall, F1, MCC nem taxa de falsos negativos —
+e metade da Q2 fica sem resposta. O modo `triagem` para de exigir que o Semgrep
+encontre o positivo, que é exatamente o que o SastBench — a fonte da nossa
+classe negativa — já faz para os verdadeiros positivos dele.
+
+### O que o modo `triagem` NÃO faz
+
+- **Não** altera `Status_Semgrep`. Um caso injetado continua `NAO_DETECTADO`,
+  com o motivo preservado: é verdade sobre o motor simbólico, e sobrescrevê-la
+  apagaria a medição de cobertura da Rodada 3.
+- **Não** injeta negativo. A classe negativa existe porque o Semgrep a emitiu, e
+  é esse ruído que o braço neural filtra.
+- **Não** injeta sobre caso já emparelhado: alerta tem precedência. São esses
+  casos que formam o **grupo de controle**.
+- **Não** transforma falha de esteira em candidato.
+
+### Normalização do contexto — a guarda de integridade
+
+No modo `triagem` o contexto hidratado perde `Alerta Semgrep:`, `Mensagem:` e
+`Localização: linha N`, **para as duas procedências**. Sobra o recorte da função
+com o mesmo cabeçalho de arquivo e faixa de linhas de sempre.
+
+Não é excesso de zelo: o candidato de gabarito não tem regra (um `N/A` ao lado
+de um `go.lang.security.audit.*` É a pista), e a linha do injetado coincide
+sempre com o início da função recortada, enquanto a do alerta cai no meio dela.
+Qualquer um dos três separaria os grupos, e o experimento mediria a pista em vez
+do julgamento. `src/fase2_middleware.py` recusa com exceção renderizar um
+candidato de gabarito no modo filtro, para que o vazamento seja impossível por
+construção e não por disciplina.
+
+**Consequência declarada:** o braço de triagem entrega ao LLM estritamente menos
+que o braço de filtro. O modo `filtro` não muda um byte, e as Rodadas 1-3 seguem
+reproduzíveis.
+
+### Custo de cota — dimensione antes
+
+No modo filtro a rodada gasta cota sobre os casos `DETECTADO` (~810 na Rodada 3).
+No modo triagem acrescenta os 778 positivos hoje descartados, **por braço**: com
+a matriz 2x2 são ~3.100 chamadas a mais por rodada completa. O tier grátis do
+Gemini (20 req/dia por modelo) não comporta isso.
+
+**Recomendação: pilote com o provedor local, que tem custo zero, antes de
+comprometer cota comercial** — e meça a vazão antes de extrapolar. Um braço
+local roda quando nomeado:
+
+```bash
+python run_pipeline.py --tudo --modo-montagem triagem \
+  --modelo ollama-qwen2.5-coder-7b --prompt baseline --prompt especialista
+```
+
+`--sem-llm` é recusado junto de `--modo-montagem triagem`: o braço de triagem
+existe para produzir veredito.
+
+### Como ler os números da triagem
+
+**Eles não descrevem o sistema em operação.** Num uso real os positivos não
+seriam injetados — viriam do Semgrep, que perde 97,4 % deles. O que a rodada de
+triagem mede é a capacidade do **componente neural isolado**; a distância entre
+os dois braços é a medida do teto do desenho de filtro puro.
 
 ---
 
@@ -367,6 +448,45 @@ sem a outra é enganoso.
   `math.erfc`), coerente com a decisão de não depender de scipy.
 - **Export LaTeX**: `tabela_bracos.tex` e `tabela_mcnemar.tex` no diretório da
   rodada, com ambientes `tabular` prontos para `\input{}`.
+  `tabela_procedencias.tex` sai junto quando a rodada é de triagem.
+
+### Procedência do candidato e o grupo de controle
+
+A coluna **`Procedencia`** do CSV diz como o candidato daquela linha foi montado:
+
+| Valor | Significado |
+|---|---|
+| `alerta` | veio de um alerta emparelhado do Semgrep |
+| `gabarito` | veio da localização do gabarito, sem exigir alerta (só no modo `triagem`) |
+| `N/A` | não houve candidato: não-detecção no modo filtro, ou falha de esteira |
+
+Sem ela, um CSV de triagem não saberia dizer quais vereditos descrevem a
+capacidade do **sistema implantado** e quais descrevem a do **componente neural
+isolado**. São duas afirmações diferentes, e a diferença entre elas é o resultado
+que o braço de triagem existe para produzir.
+
+Com a coluna, `src/metricas.py` produz os números **três vezes**: para o conjunto
+completo e para cada procedência (`--estratificar` traz o estrato `procedencia`
+junto dos demais). Qualquer número da rodada é recalculável por procedência sem
+reexecutar nada.
+
+**O grupo de controle** são os casos de gabarito vulnerável que o Semgrep *achou*
+— procedência `alerta` dentro da rodada de triagem. Eles rodam sob o mesmo prompt
+e o mesmo modelo que os injetados, e a comparação de acerto entre as duas
+procedências sai **sozinha**, sem flag, sempre que as duas convivem num braço:
+
+```
+--- Grupo de controle: acerto por procedência do candidato ---
+  Modelo  Prompt        Procedência  n   VP  FN  Acerto
+  ...     especialista  alerta       19  14   5  0.7368
+  ...     especialista  gabarito     ...
+```
+
+É a evidência de que a injeção não criou artefato — e não a afirmação de que não
+criou. Se o LLM acertar sistematicamente mais nos injetados, a diferença não vem
+do código, vem da montagem, e o número da triagem não pode ser reportado como
+está. A comparação é emitida junto do resultado de propósito: um controle que
+ninguém olha não controla nada.
 
 ### Avisos que saem antes dos números
 
@@ -377,6 +497,11 @@ sem a outra é enganoso.
   produzidas por versões diferentes de `catalogo_cwe.json`. Elas não são
   comparáveis entre si e não podem ser agregadas na mesma tabela sem
   sinalização.
+- **Controle pequeno**, quando a rodada é de triagem e o grupo de procedência
+  `alerta` tem menos de 30 vulneráveis com veredito válido — o caso real, já que
+  a Rodada 3 achou 19. A comparação entre procedências vira **indicativa**: uma
+  diferença grande ainda informa, mas a ausência de diferença não demonstra que
+  a injeção não criou artefato.
 
 ---
 

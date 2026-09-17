@@ -54,7 +54,26 @@ python run_pipeline.py --tudo --modelo ollama:qwen2.5-coder:7b --prompt especial
 
 # Só cobertura simbólica, sem gastar cota de API:
 python run_pipeline.py --tp-only --sem-llm
+
+# Braço de TRIAGEM: positivo que o Semgrep não detectou também vai ao LLM,
+# montado a partir da localização do gabarito. Multiplica as chamadas —
+# pilote no provedor local antes de comprometer cota comercial.
+python run_pipeline.py --tudo --modo-montagem triagem \
+  --modelo ollama:qwen2.5-coder:7b --prompt baseline --prompt especialista
 ```
+
+`--modo-montagem` tem dois valores e é **uniforme na rodada**:
+
+| valor | o que chega ao LLM |
+|---|---|
+| `filtro` (padrão) | só o que o Semgrep emitiu e emparelhou — o LLM é filtro puro do motor simbólico |
+| `triagem` | o mesmo, **mais** os casos de gabarito vulnerável que o Semgrep não detectou |
+
+No modo `triagem` o `Status_Semgrep` **não muda** (um caso injetado continua
+`NAO_DETECTADO`), o negativo nunca é injetado, e a coluna `Procedencia` do CSV
+diz de onde cada candidato veio (`alerta` / `gabarito` / `N/A`). Os números dessa
+rodada medem o componente neural isolado, **não o sistema em operação** — ver
+`docs/PIPELINE.md`.
 
 Cada execução cria `results/<run_id>/`, com um CSV por braço
 (`<modelo>__<prompt>.csv`) e um `manifesto.json`. Caractere inválido em nome de
