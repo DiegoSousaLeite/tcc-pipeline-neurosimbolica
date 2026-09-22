@@ -11,10 +11,23 @@ Para garantir a reprodutibilidade e o rigor científico da análise, o experimen
 
 \begin{itemize}
     \item \textbf{Linguagem de programação alvo:} Go, selecionada por representar um dos principais padrões modernos para arquiteturas \textit{cloud-native};
+    \item \textbf{Motor de análise simbólica (SAST):} Semgrep, selecionado por sua arquitetura de análise baseada em Árvore de Sintaxe Abstrata (AST) que dispensa a etapa de compilação (\textit{build}). Por operar diretamente sobre o código-fonte e apontar a vulnerabilidade na linha exata, o Semgrep viabiliza a varredura automatizada de \textit{commits} históricos independentemente da integridade estrutural do repositório;
    \item \textbf{Modelos de inferência:} \texttt{gemini-3.1-pro-preview} (Google) e \texttt{gpt-5.4} (OpenAI), atuando como motores de avaliação. Os LLMs representam o estado da arte na compreensão de código \cite{hou2024large}, e as versões selecionadas oferecem as janelas de contexto massivas exigidas para processar integralmente o código na Fase 2 \cite{googleaistudio2026, openaidocs2026}. A adoção de provedores distintos mitiga vieses de ecossistema, enquanto a fixação das versões assegura a reprodutibilidade do experimento;
     \item \textbf{Tipos de \textit{prompt}:} \textit{Prompts} genéricos (atuando como \textit{baseline}) em contraste com \textit{prompts} especialistas (enriquecidos com abstrações específicas da linguagem, como o uso de \textit{goroutines} e \textit{channels});
     \item \textbf{Base de Dados (\textit{Ground Truth}):} a base de validação, construída a partir de duas fontes complementares --- o \textit{dataset} SastBench \cite{feiglin2026sastbench} e a base pública de vulnerabilidades OSV.dev ---, utilizada como oráculo para fornecer o gabarito das amostras e simular um ambiente real de repositórios históricos.
 \end{itemize}
+
+
+
+
+
+
+
+
+
+
+
+
 
 A combinação desses fatores permite a execução de testes comparativos rigorosos. Em vez de depender de análises manuais e subjetivas, o experimento utiliza o SastBench para automatizar a validação: o \textit{pipeline} consome os alertas de vulnerabilidade do \textit{dataset}, processa a triagem neuro-simbólica e tem os seus vereditos cruzados com o gabarito oficial da base, extraindo evidências de sucesso ou falha.
 
