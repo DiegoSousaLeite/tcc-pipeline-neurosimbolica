@@ -44,8 +44,8 @@ ESPECIALISTA_DIRETO = "especialista_direto"
 
 # Variantes v2 dos dois especialistas: o original mais UM parágrafo pedindo que
 # o modelo não presuma mitigação ausente do trecho. Existem porque o especialista
-# respondeu VP zero vezes na rodada 20260908T094808Z-9a00cb2 — as fichas
-# ensinam, sobretudo, quando o alerta NÃO é fraqueza. O parágrafo é idêntico nas
+# quase só responde FP (15 VP em 827 na rodada 20260908T094808Z-9a00cb2, recall
+# 3/19) — as fichas ensinam, sobretudo, quando o alerta NÃO é fraqueza. O parágrafo é idêntico nas
 # duas, para que o efeito medido nos dois modos seja o da mesma instrução; e são
 # arquivos novos pelo mesmo motivo das variantes diretas: `Versao_Prompt` dos
 # originais precisa continuar batendo com as rodadas já gravadas.
