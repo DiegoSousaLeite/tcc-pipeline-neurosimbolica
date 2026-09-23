@@ -40,8 +40,8 @@ Tudo local (Ollama); nada de Gemini/GPT nesta mudança. Semente 42, temperatura 
 
 ## 6. Documentação
 
-- [ ] 6.1 Atualizar `docs/PIPELINE.md` (precedência regra > CWE > fallback, bloco `regras`, valor `regra` em `Ficha_CWE`, tipos `especialista_v2` e `especialista_direto_v2`) e o protocolo anti-viés (documentação da regra como fonte permitida). Verificar: inspeção contra a implementação.
-- [ ] 6.2 Atualizar `README.md` e `docs/SCRIPTS.md` com `--prompt especialista_v2`, `--prompt especialista_direto_v2` e `scripts/auditar_regras_ficha.py`. Verificar: os comandos documentados executam como descrito.
-- [ ] 6.3 Registrar em `docs/MAPA-TCC-O-QUE-REESCREVER.md` o que muda na metodologia e nos resultados da monografia (ficha por regra, rodada nova, limitação da classe positiva nas CWEs corrigidas), sem editar o `.tex`. Verificar: inspeção do arquivo.
+- [x] 6.1 Atualizar `docs/PIPELINE.md` (precedência regra > CWE > fallback, bloco `regras`, valor `regra` em `Ficha_CWE`, tipos `especialista_v2` e `especialista_direto_v2`) e o protocolo anti-viés (documentação da regra como fonte permitida). Verificar: inspeção contra a implementação.
+- [x] 6.2 Atualizar `README.md` e `docs/SCRIPTS.md` com `--prompt especialista_v2`, `--prompt especialista_direto_v2` e `scripts/auditar_regras_ficha.py`. Verificar: os comandos documentados executam como descrito.
+- [x] 6.3 Registrar em `docs/MAPA-TCC-O-QUE-REESCREVER.md` o que muda na metodologia e nos resultados da monografia (ficha por regra, rodada nova, limitação da classe positiva nas CWEs corrigidas), sem editar o `.tex`. Verificar: inspeção do arquivo.
 - [ ] 6.4 Depois das rodadas 5.2 e 5.3, listar quais evidências e trechos do rascunho de resultados (`editaveis/resultados.tex`, `docs/PLANO-ESCRITA-RESULTADOS.md`) dependem de números do especialista e precisam ser refeitos, anotando no mapa de reescrita. Não editar o `.tex` sem perguntar. Verificar: inspeção do mapa, com cada trecho afetado apontado (inclui a Tabela da seção 4b.5f, rodadas 5–6, e os números do `especialista_direto`).
 - [ ] 6.5 Rodar `ruff check .` e `pytest -q` em estado limpo. Verificar: ambos passam.

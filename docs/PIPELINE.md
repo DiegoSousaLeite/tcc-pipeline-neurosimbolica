@@ -532,7 +532,7 @@ sem a outra é enganoso.
   métricas e o custo em USD. A matriz de cobertura do Semgrep é reportada
   **separadamente** e uma vez só — ela não depende do braço.
 - **Estratificação** por trilha de origem, por `Num_Locations`
-  (1 / 2-6 / 7+) e por origem da ficha de CWE (`especifica` / `fallback`),
+  (1 / 2-6 / 7+) e por origem da ficha (`regra` / `especifica` / `fallback`),
   sem reexecutar a pipeline.
 - **McNemar pareado** entre cada par de braços, restrito aos `ID_Caso` que
   ambos classificaram com veredito válido — um caso que virou erro de esteira
@@ -603,7 +603,8 @@ ninguém olha não controla nada.
 
 `data/catalogo_cwe.json` é a fonte **única** das duas camadas do prompt
 especialista que dependem da CWE: a heurística semântica e o par few-shot
-VP/FP. Uma ficha por CWE, com quatro campos:
+VP/FP. Uma ficha por CWE e, no bloco `regras`, uma ficha por regra do Semgrep,
+todas com quatro campos:
 
 | Campo | Conteúdo |
 |---|---|
@@ -616,7 +617,40 @@ VP/FP. Uma ficha por CWE, com quatro campos:
 `scripts/ranking_cwe.py` sobre as locations `.go` do dataset, excluindo
 `_test.go`: 878 amostras em 49 CWEs, e as 15 fichas cobrem **85,4%** delas. Uma
 CWE fora do catálogo usa a ficha genérica e roda normalmente; o CSV grava
-`Ficha_CWE ∈ {especifica, fallback}` para permitir estratificar os resultados.
+`Ficha_CWE ∈ {regra, especifica, fallback}` para permitir estratificar os
+resultados.
+
+### Ficha por regra do Semgrep
+
+Uma CWE agrupa regras que olham para construções diferentes. Na CWE-327, por
+exemplo, a ficha ensina `md5` em senha, mas os 93 alertas da população vêm de
+`missing-ssl-minversion` (`tls.Config` sem `MinVersion`). Com a ficha escolhida
+só pela CWE, as três camadas falavam de uma API e o alerta de outra.
+
+Por isso o catálogo tem o bloco `regras`, indexado pelo `check_id` **completo**
+da regra, e a ficha é resolvida com a precedência **regra > CWE > fallback**:
+
+1. o alerta veio de uma regra com ficha própria → ficha da regra;
+2. senão, a CWE do caso tem ficha → ficha da CWE;
+3. senão → `__fallback__`.
+
+O casamento é pelo `check_id` inteiro, não pelo último segmento: `p/default`,
+`trailofbits.*` e as regras locais `regras.go.*` convivem na rodada, e um
+casamento parcial aplicaria a ficha de outra regra sem aviso. O candidato
+injetado do gabarito no modo triagem não tem regra (`check_id` neutro) e usa a
+ficha da CWE. O cabeçalho do prompt continua identificando a CWE do caso.
+
+A ficha é resolvida em `processar_caso` **depois** da candidatura, com o
+`check_id` do candidato; linhas sem candidato registram a origem da ficha da
+CWE. Quais regras ganham ficha sai de `scripts/auditar_regras_ficha.py`, que lê
+do cache simbólico só `check_id` e CWE (nunca o código hidratado); a seleção e
+a justificativa estão em
+`openspec/changes/ficha-por-regra-semgrep/regras-selecionadas.md` (16 fichas,
+522 das 791 detecções).
+
+Toda heurística específica, de CWE ou de regra, declara as duas condições no
+formato "É VP quando ... / É FP quando ...". As fichas de regras de corretude
+(`trailofbits.*`) declaram na definição que a regra não é de segurança por si só.
 
 **Par contrastante pela mesma API.** É o ponto central do catálogo: se o par
 contrastasse APIs diferentes, o modelo aprenderia a reconhecer a API em vez de
@@ -628,8 +662,18 @@ para chave de cache (FP); `math/rand` para token de sessão (VP) versus
 
 As fichas são escritas **à mão**, exclusivamente a partir de:
 
-1. a definição formal da CWE no catálogo MITRE, e
-2. a documentação da biblioteca padrão de Go.
+1. a definição formal da CWE no catálogo MITRE,
+2. a documentação da regra do Semgrep — o YAML e a mensagem da regra no
+   `semgrep/semgrep-rules` ou `trailofbits/semgrep-rules` — para as fichas de
+   regra, e
+3. a documentação da biblioteca padrão de Go.
+
+As fichas de regra e a reescrita das heurísticas (2026-09-22) foram redigidas
+com IA (Claude), a pedido dos autores; a autoria e a exposição a quatro
+contextos de amostras durante o diagnóstico estão declaradas em
+`regras-selecionadas.md`. `tests/test_catalogo_regras.py` confere que nenhum par
+de linhas distintivas consecutivas dos exemplos aparece no cache de fontes nem
+no contexto do cache simbólico.
 
 É **proibido** consultar, inspecionar ou se inspirar em qualquer amostra do
 material avaliado — o dataset de alertas, os arquivos em `cache/` ou qualquer
@@ -657,27 +701,45 @@ rodada. Uma linha cujo hash difere do arquivo atual foi produzida por outra
 versão do catálogo e não pode ser agregada na mesma tabela sem sinalização —
 `src/metricas.py` avisa quando encontra hashes distintos.
 
-Hash da versão congelada (2026-07-29, 16 fichas, 24.581 bytes):
+**Atenção ao fim de linha.** O hash é dos bytes em disco, e o repositório
+guarda o arquivo com LF enquanto um checkout no Windows com `core.autocrlf=true`
+o grava com CRLF. O mesmo conteúdo tem, portanto, dois hashes; as rodadas
+gravam o do arquivo **como estava no disco da máquina que rodou**.
+
+| versão | fichas | hash LF (git, Linux) | hash CRLF (checkout Windows, o das rodadas) |
+|---|---|---|---|
+| 2026-07-29 (`a875610`) | 16 | `a81b6f5ca3a4…` | `e5db7d400842…` |
+| 2026-09-22 (`08be8eb`) | 16 + 16 de regra | `ec28ec8da048…` | `3d2bc71df131…` |
+
+Hashes completos da versão atual:
 
 ```
-a81b6f5ca3a4f70c2cdbca1436fd138ccc84976ee981aa1726e3dff9ae4e4311  data/catalogo_cwe.json
+ec28ec8da04836d7cd46749cf85570defe6fbdaa0a5fdb458c04b9bdc97e8747  (LF,   53.188 bytes)
+3d2bc71df131c6c51c4e0e2db5938885d23a4ee76b259c693594e7c77b733cae  (CRLF, 53.576 bytes)
 ```
 
 Conferência: `python -c "from src.catalogo import Catalogo; print(Catalogo.carregar().sha256)"`.
 
-Garantias verificadas por `tests/test_catalogo.py` e por `gofmt`:
+Garantias verificadas por `tests/test_catalogo.py`,
+`tests/test_catalogo_regras.py` e por `gofmt`:
 
-- os 32 exemplos de código são Go válido (`gofmt -e`, zero erros) e estão
-  formatados por `gofmt`;
-- em 15 das 16 fichas o par VP/FP compartilha a API central — a exceção é
-  `__fallback__`, que por ser genérica não tem API específica e contrasta a
-  **origem** do dado (externa versus constante do binário);
+- os 64 exemplos de código (fichas de CWE e de regra) são Go válido
+  (`gofmt -e`, zero erros);
+- em todas as fichas específicas o par VP/FP compartilha a API central — as
+  exceções são `__fallback__`, que por ser genérica não tem API específica e
+  contrasta a **origem** do dado, e `iterate-over-empty-map`, cujo alvo é
+  construção nativa (`make(map...)` + `range`), que o par também compartilha;
+- os dois exemplos de cada ficha de regra usam a construção que a regra casa
+  (por exemplo, `tls.Config` sem `MinVersion` nos dois lados da ficha de TLS);
 - a prosa e os comentários dos exemplos estão em português acentuado.
   Identificadores e valores de literais ficam em ASCII, por convenção da
   linguagem.
 
 > A rodada `results/piloto-gemini/` foi executada com uma versão anterior do
-> catálogo e **não pode ser agregada** às rodadas seguintes.
+> catálogo e **não pode ser agregada** às rodadas seguintes. O mesmo vale, a
+> partir de 2026-09-22, para todo braço especialista das Rodadas 1–6 e da
+> rodada `20260908T094808Z-9a00cb2`: foram produzidos com o catálogo sem fichas
+> de regra.
 > `src/metricas.py` sinaliza a divergência ao encontrar hashes distintos.
 
 ---
@@ -1071,7 +1133,7 @@ Tempo_Execucao_s   → float em segundos
 Justificativa      → reasoning do LLM ou mensagem de erro
 --- colunas da Parte 2 ---
 Num_Locations      → locations da entrada de origem, ANTES de qualquer filtro
-Ficha_CWE          → especifica | fallback | N/A
+Ficha_CWE          → regra | especifica | fallback | N/A
 Versao_Prompt      → hash curto do template (ex: especialista:d1145f8b)
 Hash_Catalogo      → SHA-256 do catalogo_cwe.json vigente na execução
 Tokens_Entrada     → tokens do prompt, reportados pela API

@@ -60,6 +60,15 @@ python run_pipeline.py --tp-only --sem-llm
 # pilote no provedor local antes de comprometer cota comercial.
 python run_pipeline.py --tudo --modo-montagem triagem \
   --modelo ollama:qwen2.5-coder:7b --prompt baseline --prompt especialista
+
+# Variantes v2 do especialista (instrução contra presumir mitigação ausente):
+python run_pipeline.py --tudo --modelo ollama:qwen2.5-coder:7b \
+  --prompt especialista --prompt especialista_v2
+python run_pipeline.py --tudo --modo-montagem triagem --modelo ollama:qwen2.5-coder:7b \
+  --prompt especialista_direto --prompt especialista_direto_v2
+
+# Quais regras do Semgrep disparam em cada CWE (insumo das fichas por regra):
+python scripts/auditar_regras_ficha.py
 ```
 
 `--modo-montagem` tem dois valores e é **uniforme na rodada**:
@@ -109,7 +118,7 @@ run_pipeline.py          # Orquestrador: 5 fases, N braços (modelo x prompt)
 pyproject.toml           # Metadados, config do ruff e do pytest
 src/                     # Módulos da pipeline (config, fonte, fases 1-5, métricas)
   provedores/            # Camada de rede por provedor de LLM + tabela de preços
-prompts/                 # Templates de prompt: baseline.md e especialista.md
+prompts/                 # Templates: baseline, especialista, *_direto e as variantes *_v2
 scripts/                 # Fase 0 (coleta e reconstrução de pares) e utilitários
 data/                    # Dataset, catálogo de CWE e manifestos de fix commits
 tp_pairs.json            # Pares TP ouro   (versionado: exige histórico git p/ regerar)
