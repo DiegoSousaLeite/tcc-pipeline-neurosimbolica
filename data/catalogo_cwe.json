@@ -1,7 +1,7 @@
 {
   "CWE-79": {
     "definicao": "Neutralização inadequada de entrada controlável por terceiros durante a geração de uma página web (Cross-site Scripting). Dados do usuário são incorporados à saída HTML sem escape apropriado ao contexto, permitindo que o navegador da vítima execute script injetado pelo atacante.",
-    "heuristica_go": "Em Go, procurar por conversões para template.HTML, template.JS, template.CSS ou template.URL aplicadas a dados de origem externa dentro de html/template, e por escrita direta de entrada do usuário via fmt.Fprintf(w, ...) no http.ResponseWriter. O uso de html/template com valores string comuns (escape contextual automático) ou de template.HTML sobre constante estática não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por conversões para template.HTML, template.JS, template.CSS ou template.URL dentro de html/template e por escrita direta no http.ResponseWriter via fmt.Fprintf(w, ...). É VP quando o valor convertido ou escrito vem de origem externa (r.URL.Query, r.FormValue, corpo da requisição, banco preenchido pelo usuário) sem escape. É FP quando html/template recebe string comum (escape contextual automático) ou quando template.HTML envolve constante estática.",
     "exemplo_vp": {
       "codigo": "func renderComentario(w http.ResponseWriter, comentario string) {\n\t// template.HTML desliga o escape automático do html/template\n\tt := template.Must(template.New(\"c\").Parse(\"<div>{{.}}</div>\"))\n\tt.Execute(w, template.HTML(comentario)) // entrada do usuário sem escape\n}",
       "porque": "template.HTML desativa o escape do html/template; comentário do usuário renderizado como HTML permite injeção de <script>."
@@ -13,7 +13,7 @@
   },
   "CWE-327": {
     "definicao": "Uso de um algoritmo criptográfico comprovadamente quebrado ou inadequado para a finalidade pretendida. Empregar cifras ou funções de hash cujas garantias já não se sustentam enfraquece a proteção em contextos que exigem sigilo, integridade ou autenticação.",
-    "heuristica_go": "Em Go, procurar por crypto/md5 e crypto/sha1 (e cifras como crypto/des, crypto/rc4) em caminhos de autenticação, assinatura, derivação de chave ou armazenamento de credencial. O mesmo import em caminho de deduplicação, cache ou checksum não criptográfico não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por crypto/md5 e crypto/sha1 (e cifras como crypto/des, crypto/rc4). É VP quando o algoritmo protege autenticação, assinatura, derivação de chave ou armazenamento de credencial. É FP quando o mesmo import serve a deduplicação, chave de cache ou checksum não criptográfico, em que a propriedade exigida é dispersão e não resistência a adversário.",
     "exemplo_vp": {
       "codigo": "func hashSenha(senha string) string {\n\tsoma := md5.Sum([]byte(senha))\n\treturn hex.EncodeToString(soma[:])\n}",
       "porque": "md5.Sum aplicado a credencial: hash rápido e sem sal, vulnerável a busca exaustiva e a colisão."
@@ -25,7 +25,7 @@
   },
   "CWE-94": {
     "definicao": "Controle inadequado da geração de código (injeção de código): parte do que o programa executa é construída a partir de entrada externa. Um agente que influencia esse trecho passa a determinar a lógica executada, e não apenas os dados processados.",
-    "heuristica_go": "Em Go, procurar por text/template ou html/template cujo TEXTO do template - o argumento de Parse/ParseFiles/New().Parse - provém de entrada externa, permitindo injeção de ações {{...}}. Passar entrada externa apenas como dado em Execute, com o texto do template fixo no código, não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por text/template ou html/template cujo TEXTO do template - o argumento de Parse/ParseFiles/New().Parse - é montado a partir de dados. É VP quando esse texto provém de entrada externa, permitindo injetar ações {{...}}. É FP quando o texto do template é fixo no código e a entrada externa só chega como dado em Execute.",
     "exemplo_vp": {
       "codigo": "func renderPagina(w http.ResponseWriter, layoutDoUsuario string, dados any) {\n\t// o TEXTO do template vem do usuário: ele controla a lógica executada\n\tt := template.Must(template.New(\"p\").Parse(layoutDoUsuario))\n\tt.Execute(w, dados)\n}",
       "porque": "O texto do template é entrada externa; o usuário injeta ações {{...}} e acessa métodos/campos do contexto - injeção via template."
@@ -37,7 +37,7 @@
   },
   "CWE-319": {
     "definicao": "Transmissão de informação sensível em texto claro: dados que exigem confidencialidade trafegam por um canal sem cifragem. Qualquer intermediário com acesso ao tráfego pode lê-los ou alterá-los.",
-    "heuristica_go": "Em Go, procurar por literais de URL com esquema http:// (não https://) em chamadas como http.Get, http.Post ou http.NewRequest que transportam dados sensíveis - credenciais, tokens de autenticação ou dados pessoais. A mesma chamada sob https:// não caracteriza a fraqueza, pois o TLS cifra o corpo em trânsito.",
+    "heuristica_go": "Em Go, procurar por literais de URL com esquema http:// em chamadas como http.Get, http.Post ou http.NewRequest. É VP quando a chamada transporta dado sensível - credencial, token de autenticação ou dado pessoal - por rede que não é confiável. É FP quando a mesma chamada usa https://, pois o TLS cifra o corpo em trânsito, ou quando o destino é loopback e o conteúdo não é sensível.",
     "exemplo_vp": {
       "codigo": "func enviarCredenciais(usuario, senha string) (*http.Response, error) {\n\t// esquema http:// -> corpo com credenciais trafega em texto claro\n\tcorpo := strings.NewReader(\"user=\" + usuario + \"&pass=\" + senha)\n\treturn http.Post(\"http://api.exemplo.com/login\", \"application/x-www-form-urlencoded\", corpo)\n}",
       "porque": "Credenciais enviadas via URL http://: o conteúdo trafega sem TLS e pode ser lido por qualquer intermediário na rede."
@@ -49,7 +49,7 @@
   },
   "CWE-338": {
     "definicao": "Uso de gerador de números pseudoaleatórios (PRNG) criptograficamente fraco em um contexto de segurança. Como a sequência gerada é previsível, um atacante pode reconstruí-la ou adivinhá-la, comprometendo tokens, chaves ou nonces que dependem de imprevisibilidade.",
-    "heuristica_go": "Em Go, procurar por math/rand (funções como rand.Intn, rand.Int63, rand.Read) alimentando tokens, senhas, IDs de sessão, nonces ou chaves - contextos que exigem imprevisibilidade e pedem crypto/rand. O mesmo math/rand em jitter de backoff, amostragem, embaralhamento de exibição ou simulação não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por math/rand (rand.Intn, rand.Int63, rand.Read). É VP quando o valor alimenta token, senha, ID de sessão, nonce ou chave - contextos que exigem imprevisibilidade e pedem crypto/rand. É FP quando o mesmo math/rand serve a jitter de backoff, amostragem, embaralhamento de exibição ou simulação.",
     "exemplo_vp": {
       "codigo": "func tokenSessao() string {\n\t// math/rand é previsível: a sequência é reconstruível a partir da seed\n\tb := make([]byte, 32)\n\tfor i := range b {\n\t\tb[i] = byte(rand.Intn(256))\n\t}\n\treturn hex.EncodeToString(b)\n}",
       "porque": "Token de sessão gerado com math/rand: a saída é previsível e um atacante pode reconstruir ou adivinhar tokens válidos."
@@ -61,7 +61,7 @@
   },
   "CWE-665": {
     "definicao": "Inicialização inadequada: o programa não inicializa, ou inicializa incorretamente, um recurso antes de usá-lo, deixando-o em estado inesperado. Quando esse recurso é relevante para a segurança, o estado não inicializado pode ser previsível ou inseguro.",
-    "heuristica_go": "Em Go, procurar por recursos de segurança usados com o valor zero de make ou de um struct literal antes de serem preenchidos - por exemplo, uma chave []byte passada a aes.NewCipher ou hmac.New sem ter recebido material de crypto/rand, ou campos deixados no zero. A mesma construção com o recurso inicializado antes do uso não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por recursos de segurança usados com o valor zero de make ou de um struct literal - por exemplo, uma chave []byte passada a aes.NewCipher ou hmac.New. É VP quando o recurso chega ao uso sem ter recebido material de crypto/rand ou os campos obrigatórios. É FP quando o recurso é inicializado antes do uso.",
     "exemplo_vp": {
       "codigo": "func novaCifra() (cipher.Block, error) {\n\t// a chave fica toda-zero: make aloca mas não preenche material secreto\n\tchave := make([]byte, 32)\n\treturn aes.NewCipher(chave)\n}",
       "porque": "A chave AES fica com o valor zero de make, nunca preenchida com segredo real - cifra inicializada em estado previsível e sem proteção."
@@ -73,7 +73,7 @@
   },
   "CWE-328": {
     "definicao": "Uso de hash fraco: a função de hash empregada não atende às expectativas de segurança do contexto, seja por fragilidade do próprio algoritmo, seja por aplicá-lo de forma que quebra suas garantias (por exemplo, hash rápido e sem sal para senhas). Isso viabiliza ataques de pré-imagem, colisão ou tabela arco-íris mais eficientes que a força bruta.",
-    "heuristica_go": "Em Go, procurar por funções de hash de propósito geral - sha256.Sum256, sha512.Sum512, e as já quebradas md5.Sum/sha1.Sum - aplicadas a senhas ou segredos que exigem KDF com sal e custo (golang.org/x/crypto/bcrypt, scrypt, argon2). A mesma função em integridade de arquivo, endereçamento de conteúdo ou checksum não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por funções de hash de propósito geral - sha256.Sum256, sha512.Sum512 e as já quebradas md5.Sum/sha1.Sum. É VP quando o hash é aplicado a senha ou segredo que exige KDF com sal e custo (golang.org/x/crypto/bcrypt, scrypt, argon2). É FP quando a mesma função serve a integridade de arquivo, endereçamento de conteúdo ou checksum.",
     "exemplo_vp": {
       "codigo": "func armazenarSenha(senha string) string {\n\t// SHA-256 é rápido e sem sal: inadequado para armazenar senha\n\tsoma := sha256.Sum256([]byte(senha))\n\treturn hex.EncodeToString(soma[:])\n}",
       "porque": "sha256.Sum256 sobre senha: hash rápido, sem sal e sem fator de trabalho, permite ataque de dicionário e força bruta em GPU (o correto seria bcrypt/scrypt/argon2)."
@@ -85,7 +85,7 @@
   },
   "CWE-614": {
     "definicao": "Cookie sensível transmitido em sessão HTTPS sem o atributo Secure. Sem esse atributo, o navegador também envia o cookie por conexões HTTP não cifradas, expondo o valor sensível na rede.",
-    "heuristica_go": "Em Go, procurar por http.Cookie / http.SetCookie criando cookies de sessão, autenticação ou token (nomes como sessionid, token, auth) com o campo Secure ausente ou false. O mesmo cookie sem Secure para dado não sensível (preferência de idioma, tema, layout) não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por http.Cookie / http.SetCookie com o campo Secure ausente ou false. É VP quando o cookie carrega sessão, autenticação ou token (nomes como sessionid, token, auth) e pode trafegar por HTTP. É FP quando o cookie guarda dado não sensível, como preferência de idioma, tema ou layout.",
     "exemplo_vp": {
       "codigo": "func setSessao(w http.ResponseWriter, id string) {\n\t// Secure ausente: o cookie de sessão pode ir por HTTP em texto claro\n\thttp.SetCookie(w, &http.Cookie{\n\t\tName:  \"sessionid\",\n\t\tValue: id,\n\t})\n}",
       "porque": "Cookie de sessão sem Secure: o navegador o envia também em conexões http://, expondo o identificador em texto claro na rede."
@@ -97,7 +97,7 @@
   },
   "CWE-601": {
     "definicao": "Redirecionamento de URL para site não confiável (open redirect): o destino de um redirecionamento é derivado de entrada externa sem validação. O atacante induz a aplicação a redirecionar a vítima para um site sob controle dele, viabilizando phishing.",
-    "heuristica_go": "Em Go, procurar por http.Redirect (ou header Location definido via w.Header().Set) cujo destino vem de r.URL.Query(), r.FormValue ou r.Header sem validação. A mesma chamada com destino restrito a caminho relativo (prefixo / e rejeição de //) ou a uma lista de hosts confiáveis não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por http.Redirect (ou header Location definido via w.Header().Set). É VP quando o destino vem de r.URL.Query(), r.FormValue ou r.Header sem validação. É FP quando o destino é restrito a caminho relativo (prefixo / e rejeição de //) ou a uma lista de hosts confiáveis.",
     "exemplo_vp": {
       "codigo": "func redirecionar(w http.ResponseWriter, r *http.Request) {\n\t// destino vem direto do parâmetro: atacante aponta para site externo\n\tdestino := r.URL.Query().Get(\"next\")\n\thttp.Redirect(w, r, destino, http.StatusFound)\n}",
       "porque": "O destino do redirecionamento é entrada externa não validada; um atacante fornece uma URL absoluta para um site malicioso (phishing)."
@@ -109,7 +109,7 @@
   },
   "CWE-470": {
     "definicao": "Uso de entrada controlada externamente para selecionar classes ou código (reflexão insegura): o nome de um tipo, método ou função resolvido em tempo de execução vem de entrada externa. O atacante passa a escolher que código é invocado, para além do previsto pelo desenvolvedor.",
-    "heuristica_go": "Em Go, procurar por reflect.MethodByName, reflect.FieldByName ou seleção de handler/tipo por nome vindo de entrada externa (r.URL.Query, r.FormValue), e por plugin.Open com caminho externo. A mesma reflexão cujo nome provém de uma lista fixa mapeada antes da chamada não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por reflect.MethodByName, reflect.FieldByName, seleção de handler/tipo por nome e plugin.Open. É VP quando o nome ou o caminho vem de entrada externa (r.URL.Query, r.FormValue). É FP quando o nome provém de uma lista fixa mapeada antes da chamada.",
     "exemplo_vp": {
       "codigo": "func executarAcao(servico any, r *http.Request) {\n\t// o nome do método vem do usuário: qualquer método exportado é chamável\n\tnome := r.URL.Query().Get(\"acao\")\n\tif m := reflect.ValueOf(servico).MethodByName(nome); m.IsValid() {\n\t\tm.Call(nil)\n\t}\n}",
       "porque": "O nome do método a invocar é entrada externa; o atacante seleciona qualquer método exportado do serviço, inclusive os não previstos para essa rota."
@@ -121,7 +121,7 @@
   },
   "CWE-115": {
     "definicao": "Interpretação incorreta de entrada: o programa interpreta uma entrada - de um atacante ou de outro componente - de modo divergente do pretendido, de forma relevante para a segurança. A própria MITRE classifica a fraqueza como de definição imprecisa e frequentemente resultante de outras.",
-    "heuristica_go": "Em Go, procurar por interpretações de entrada dependentes de configuração implícita - strconv.ParseInt/ParseUint com base 0 (inferência de octal/hex pelo prefixo), ou parsing que assume formato diferente do produtor do dado. A mesma chamada com base explícita (10) ou formato acordado entre as pontas não caracteriza a fraqueza. CWE de definição vaga: quando o sinal for fraco, prefira encaminhar ao __fallback__.",
+    "heuristica_go": "Em Go, procurar por interpretações de entrada que dependem de configuração implícita - strconv.ParseInt/ParseUint com base 0 (inferência de octal/hex pelo prefixo), ou parsing que assume formato diferente do produtor do dado. É VP quando a divergência de interpretação muda uma decisão (limite, permissão, valor monetário). É FP quando a chamada usa base explícita (10) ou formato acordado entre as pontas. CWE de definição vaga: quando o sinal for fraco, prefira encaminhar ao __fallback__.",
     "exemplo_vp": {
       "codigo": "func lerQuantidade(entrada string) (int64, error) {\n\t// base 0: \"010\" é interpretado como octal (8), não decimal (10)\n\treturn strconv.ParseInt(entrada, 0, 64)\n}",
       "porque": "Com base 0, strconv.ParseInt infere a base pelo prefixo; entrada como \"010\" vira 8 e \"0x1F\" vira 31, divergindo do decimal que o código presume."
@@ -133,7 +133,7 @@
   },
   "CWE-352": {
     "definicao": "Cross-Site Request Forgery (CSRF): a aplicação não verifica de forma confiável se uma requisição que altera estado foi intencionalmente enviada pelo usuário. Um site malicioso consegue disparar ações autenticadas no navegador da vítima sem o consentimento dela.",
-    "heuristica_go": "Em Go, procurar por cookies de sessão/autenticação com http.SameSiteNoneMode (ou SameSite não definido) e por handlers que alteram estado sem validar token anti-CSRF (padrão gorilla/csrf) nem a origem (r.Header.Get(\"Origin\")). O mesmo cookie com http.SameSiteLaxMode/StrictMode ou handler que valida token não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por cookies de sessão/autenticação com http.SameSiteNoneMode (ou SameSite não definido) e por handlers que alteram estado. É VP quando o handler que altera estado não valida token anti-CSRF (padrão gorilla/csrf) nem a origem (r.Header.Get(\"Origin\")). É FP quando o cookie usa http.SameSiteLaxMode/StrictMode ou o handler valida token.",
     "exemplo_vp": {
       "codigo": "func setSessao(w http.ResponseWriter, id string) {\n\t// SameSite=None: o cookie acompanha requisições cross-site -> exposto a CSRF\n\thttp.SetCookie(w, &http.Cookie{\n\t\tName:     \"session\",\n\t\tValue:    id,\n\t\tSecure:   true,\n\t\tSameSite: http.SameSiteNoneMode,\n\t})\n}",
       "porque": "Cookie de sessão com SameSite=None é enviado em requisições originadas por outros sites, permitindo que um formulário malicioso dispare ações autenticadas (CSRF)."
@@ -145,7 +145,7 @@
   },
   "CWE-681": {
     "definicao": "Conversão incorreta entre tipos numéricos: um valor é convertido entre tipos de larguras ou sinais diferentes sem verificar se cabe no tipo de destino. A conversão pode truncar, estourar ou trocar o sinal do valor de forma silenciosa.",
-    "heuristica_go": "Em Go, procurar por conversões estreitantes entre inteiros - int64->int32, int->int16, ou com/sem sinal (int->uint, que torna negativos enormes) - sobre valores de origem externa ou de len/tamanho, sem verificação de faixa. A mesma conversão precedida de checagem contra math.MaxInt32 (ou limite equivalente) não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por conversões estreitantes entre inteiros - int64->int32, int->int16, ou com/sem sinal (int->uint, que torna negativos enormes). É VP quando o valor convertido vem de origem externa ou de len/tamanho sem verificação de faixa. É FP quando a conversão é precedida de checagem contra math.MaxInt32 (ou limite equivalente).",
     "exemplo_vp": {
       "codigo": "func encolher(n int64) int32 {\n\t// n pode exceder MaxInt32: a conversão trunca/estoura em silêncio\n\treturn int32(n)\n}",
       "porque": "Conversão de int64 para int32 sem checar faixa: valores acima de 2147483647 sofrem overflow silencioso e mudam de sinal/magnitude."
@@ -157,7 +157,7 @@
   },
   "CWE-1004": {
     "definicao": "Cookie sensível sem o atributo HttpOnly: um cookie que carrega dado sensível fica acessível a scripts do lado do cliente (document.cookie). Combinado a um XSS, isso permite roubo do valor, como o identificador de sessão.",
-    "heuristica_go": "Em Go, procurar por http.Cookie de sessão/autenticação com o campo HttpOnly ausente ou false, o que expõe o valor a document.cookie e a roubo via XSS. O mesmo HttpOnly=false em cookie que o front-end precisa ler por projeto (token CSRF double-submit, sinalizador de UI não sensível) não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por http.Cookie com o campo HttpOnly ausente ou false. É VP quando o cookie é de sessão/autenticação, o que expõe o valor a document.cookie e a roubo via XSS. É FP quando o front-end precisa ler o cookie por projeto (token CSRF double-submit, sinalizador de UI não sensível).",
     "exemplo_vp": {
       "codigo": "func setSessao(w http.ResponseWriter, id string) {\n\t// HttpOnly ausente: JavaScript lê o cookie de sessão (roubo via XSS)\n\thttp.SetCookie(w, &http.Cookie{\n\t\tName:  \"session\",\n\t\tValue: id,\n\t})\n}",
       "porque": "Cookie de sessão sem HttpOnly é acessível via document.cookie; um XSS consegue ler o identificador de sessão e sequestrar a conta."
@@ -169,7 +169,7 @@
   },
   "CWE-667": {
     "definicao": "Travamento inadequado (locking): o programa não adquire ou não libera um lock de forma correta em todos os caminhos de execução. A falha pode deixar um lock retido permanentemente (deadlock) ou expor estado compartilhado a corrida.",
-    "heuristica_go": "Em Go, procurar por sync.Mutex/sync.RWMutex cujo Unlock não está protegido por defer logo após o Lock, de modo que um caminho de erro (return no meio da função) sai sem destravar. O mesmo Lock seguido de defer c.mu.Unlock() garante a liberação em todos os retornos e não caracteriza a fraqueza.",
+    "heuristica_go": "Em Go, procurar por sync.Mutex/sync.RWMutex cujo Unlock não está protegido por defer logo após o Lock. É VP quando um caminho de erro (return no meio da função) sai sem destravar, deixando o recurso travado. É FP quando o Lock é seguido de defer c.mu.Unlock(), que garante a liberação em todos os retornos.",
     "exemplo_vp": {
       "codigo": "type Contador struct {\n\tmu      sync.Mutex\n\tvalor   int\n\tfechado bool\n}\n\nfunc (c *Contador) Incrementar() error {\n\tc.mu.Lock()\n\tif c.fechado {\n\t\treturn errors.New(\"fechado\") // retorna com o mutex ainda travado\n\t}\n\tc.valor++\n\tc.mu.Unlock()\n\treturn nil\n}",
       "porque": "No caminho de erro a função retorna sem Unlock; o mutex fica travado para sempre e qualquer Lock posterior trava (deadlock)."
@@ -189,6 +189,200 @@
     "exemplo_fp": {
       "codigo": "func inicializar() {\n\tconst entrada = \"valor-fixo-do-binario\"\n\toperacaoPerigosa(entrada) // valor constante do binário, não influenciável\n}",
       "porque": "A entrada da operação é uma constante embutida no binário, fora do controle de qualquer agente externo; não há vetor para explorar."
+    }
+  },
+  "regras": {
+    "go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion": {
+      "definicao": "Configuração TLS sem versão mínima declarada (tls.Config sem MinVersion). Se o piso efetivo for TLS 1.0 ou 1.1, versões com fraquezas conhecidas, a conexão pode ser negociada para baixo: é a forma como a CWE-327 (algoritmo criptográfico de risco) aparece nesta regra.",
+      "heuristica_go": "Em Go, a ausência de MinVersion herda o padrão da stdlib: TLS 1.2 para clientes desde Go 1.18 e para servidores desde Go 1.22; antes disso, o servidor aceitava TLS 1.0. É VP quando o tls.Config é de servidor exposto à rede e o módulo é compilado com Go anterior a 1.22 (diretiva go do go.mod), de modo que o piso efetivo é TLS 1.0. É FP quando o tls.Config é de cliente, quando o módulo exige Go >= 1.22, ou quando a conexão é local, de teste ou de ferramenta interna.",
+      "exemplo_vp": {
+        "codigo": "// go.mod declara go 1.19: o servidor ainda aceita TLS 1.0 por padrão\nfunc servidorPagamentos(h http.Handler, cert tls.Certificate) *http.Server {\n\treturn &http.Server{\n\t\tAddr:    \":443\",\n\t\tHandler: h,\n\t\t// sem MinVersion num servidor público\n\t\tTLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},\n\t}\n}",
+        "porque": "Servidor exposto, compilado com Go anterior a 1.22 e sem MinVersion: o piso é TLS 1.0, e um atacante na rede força a negociação para um protocolo com fraquezas conhecidas."
+      },
+      "exemplo_fp": {
+        "codigo": "func clienteMetricas(raizes *x509.CertPool) *http.Client {\n\t// cliente: sem MinVersion, a stdlib já exige TLS 1.2 (Go >= 1.18)\n\treturn &http.Client{Transport: &http.Transport{\n\t\tTLSClientConfig: &tls.Config{RootCAs: raizes},\n\t}}\n}",
+        "porque": "Configuração de cliente sem MinVersion: o padrão da biblioteca já é TLS 1.2, então o alerta aponta ausência de configuração explícita, não exposição real."
+      }
+    },
+    "go.lang.security.audit.dangerous-exec-command.dangerous-exec-command": {
+      "definicao": "Execução de processo com programa ou argumentos não constantes em exec.Command/exec.CommandContext, ou com um shell (sh -c) recebendo string montada. Se dado externo alcança essa chamada, quem o controla escolhe o que roda no servidor.",
+      "heuristica_go": "Em Go, olhar a ORIGEM do nome do programa e dos argumentos de exec.Command e, com prioridade, o terceiro argumento de exec.Command(\"sh\", \"-c\", ...). É VP quando algum deles deriva de requisição HTTP (r.URL.Query, r.FormValue, corpo), de mensagem de fila ou de arquivo de terceiro, sem validação contra lista fixa. É FP quando o programa vem de constante, de lista fixa validada antes da chamada, ou de configuração do próprio operador em ferramenta de linha de comando local, sem fronteira de confiança cruzada.",
+      "exemplo_vp": {
+        "codigo": "func diagnostico(w http.ResponseWriter, r *http.Request) {\n\talvo := r.URL.Query().Get(\"host\")\n\t// parâmetro da requisição concatenado num shell\n\tsaida, _ := exec.Command(\"sh\", \"-c\", \"ping -c 1 \"+alvo).Output()\n\tw.Write(saida)\n}",
+        "porque": "O cliente controla a string executada pelo shell: \"; rm -rf /\" no parâmetro vira execução arbitrária."
+      },
+      "exemplo_fp": {
+        "codigo": "var permitidos = map[string]string{\"formatar\": \"gofmt\", \"versao\": \"go\"}\n\nfunc rodarFerramenta(nome string) error {\n\tbinario, ok := permitidos[nome]\n\tif !ok {\n\t\treturn errors.New(\"ferramenta desconhecida\")\n\t}\n\treturn exec.Command(binario, \"-h\").Run()\n}",
+        "porque": "O programa não é constante na chamada, mas só pode ser um valor da lista fixa verificada antes: a entrada escolhe entre opções, não define o comando."
+      }
+    },
+    "go.lang.security.audit.dangerous-exec-cmd.dangerous-exec-cmd": {
+      "definicao": "Construção direta de exec.Cmd com Path ou Args não constantes. É a mesma fraqueza da execução de comando montado: se dado externo define o programa ou os argumentos, quem o controla escolhe o que roda.",
+      "heuristica_go": "Em Go, olhar a origem dos campos Path e Args do literal exec.Cmd{...}. É VP quando Path ou Args (em especial Args de um shell com -c) derivam de requisição, mensagem ou arquivo de terceiro sem validação contra lista fixa. É FP quando Path vem de exec.LookPath sobre nome constante ou de lista fixa, e os argumentos variáveis são dados passados a um programa fixo que não os interpreta como comando.",
+      "exemplo_vp": {
+        "codigo": "func converter(r *http.Request) error {\n\tfiltro := r.FormValue(\"filtro\")\n\t// o shell interpreta o filtro vindo do formulário\n\tcmd := &exec.Cmd{Path: \"/bin/sh\", Args: []string{\"sh\", \"-c\", \"convert \" + filtro}}\n\treturn cmd.Run()\n}",
+        "porque": "Campo do formulário concatenado no comando do shell: metacaracteres no filtro executam comandos arbitrários."
+      },
+      "exemplo_fp": {
+        "codigo": "func compactar(destino string, arquivos []string) error {\n\tcaminho, err := exec.LookPath(\"tar\")\n\tif err != nil {\n\t\treturn err\n\t}\n\t// programa fixo; os nomes de arquivo são só argumentos do tar\n\tcmd := &exec.Cmd{Path: caminho, Args: append([]string{\"tar\", \"-czf\", destino}, arquivos...)}\n\treturn cmd.Run()\n}",
+        "porque": "O programa é fixo e resolvido por exec.LookPath; sem shell no meio, os argumentos variáveis não são interpretados como comando."
+      }
+    },
+    "trailofbits.go.invalid-usage-of-modified-variable.invalid-usage-of-modified-variable": {
+      "definicao": "Regra de CORRETUDE, não de segurança por si só: aponta variável atribuída junto com um erro e usada (acesso a campo) dentro do bloco que trata esse erro. Se a função devolve nil no erro, o acesso causa pânico por desreferência nula. Só vira fraqueza de segurança quando esse pânico é alcançável por entrada externa (negação de serviço).",
+      "heuristica_go": "Em Go, verificar o contrato da função que produziu a variável: ela devolve valor nil junto com erro? É VP quando devolve nil no erro, o campo é acessado dentro do if err != nil sem checagem de nil, e o caminho é alcançável por requisição ou dado externo, derrubando o processo. É FP quando a função documenta que sempre devolve valor não nil, quando há checagem de nil antes do acesso, ou quando o pânico só é possível em código de teste ou de inicialização controlada.",
+      "exemplo_vp": {
+        "codigo": "func perfil(w http.ResponseWriter, r *http.Request) {\n\tusuario, err := buscarUsuario(r.URL.Query().Get(\"id\"))\n\tif err != nil {\n\t\t// buscarUsuario devolve nil no erro: pânico a cada id inválido\n\t\tlog.Printf(\"falha ao carregar %s: %v\", usuario.Nome, err)\n\t\thttp.Error(w, \"erro\", http.StatusInternalServerError)\n\t\treturn\n\t}\n\tfmt.Fprint(w, usuario.Nome)\n}",
+        "porque": "Qualquer cliente que envie um id inexistente provoca desreferência nula no tratamento do erro: negação de serviço alcançável pela requisição."
+      },
+      "exemplo_fp": {
+        "codigo": "// validarConfig sempre devolve um *Relatorio, mesmo com erro.\nfunc carregarConfig(caminho string) error {\n\trelatorio, err := validarConfig(caminho)\n\tif err != nil {\n\t\tlog.Printf(\"%d problemas encontrados\", relatorio.Total)\n\t\treturn err\n\t}\n\treturn nil\n}",
+        "porque": "O contrato da função garante valor não nil junto com o erro, então o acesso ao campo no tratamento é seguro."
+      }
+    },
+    "trailofbits.go.iterate-over-empty-map.iterate-over-empty-map": {
+      "definicao": "Regra de CORRETUDE: aponta iteração sobre um mapa criado com make e que não recebe nenhuma atribuição visível antes do range. Normalmente é código redundante; só vira fraqueza de segurança quando o mapa vazio é uma lista de controle (bloqueios, permissões, revogações) e o laço nunca executa.",
+      "heuristica_go": "Em Go, verificar se o mapa é preenchido por um caminho que a regra não enxerga (passado por referência a outra função, reatribuído a partir de retorno de função) e o que o laço decide. É VP quando o mapa vazio é uma lista de controle de acesso e o laço vazio faz a checagem sempre aprovar. É FP quando o mapa é preenchido por outra função antes do range, ou quando o laço é só redundância sem efeito em decisão de segurança.",
+      "exemplo_vp": {
+        "codigo": "func bloqueado(papel string) bool {\n\tnegados := make(map[string]bool)\n\t// a política de bloqueio nunca é carregada no mapa\n\tfor p := range negados {\n\t\tif p == papel {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+        "porque": "A checagem de bloqueio itera um mapa sempre vazio e aprova qualquer papel: a regra de acesso nunca é aplicada."
+      },
+      "exemplo_fp": {
+        "codigo": "func frequencias(palavras []string) []string {\n\tcontagem := make(map[string]int)\n\tacumular(contagem, palavras) // preenche o mapa por referência\n\tvar repetidas []string\n\tfor p := range contagem {\n\t\tif contagem[p] > 1 {\n\t\t\trepetidas = append(repetidas, p)\n\t\t}\n\t}\n\treturn repetidas\n}",
+        "porque": "O mapa é preenchido por outra função antes do laço, o que a regra não enxerga; além disso, o laço não decide nada de segurança."
+      }
+    },
+    "go.lang.security.audit.xss.import-text-template.import-text-template": {
+      "definicao": "Importação de text/template, que não faz escape de HTML. Se o resultado do template é servido como página e contém dado controlado pelo usuário, a saída permite Cross-site Scripting; html/template faria o escape contextual automaticamente.",
+      "heuristica_go": "Em Go, o alerta aponta só o import; é preciso ver PARA ONDE vai a saída do text/template. É VP quando o template é executado sobre o http.ResponseWriter (ou gera HTML servido ao navegador) com dado externo. É FP quando o text/template gera texto que não é HTML servido - arquivo de configuração, código-fonte gerado, e-mail em texto puro, saída de linha de comando.",
+      "exemplo_vp": {
+        "codigo": "func saudacao(w http.ResponseWriter, r *http.Request) {\n\t// text/template não escapa HTML\n\tt := template.Must(template.New(\"s\").Parse(\"<h1>Olá, {{.}}</h1>\"))\n\tt.Execute(w, r.URL.Query().Get(\"nome\"))\n}",
+        "porque": "Página HTML gerada com text/template a partir de parâmetro da requisição: um nome com <script> é executado no navegador da vítima."
+      },
+      "exemplo_fp": {
+        "codigo": "func gerarUnit(saida io.Writer, servico string) error {\n\t// gera arquivo de unidade do systemd, não HTML\n\tt := template.Must(template.New(\"u\").Parse(\"[Service]\\nExecStart=/usr/bin/{{.}}\\n\"))\n\treturn t.Execute(saida, servico)\n}",
+        "porque": "O text/template produz um arquivo de configuração que nunca é interpretado por navegador: escape de HTML não se aplica."
+      }
+    },
+    "go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter": {
+      "definicao": "Escrita direta de bytes no http.ResponseWriter (w.Write) dentro de um handler, sem passar pelo escape de html/template. Se os bytes contêm dado controlado pelo usuário e a resposta é interpretada como HTML, há Cross-site Scripting.",
+      "heuristica_go": "Em Go, verificar O QUE é escrito com w.Write e com qual Content-Type. É VP quando os bytes incluem entrada externa e a resposta é HTML (Content-Type text/html, ou ausente e detectado como HTML). É FP quando a resposta é JSON de json.Marshal, binário, texto com Content-Type text/plain e nosniff, ou bytes que não carregam dado externo.",
+      "exemplo_vp": {
+        "codigo": "func eco(w http.ResponseWriter, r *http.Request) {\n\tw.Header().Set(\"Content-Type\", \"text/html\")\n\t// termo de busca devolvido como HTML sem escape\n\tw.Write([]byte(\"<p>Resultados para \" + r.FormValue(\"q\") + \"</p>\"))\n}",
+        "porque": "O termo de busca vai sem escape para uma resposta HTML: um <script> no parâmetro roda no navegador de quem abre o link."
+      },
+      "exemplo_fp": {
+        "codigo": "func status(w http.ResponseWriter, r *http.Request) {\n\tcorpo, _ := json.Marshal(map[string]string{\"consulta\": r.FormValue(\"q\")})\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\t// JSON serializado: o navegador não interpreta como HTML\n\tw.Write(corpo)\n}",
+        "porque": "A resposta é JSON produzido por json.Marshal, com Content-Type application/json: o dado externo não é interpretado como marcação."
+      }
+    },
+    "go.lang.security.audit.xss.no-fprintf-to-responsewriter.no-fprintf-to-responsewriter": {
+      "definicao": "Escrita formatada (fmt.Fprintf e similares) no http.ResponseWriter, sem o escape de html/template. Se os argumentos incluem dado controlado pelo usuário e a resposta é HTML, há Cross-site Scripting.",
+      "heuristica_go": "Em Go, verificar os argumentos de fmt.Fprintf(w, ...) e o tipo da resposta. É VP quando algum argumento vem de entrada externa sem html.EscapeString e a resposta é HTML. É FP quando os argumentos são números, valores internos ou já escapados com html.EscapeString, ou quando a resposta é text/plain com nosniff.",
+      "exemplo_vp": {
+        "codigo": "func ola(w http.ResponseWriter, r *http.Request) {\n\t// nome da query string interpolado direto no HTML\n\tfmt.Fprintf(w, \"<p>Bem-vindo, %s</p>\", r.URL.Query().Get(\"nome\"))\n}",
+        "porque": "Parâmetro da requisição interpolado sem escape numa resposta HTML: o atacante injeta marcação e script pelo link."
+      },
+      "exemplo_fp": {
+        "codigo": "func contador(w http.ResponseWriter, r *http.Request) {\n\ttotal := atomic.LoadInt64(&visitas)\n\t// só um inteiro interno é formatado na resposta\n\tfmt.Fprintf(w, \"<p>Visitas: %d</p>\", total)\n}",
+        "porque": "O único valor interpolado é um inteiro mantido pelo servidor: não há dado externo capaz de injetar marcação."
+      }
+    },
+    "problem-based-packs.insecure-transport.go-stdlib.bypass-tls-verification.bypass-tls-verification": {
+      "definicao": "Desativação da verificação de certificado TLS (InsecureSkipVerify: true). A conexão continua cifrada, mas sem autenticar o servidor: um intermediário pode se passar por ele e ler ou alterar o tráfego (CWE-319, transmissão exposta).",
+      "heuristica_go": "Em Go, procurar tls.Config com InsecureSkipVerify: true e ver onde a configuração é usada. É VP quando ela vale em produção para falar com serviço remoto que troca credenciais ou dados sensíveis. É FP quando o InsecureSkipVerify é condicionado a flag explícita de depuração desligada por padrão, restrito a teste, ou compensado por VerifyPeerCertificate ou VerifyConnection que valida o certificado (por exemplo, pinning).",
+      "exemplo_vp": {
+        "codigo": "func clienteBanco() *http.Client {\n\t// verificação desligada em produção para qualquer host\n\ttransporte := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}\n\treturn &http.Client{Transport: transporte}\n}",
+        "porque": "Cliente de produção aceita qualquer certificado: um intermediário na rede apresenta certificado próprio e lê as credenciais trafegadas."
+      },
+      "exemplo_fp": {
+        "codigo": "func clienteFixado(digestoEsperado [32]byte) *http.Client {\n\tconfig := &tls.Config{\n\t\tInsecureSkipVerify: true, // a cadeia é substituída pela checagem abaixo\n\t\tVerifyPeerCertificate: func(brutos [][]byte, _ [][]*x509.Certificate) error {\n\t\t\tif len(brutos) == 0 || sha256.Sum256(brutos[0]) != digestoEsperado {\n\t\t\t\treturn errors.New(\"certificado não confere\")\n\t\t\t}\n\t\t\treturn nil\n\t\t},\n\t}\n\treturn &http.Client{Transport: &http.Transport{TLSClientConfig: config}}\n}",
+        "porque": "A verificação padrão é trocada por pinning do certificado em VerifyPeerCertificate: o servidor continua autenticado."
+      }
+    },
+    "go.lang.security.audit.net.use-tls.use-tls": {
+      "definicao": "Servidor HTTP iniciado com http.ListenAndServe, sem TLS. Tudo que trafega - incluindo credenciais e cookies de sessão - vai em texto claro se o servidor for alcançado diretamente pela rede.",
+      "heuristica_go": "Em Go, verificar ONDE o http.ListenAndServe escuta e o que ele serve. É VP quando o servidor é exposto à rede (\":80\", \"0.0.0.0:...\") e atende rotas com login, sessão ou dado sensível sem TLS à frente. É FP quando escuta só em loopback, serve apenas health check/métricas sem dado sensível, ou roda atrás de proxy/sidecar que termina o TLS por projeto documentado.",
+      "exemplo_vp": {
+        "codigo": "func main() {\n\thttp.HandleFunc(\"/login\", entrar)\n\t// login servido em texto claro para toda a rede\n\tlog.Fatal(http.ListenAndServe(\":80\", nil))\n}",
+        "porque": "A rota de login recebe senha por HTTP puro em todas as interfaces: qualquer um no caminho lê as credenciais."
+      },
+      "exemplo_fp": {
+        "codigo": "func iniciarSaude() {\n\tmux := http.NewServeMux()\n\tmux.HandleFunc(\"/healthz\", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })\n\t// só loopback, só verificação de saúde\n\tgo http.ListenAndServe(\"127.0.0.1:8081\", mux)\n}",
+        "porque": "O servidor escuta apenas em loopback e responde só um código de saúde: não há dado sensível nem exposição à rede."
+      }
+    },
+    "go.lang.security.reverseproxy-director.reverseproxy-director": {
+      "definicao": "Uso de httputil.ReverseProxy.Director. Cabeçalhos hop-by-hop listados em Connection pela requisição de entrada são removidos DEPOIS do Director, de modo que um cliente pode fazer o proxy apagar cabeçalhos que o Director acrescentou - a origem passa a interpretar a requisição de forma diferente da pretendida (CWE-115).",
+      "heuristica_go": "Em Go, verificar O QUE o Director acrescenta. É VP quando ele injeta cabeçalho em que a origem confia para decisão de segurança (identidade do usuário autenticado, X-Forwarded-For usado em lista de permissão, token interno) e o cliente pode listá-lo em Connection para removê-lo. É FP quando o Director só reescreve URL, host ou esquema, ou acrescenta cabeçalho informativo sem efeito em autorização; ReverseProxy.Rewrite evita o problema.",
+      "exemplo_vp": {
+        "codigo": "func proxyAutenticado(destino *url.URL, usuario string) *httputil.ReverseProxy {\n\tp := httputil.NewSingleHostReverseProxy(destino)\n\tbase := p.Director\n\tp.Director = func(req *http.Request) {\n\t\tbase(req)\n\t\t// a origem autoriza por este cabeçalho, que o cliente apaga via Connection\n\t\treq.Header.Set(\"X-Usuario\", usuario)\n\t}\n\treturn p\n}",
+        "porque": "A identidade injetada pelo Director pode ser apagada pelo cliente via Connection, e a origem passa a tratar a requisição como de outro contexto de autenticação."
+      },
+      "exemplo_fp": {
+        "codigo": "func proxyEstatico(destino *url.URL) *httputil.ReverseProxy {\n\tp := httputil.NewSingleHostReverseProxy(destino)\n\tbase := p.Director\n\tp.Director = func(req *http.Request) {\n\t\tbase(req)\n\t\t// só ajusta o caminho; nenhum cabeçalho de confiança é injetado\n\t\treq.URL.Path = \"/estatico\" + req.URL.Path\n\t}\n\treturn p\n}",
+        "porque": "O Director apenas reescreve o caminho: remover cabeçalhos hop-by-hop não altera nenhuma decisão de segurança na origem."
+      }
+    },
+    "go.gorilla.security.audit.websocket-missing-origin-check.websocket-missing-origin-check": {
+      "definicao": "Upgrade de conexão WebSocket (gorilla/websocket) sem função CheckOrigin própria. O navegador envia os cookies do usuário no handshake, então uma página de outra origem pode abrir a conexão em nome dele (CSRF sobre WebSocket).",
+      "heuristica_go": "Em Go, verificar o websocket.Upgrader e o que a conexão permite. Sem CheckOrigin, o gorilla/websocket recusa origem diferente do Host; o risco real está em CheckOrigin que devolve true sempre ou em Upgrader configurado fora da vista da regra. É VP quando a conexão é autenticada por cookie e o Upgrader aceita qualquer origem. É FP quando o Upgrader usa a checagem padrão, quando CheckOrigin compara a origem com lista fixa, ou quando a autenticação é por token enviado na mensagem, não por cookie.",
+      "exemplo_vp": {
+        "codigo": "var upgrader = websocket.Upgrader{\n\t// aceita qualquer origem numa conexão autenticada por cookie\n\tCheckOrigin: func(r *http.Request) bool { return true },\n}\n\nfunc painel(w http.ResponseWriter, r *http.Request) {\n\tconexao, _ := upgrader.Upgrade(w, r, nil)\n\tdefer conexao.Close()\n}",
+        "porque": "Qualquer página aberta pelo usuário consegue abrir o WebSocket com os cookies dele e agir no painel em seu nome."
+      },
+      "exemplo_fp": {
+        "codigo": "var origensPermitidas = map[string]bool{\"https://app.exemplo.com\": true}\n\nvar upgrader = websocket.Upgrader{\n\tCheckOrigin: func(r *http.Request) bool { return origensPermitidas[r.Header.Get(\"Origin\")] },\n}\n\nfunc painel(w http.ResponseWriter, r *http.Request) {\n\tconexao, _ := upgrader.Upgrade(w, r, nil)\n\tdefer conexao.Close()\n}",
+        "porque": "A origem do handshake é comparada com uma lista fixa: página de outro domínio não consegue abrir a conexão."
+      }
+    },
+    "go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection": {
+      "definicao": "Servidor gRPC criado com grpc.NewServer sem grpc.Creds: o canal não tem TLS, e quem está no caminho da rede pode ler e alterar as mensagens (canal acessível por quem não é ponta da comunicação, CWE-300).",
+      "heuristica_go": "Em Go, verificar onde o listener do grpc.NewServer escuta e se há TLS em outra camada. É VP quando o servidor escuta em interface de rede alcançável e troca dados sensíveis ou comandos sem grpc.Creds nem TLS à frente. É FP quando o listener é loopback ou socket Unix, quando o servidor é de teste, ou quando um service mesh/sidecar termina mTLS por projeto documentado.",
+      "exemplo_vp": {
+        "codigo": "func servirContas(srv ContasServer) error {\n\touvinte, err := net.Listen(\"tcp\", \":50051\")\n\tif err != nil {\n\t\treturn err\n\t}\n\t// sem grpc.Creds: tokens e saldos trafegam em claro na rede\n\ts := grpc.NewServer()\n\tRegisterContasServer(s, srv)\n\treturn s.Serve(ouvinte)\n}",
+        "porque": "O serviço de contas escuta em todas as interfaces sem TLS: um intermediário lê e altera as chamadas."
+      },
+      "exemplo_fp": {
+        "codigo": "func servirAgente(srv AgenteServer) error {\n\touvinte, err := net.Listen(\"unix\", \"/run/agente.sock\")\n\tif err != nil {\n\t\treturn err\n\t}\n\t// socket Unix local: não há rede entre as pontas\n\ts := grpc.NewServer()\n\tRegisterAgenteServer(s, srv)\n\treturn s.Serve(ouvinte)\n}",
+        "porque": "O servidor só atende por socket Unix na própria máquina: não existe caminho de rede para um intermediário."
+      }
+    },
+    "go.lang.security.decompression_bomb.potential-dos-via-decompression-bomb": {
+      "definicao": "Descompressão com io.Copy sem limite de tamanho sobre leitor de gzip, zlib, zip, tar e similares. Um arquivo pequeno que expande para gigabytes (bomba de descompressão) esgota memória ou disco (CWE-400).",
+      "heuristica_go": "Em Go, verificar a origem do fluxo comprimido e se há limite de leitura. É VP quando o conteúdo vem de upload, requisição ou arquivo de terceiro e é copiado com io.Copy sem io.LimitReader, io.CopyN ou http.MaxBytesReader. É FP quando há limite explícito de bytes, ou quando o arquivo comprimido é artefato interno confiável (embutido no binário, gerado pelo próprio sistema).",
+      "exemplo_vp": {
+        "codigo": "func receberPacote(w http.ResponseWriter, r *http.Request) {\n\tleitor, err := gzip.NewReader(r.Body)\n\tif err != nil {\n\t\thttp.Error(w, \"inválido\", http.StatusBadRequest)\n\t\treturn\n\t}\n\t// sem limite: alguns KB enviados viram gigabytes no disco\n\tio.Copy(destinoTemporario, leitor)\n}",
+        "porque": "Upload do cliente descomprimido sem limite: uma bomba de gzip esgota o disco ou a memória do servidor."
+      },
+      "exemplo_fp": {
+        "codigo": "func receberPacote(w http.ResponseWriter, r *http.Request) {\n\tleitor, err := gzip.NewReader(r.Body)\n\tif err != nil {\n\t\thttp.Error(w, \"inválido\", http.StatusBadRequest)\n\t\treturn\n\t}\n\t// no máximo 10 MiB descomprimidos, qualquer que seja a entrada\n\tio.Copy(destinoTemporario, io.LimitReader(leitor, 10<<20))\n}",
+        "porque": "O io.LimitReader corta a descompressão num teto fixo: a bomba não consegue expandir além dele."
+      }
+    },
+    "go.lang.security.audit.net.pprof.pprof-debug-exposure": {
+      "definicao": "Import de net/http/pprof, que registra /debug/pprof no http.DefaultServeMux, junto com http.ListenAndServe servindo esse mux. Os endpoints de perfilamento expõem estado interno do processo e permitem gerar carga (código de depuração ativo, CWE-489).",
+      "heuristica_go": "Em Go, verificar em que endereço o DefaultServeMux é servido. É VP quando o http.ListenAndServe com mux padrão (handler nil) escuta em interface alcançável pela rede, expondo /debug/pprof a terceiros. É FP quando o servidor com pprof escuta só em loopback (inclusive via variável ou flag), quando a aplicação usa mux próprio sem as rotas de pprof, ou quando é ferramenta local de desenvolvimento.",
+      "exemplo_vp": {
+        "codigo": "func main() {\n\thttp.HandleFunc(\"/api\", api)\n\t// DefaultServeMux inclui /debug/pprof e escuta em todas as interfaces\n\tlog.Fatal(http.ListenAndServe(\":8080\", nil))\n}",
+        "porque": "A API pública serve o mesmo mux que o pprof: qualquer cliente acessa /debug/pprof e obtém heap, goroutines e perfis de CPU."
+      },
+      "exemplo_fp": {
+        "codigo": "func main() {\n\tendereco := os.Getenv(\"DEBUG_ADDR\") // padrão \"127.0.0.1:6060\"\n\tgo func() {\n\t\t// pprof só na interface de loopback, separado da API\n\t\tlog.Println(http.ListenAndServe(endereco, nil))\n\t}()\n\tlog.Fatal(http.ListenAndServe(\":8080\", apiMux))\n}",
+        "porque": "O DefaultServeMux com pprof é servido num endereço de loopback, e a API pública usa mux próprio sem as rotas de depuração."
+      }
+    },
+    "go.lang.security.audit.database.string-formatted-query.string-formatted-query": {
+      "definicao": "Consulta SQL montada por concatenação ou fmt.Sprintf e passada a Query/Exec/QueryRow. Se parte da string vem de entrada externa, o atacante altera a estrutura da consulta (injeção de SQL, CWE-89).",
+      "heuristica_go": "Em Go, verificar o que é interpolado na string SQL. É VP quando algum trecho interpolado vem de entrada externa (r.URL.Query, r.FormValue, corpo, mensagem) sem passar por placeholder (?, $1). É FP quando os valores vão como argumentos com placeholder e só partes estruturais vindas de constante ou de lista fixa (nome de tabela, direção de ORDER BY) são interpoladas.",
+      "exemplo_vp": {
+        "codigo": "func buscarPedidos(db *sql.DB, r *http.Request) (*sql.Rows, error) {\n\tcliente := r.URL.Query().Get(\"cliente\")\n\t// valor da requisição dentro do texto SQL\n\tconsulta := fmt.Sprintf(\"SELECT id FROM pedidos WHERE cliente = '%s'\", cliente)\n\treturn db.Query(consulta)\n}",
+        "porque": "O parâmetro entra no texto da consulta: \"' OR '1'='1\" devolve os pedidos de todos os clientes."
+      },
+      "exemplo_fp": {
+        "codigo": "var colunasOrdenaveis = map[string]string{\"data\": \"criado_em\", \"valor\": \"total\"}\n\nfunc buscarPedidos(db *sql.DB, cliente, ordem string) (*sql.Rows, error) {\n\tcoluna, ok := colunasOrdenaveis[ordem]\n\tif !ok {\n\t\tcoluna = \"criado_em\"\n\t}\n\t// só a coluna da lista fixa é interpolada; o valor vai como parâmetro\n\tconsulta := fmt.Sprintf(\"SELECT id FROM pedidos WHERE cliente = $1 ORDER BY %s\", coluna)\n\treturn db.Query(consulta, cliente)\n}",
+        "porque": "A única parte interpolada vem de uma lista fixa, e o dado externo segue por placeholder: a estrutura da consulta não é controlável."
+      }
     }
   }
 }
