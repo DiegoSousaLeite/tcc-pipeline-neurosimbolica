@@ -42,14 +42,25 @@ ESPECIALISTA = "especialista"
 BASELINE_DIRETO = "baseline_direto"
 ESPECIALISTA_DIRETO = "especialista_direto"
 
-TIPOS = (BASELINE, ESPECIALISTA, BASELINE_DIRETO, ESPECIALISTA_DIRETO)
+# Variantes v2 dos dois especialistas: o original mais UM parágrafo pedindo que
+# o modelo não presuma mitigação ausente do trecho. Existem porque o especialista
+# respondeu VP zero vezes na rodada 20260908T094808Z-9a00cb2 — as fichas
+# ensinam, sobretudo, quando o alerta NÃO é fraqueza. O parágrafo é idêntico nas
+# duas, para que o efeito medido nos dois modos seja o da mesma instrução; e são
+# arquivos novos pelo mesmo motivo das variantes diretas: `Versao_Prompt` dos
+# originais precisa continuar batendo com as rodadas já gravadas.
+ESPECIALISTA_V2 = "especialista_v2"
+ESPECIALISTA_DIRETO_V2 = "especialista_direto_v2"
+
+TIPOS = (BASELINE, ESPECIALISTA, BASELINE_DIRETO, ESPECIALISTA_DIRETO,
+         ESPECIALISTA_V2, ESPECIALISTA_DIRETO_V2)
 
 # Tipos que NÃO recebem a ficha do catálogo: são as condições de controle, e ver
 # qualquer camada da metodologia — inclusive o nome da CWE — as descaracteriza.
 TIPOS_SEM_FICHA = (BASELINE, BASELINE_DIRETO)
 
 # Tipos que perguntam pelo código em vez de pelo alerta.
-TIPOS_DIRETOS = (BASELINE_DIRETO, ESPECIALISTA_DIRETO)
+TIPOS_DIRETOS = (BASELINE_DIRETO, ESPECIALISTA_DIRETO, ESPECIALISTA_DIRETO_V2)
 
 # Trecho que define o contrato de saída. Tem que ser idêntico nos dois
 # templates: a diferença entre os braços precisa estar no CONTEÚDO, não no

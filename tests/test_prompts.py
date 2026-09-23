@@ -224,3 +224,45 @@ def test_templates_originais_nao_mudaram():
     reproduzíveis — e o certo é criar um tipo NOVO, não editar estes."""
     assert versao_prompt(BASELINE) == "baseline:597fcfa9"
     assert versao_prompt(ESPECIALISTA) == "especialista:d1145f8b"
+
+
+# --- Variantes v2 (change ficha-por-regra-semgrep) --------------------------
+
+from src.prompts import ESPECIALISTA_DIRETO_V2, ESPECIALISTA_V2  # noqa: E402
+
+INSTRUCAO_V2 = "Não presuma validação, sanitização ou mitigação"
+PARES_V2 = ((ESPECIALISTA, ESPECIALISTA_V2),
+            (ESPECIALISTA_DIRETO, ESPECIALISTA_DIRETO_V2))
+
+
+def test_originais_do_especialista_direto_nao_mudaram():
+    """Hash gravado nas Rodadas 5 e 6; editar o original em vez de criar a v2
+    tornaria aquelas rodadas irreproduzíveis."""
+    assert versao_prompt(ESPECIALISTA_DIRETO) == "especialista_direto:f537598a"
+
+
+@pytest.mark.parametrize("original, v2", PARES_V2)
+def test_instrucao_so_na_variante_v2(catalogo, original, v2):
+    ficha = catalogo.ficha("CWE-327")
+    a = montar_prompt(original, contexto=CONTEXTO, cwe_id="CWE-327", ficha=ficha)
+    b = montar_prompt(v2, contexto=CONTEXTO, cwe_id="CWE-327", ficha=ficha)
+    assert INSTRUCAO_V2 not in a
+    assert INSTRUCAO_V2 in b
+    # Tirando o parágrafo novo, o texto é idêntico: mesmas camadas, mesmo
+    # enquadramento, mesmo contexto.
+    paragrafo = b[b.index(INSTRUCAO_V2):b.index("VP.\n", b.index(INSTRUCAO_V2)) + 5]
+    assert b.replace(paragrafo, "") == a
+
+
+def test_paragrafo_v2_e_identico_nos_dois_modos():
+    def paragrafo(tipo):
+        t = carregar_template(tipo)
+        i = t.index(INSTRUCAO_V2)
+        return t[i:t.index("VP.\n", i)]
+    assert paragrafo(ESPECIALISTA_V2) == paragrafo(ESPECIALISTA_DIRETO_V2)
+
+
+def test_v2_direto_continua_perguntando_pelo_codigo():
+    t = carregar_template(ESPECIALISTA_DIRETO_V2)
+    assert "Não há alerta de ferramenta a validar" in t
+    assert "alerta emitido" not in t

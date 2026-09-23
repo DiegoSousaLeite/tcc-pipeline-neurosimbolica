@@ -691,3 +691,54 @@ def test_inicializar_relatorio_grava_o_cabecalho(tmp_path):
     inicializar_relatorio(str(p))
     with open(p, encoding="utf-8") as f:
         assert next(csv.reader(f)) == CABECALHO
+
+
+# --- Ficha por regra do Semgrep (change ficha-por-regra-semgrep) ------------
+
+REGRA_COM_FICHA = "go.teste.regra-com-ficha.regra-com-ficha"
+
+
+@pytest.fixture
+def catalogo_com_regra(tmp_path, catalogo):
+    dados = json.loads(json.dumps(catalogo.dados))
+    dados["regras"] = {REGRA_COM_FICHA: {
+        "definicao": "DEFINICAO-DA-REGRA",
+        "heuristica_go": "heurística da regra",
+        "exemplo_vp": {"codigo": "// vp", "porque": "vp"},
+        "exemplo_fp": {"codigo": "// fp", "porque": "fp"},
+    }}
+    p = tmp_path / "cat_regra.json"
+    p.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
+    return Catalogo.carregar(str(p))
+
+
+def test_alerta_de_regra_com_ficha_usa_a_ficha_da_regra(
+        tmp_path, catalogo_com_regra, monkeypatch):
+    monkeypatch.setattr(run_pipeline, "resolver_simbolico", lambda c, cache=None:
+                        ResultadoSimbolico("DETECTADO",
+                                           {"check_id": REGRA_COM_FICHA,
+                                            "start": {"line": 1}}, CONTEXTO))
+    braco = Braco(GEMINI, "especialista")
+    dir_rodada, provedores, _ = _rodar([caso("c1")], [braco], tmp_path,
+                                       catalogo_com_regra)
+    assert _ler(dir_rodada, braco)[0]["Ficha_CWE"] == "regra"
+    prompt = provedores[GEMINI].prompts[0]
+    assert "DEFINICAO-DA-REGRA" in prompt
+    assert "CWE-327" in prompt   # o cabeçalho continua sendo o da CWE do caso
+
+
+def test_alerta_de_regra_sem_ficha_usa_a_ficha_da_cwe(
+        tmp_path, catalogo_com_regra, simbolico_dublado):
+    braco = Braco(GEMINI, "especialista")
+    dir_rodada, provedores, _ = _rodar([caso("c1")], [braco], tmp_path,
+                                       catalogo_com_regra)
+    assert _ler(dir_rodada, braco)[0]["Ficha_CWE"] == "especifica"
+    assert "DEFINICAO-DA-REGRA" not in provedores[GEMINI].prompts[0]
+
+
+def test_nao_detectado_registra_a_ficha_da_cwe(tmp_path, catalogo_com_regra,
+                                               simbolico_dublado):
+    simbolico_dublado["detectado"] = False
+    braco = Braco(GEMINI, "especialista")
+    dir_rodada, _, _ = _rodar([caso("c1")], [braco], tmp_path, catalogo_com_regra)
+    assert _ler(dir_rodada, braco)[0]["Ficha_CWE"] == "especifica"

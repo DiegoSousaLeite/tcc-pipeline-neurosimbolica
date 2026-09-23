@@ -245,9 +245,10 @@ def test_estratifica_por_ficha_cwe(tmp_path):
     gravar(p, [
         linha("c1", "seguro", "FP", ficha="especifica"),
         linha("c2", "seguro", "VP", ficha="fallback"),
+        linha("c3", "seguro", "FP", ficha="regra"),
     ])
     e = estratificar(carregar(str(p))[0].linhas, "ficha_cwe")
-    assert set(e) == {"especifica", "fallback"}
+    assert set(e) == {"especifica", "fallback", "regra"}
 
 
 # --- 8.4 McNemar ------------------------------------------------------------

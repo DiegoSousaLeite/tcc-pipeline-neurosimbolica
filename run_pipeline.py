@@ -906,8 +906,13 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
     disparam.
     """
     caso_id = caso["id"]
-    ficha = (catalogo or catalogo_padrao()).ficha(caso["cwe"], caso["cwe_name"])
-    hash_catalogo = (catalogo or catalogo_padrao()).sha256
+    catalogo = catalogo or catalogo_padrao()
+    # Ficha provisória, pela CWE: é a que vale para as linhas sem candidato
+    # (NAO_DETECTADO sem injeção, falha de esteira), que também registram a
+    # origem da ficha. Com candidato, ela é refeita abaixo com a regra do
+    # alerta, que tem precedência (regra > CWE > fallback).
+    ficha = catalogo.ficha(caso["cwe"], caso["cwe_name"])
+    hash_catalogo = catalogo.sha256
 
     log.info("\n[%d/%d] %s | %s | %s | %s", idx, total, caso["origem"],
              caso["repo_dir"], caso["cwe"], caso["gabarito"])
@@ -956,6 +961,14 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
 
     status_simbolico, contexto = simbolico.status, candidatura.contexto
     tempo_simbolico = time.time() - t0
+
+    if candidatura.candidato is not None:
+        # A ficha acompanha o ALERTA, não só a CWE: uma CWE agrupa regras que
+        # olham para construções diferentes. O candidato injetado do gabarito
+        # traz o `check_id` neutro, que não casa com ficha de regra, e fica na
+        # ficha da CWE — a procedência não vaza para o prompt por aqui.
+        ficha = catalogo.ficha(caso["cwe"], caso["cwe_name"],
+                               check_id=candidatura.candidato.check_id)
 
     if status_simbolico == "NAO_DETECTADO" and candidatura.candidato is None:
         # O status continua um só nos dois motivos: quem compara a string
