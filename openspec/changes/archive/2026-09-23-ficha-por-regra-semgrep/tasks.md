@@ -14,7 +14,7 @@
 ## 3. Auditoria regra × ficha (só metadados)
 
 - [x] 3.1 Escrever `scripts/auditar_regras_ficha.py`, que conta `check_id` por CWE do caso a partir do cache simbólico **sem ler `contexto_hidratado`** e emite a tabela regra, CWE, detecções. Verificar: a execução reproduz as contagens da tabela do `design.md` (93 para `missing-ssl-minversion`, 91 para `dangerous-exec-command`, ...).
-- [x] 3.2 Aplicar o critério de D6 (≥ 5 detecções e alvo diferente da API central da ficha da CWE) e gravar a lista final em `openspec/changes/ficha-por-regra-semgrep/regras-selecionadas.md`, com uma linha de justificativa por regra. Verificar: inspeção do arquivo; inclui no mínimo as 8 regras citadas na proposta ou justifica a exclusão.
+- [x] 3.2 Aplicar o critério de D6 (≥ 5 detecções e alvo diferente da API central da ficha da CWE) e gravar a lista final em `openspec/changes/archive/2026-09-23-ficha-por-regra-semgrep/regras-selecionadas.md`, com uma linha de justificativa por regra. Verificar: inspeção do arquivo; inclui no mínimo as 8 regras citadas na proposta ou justifica a exclusão.
 
 ## 4. Conteúdo do catálogo
 
