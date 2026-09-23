@@ -818,6 +818,7 @@ python src/metricas.py legacy/resultados_parte1/resultados_tcc.csv --por-cwe
 - `--dry-run` — só relata a população e os braços
 - `--sem-llm` — Fases 1-2 apenas (cobertura simbólica, sem gastar API)
 - `--sem-cache-simbolico` — reexecuta Fases 1-2 sempre
+- `--catalogo CAMINHO` — catálogo de fichas do especialista (padrão `data/catalogo_cwe.json`, por CWE; o por regra da Rodada 7 é `data/catalogo_cwe_por_regra.json`)
 - `--run-id ID` — retoma uma rodada existente
 - `--verboso` — DEBUG (mostra cada invocação real do Semgrep)
 

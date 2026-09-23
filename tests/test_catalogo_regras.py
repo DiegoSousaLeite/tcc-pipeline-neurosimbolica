@@ -117,12 +117,25 @@ import re  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
 
-from src.catalogo import catalogo_padrao  # noqa: E402
+from src.config import DATA_DIR  # noqa: E402
 from tests.test_catalogo import (  # noqa: E402
     SEM_ACENTO_PROIBIDO,
     _apis,
     _tem_acento,
 )
+
+# O catálogo com fichas por regra (Rodada 7) vive em arquivo próprio; o padrão,
+# data/catalogo_cwe.json, é o catálogo por CWE das Rodadas 1-6. Os testes de
+# conteúdo abaixo valem para o arquivo por regra, qualquer que seja o padrão.
+CAMINHO_POR_REGRA = os.path.join(DATA_DIR, "catalogo_cwe_por_regra.json")
+_cache_por_regra = []
+
+
+def catalogo_padrao():
+    """Catálogo por regra, carregado uma vez (nome mantido pelos testes)."""
+    if not _cache_por_regra:
+        _cache_por_regra.append(Catalogo.carregar(CAMINHO_POR_REGRA))
+    return _cache_por_regra[0]
 
 
 def _todas_as_fichas():
