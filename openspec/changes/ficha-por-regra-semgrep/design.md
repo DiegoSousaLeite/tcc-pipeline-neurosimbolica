@@ -1,3 +1,12 @@
+> **DESFECHO (2026-09-23) — ler antes do resto.** A Rodada 7 mediu o catálogo
+> por regra e ele foi **pior** que o por CWE: mesmo recall, mais falsos alarmes,
+> nos dois modelos (`docs/ANALISE-RODADA-7.md`). Decisão: o catálogo **por CWE**
+> (`data/catalogo_cwe.json`) continua o oficial e voltou a ser o padrão; o por
+> regra ficou em `data/catalogo_cwe_por_regra.json`, usável com `--catalogo`.
+> **Os números das Rodadas 1–6 continuam valendo** — as passagens abaixo que
+> falam em invalidar ou refazer o especialista descrevem o plano anterior ao
+> resultado. Enquadramento para o texto: `docs/MAPA-TCC-O-QUE-REESCREVER.md` §11.6.
+
 ## Context
 
 Parte 2 do TCC, eixo horizontal da matriz (baseline × especialista). Fases tocadas: 3/4 (montagem do prompt) e, indiretamente, 5 (valor novo em `Ficha_CWE`). As Fases 0, 1 e 2 não mudam.

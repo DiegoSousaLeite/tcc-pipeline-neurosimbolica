@@ -1,3 +1,12 @@
+> **DESFECHO (2026-09-23) — ler antes do resto.** A Rodada 7 mediu o catálogo
+> por regra e ele foi **pior** que o por CWE: mesmo recall, mais falsos alarmes,
+> nos dois modelos (`docs/ANALISE-RODADA-7.md`). Decisão: o catálogo **por CWE**
+> (`data/catalogo_cwe.json`) continua o oficial e voltou a ser o padrão; o por
+> regra ficou em `data/catalogo_cwe_por_regra.json`, usável com `--catalogo`.
+> **Os números das Rodadas 1–6 continuam valendo** — as passagens abaixo que
+> falam em invalidar ou refazer o especialista descrevem o plano anterior ao
+> resultado. Enquadramento para o texto: `docs/MAPA-TCC-O-QUE-REESCREVER.md` §11.6.
+
 ## Why
 
 A ficha do prompt especialista é escolhida pela CWE do caso, mas uma mesma CWE agrupa regras do Semgrep que olham para construções de código diferentes. Medido sobre as 791 detecções do cache simbólico (2026-09-22), em várias CWEs a ficha fala de uma API e o alerta aponta outra: em CWE-327 a ficha ensina `md5` em senha e os 93 alertas são `missing-ssl-minversion` (configuração TLS); em CWE-94 a ficha ensina template montado de entrada externa e 91 de 94 alertas são `dangerous-exec-command`; em CWE-665 a ficha ensina chave zerada em `aes`/`hmac` e os alertas são regras de corretude da Trail of Bits. Nesses cerca de 260 casos as camadas 1–3 não orientam o julgamento do alerta que o modelo recebe, e o braço especialista deixa de ser, ali, a condição experimental que a monografia descreve.
