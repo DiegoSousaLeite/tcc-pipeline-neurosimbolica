@@ -668,10 +668,9 @@ As fichas são escritas **à mão**, exclusivamente a partir de:
    regra, e
 3. a documentação da biblioteca padrão de Go.
 
-As fichas de regra e a reescrita das heurísticas (2026-09-22) foram redigidas
-com IA (Claude), a pedido dos autores; a autoria e a exposição a quatro
-contextos de amostras durante o diagnóstico estão declaradas em
-`regras-selecionadas.md`. `tests/test_catalogo_regras.py` confere que nenhum par
+A exposição a quatro contextos de amostras durante o diagnóstico que motivou as
+fichas de regra está registrada em `regras-selecionadas.md`.
+`tests/test_catalogo_regras.py` confere que nenhum par
 de linhas distintivas consecutivas dos exemplos aparece no cache de fontes nem
 no contexto do cache simbólico.
 
