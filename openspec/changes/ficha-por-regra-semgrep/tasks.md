@@ -45,3 +45,9 @@ Tudo local (Ollama); nada de Gemini/GPT nesta mudança. Semente 42, temperatura 
 - [x] 6.3 Registrar em `docs/MAPA-TCC-O-QUE-REESCREVER.md` o que muda na metodologia e nos resultados da monografia (ficha por regra, rodada nova, limitação da classe positiva nas CWEs corrigidas), sem editar o `.tex`. Verificar: inspeção do arquivo.
 - [ ] 6.4 Depois das rodadas 5.2 e 5.3, listar quais evidências e trechos do rascunho de resultados (`editaveis/resultados.tex`, `docs/PLANO-ESCRITA-RESULTADOS.md`) dependem de números do especialista e precisam ser refeitos, anotando no mapa de reescrita. Não editar o `.tex` sem perguntar. Verificar: inspeção do mapa, com cada trecho afetado apontado (inclui a Tabela da seção 4b.5f, rodadas 5–6, e os números do `especialista_direto`).
 - [ ] 6.5 Rodar `ruff check .` e `pytest -q` em estado limpo. Verificar: ambos passam.
+
+## 7. Desfecho da Rodada 7 (2026-09-23)
+
+- [x] 7.1 Opção `--catalogo CAMINHO` no runner, para rodar catálogos diferentes em rodadas separadas; o catálogo por regra salvo em `data/catalogo_cwe_por_regra.json` (mesmos bytes, hash `3d2bc71d…`). Verificar: `--dry-run --catalogo data/catalogo_cwe_por_regra.json` mostra 15 fichas de CWE + 16 de regra.
+- [ ] 7.2 Depois que o último braço da Rodada 7 terminar, restaurar `data/catalogo_cwe.json` ao catálogo por CWE do commit `a875610` (padrão das Rodadas 1–6). Não antes: um braço que falhe e seja retomado recarregaria o padrão e misturaria catálogos na rodada. Verificar: `sha256sum data/catalogo_cwe.json` = `e5db7d40…` (CRLF) e `pytest -q` passa.
+

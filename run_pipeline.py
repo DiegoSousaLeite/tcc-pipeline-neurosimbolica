@@ -53,7 +53,7 @@ from typing import NamedTuple
 
 from src import regras_locais
 from src.cache_simbolico import CacheSimbolico
-from src.catalogo import catalogo_padrao
+from src.catalogo import Catalogo, CatalogoInvalido, catalogo_padrao
 from src.config import (
     CACHE_DIR,
     DATASET_PATH,
@@ -1219,6 +1219,14 @@ def main():
                          f"gabarito; o negativo continua vindo só do Semgrep e "
                          f"o Status_Semgrep não muda. Multiplica as chamadas de "
                          f"LLM: dimensione a cota antes.")
+    ap.add_argument("--catalogo", metavar="CAMINHO",
+                    help="Catálogo de fichas a usar no especialista. Padrão: "
+                         "data/catalogo_cwe.json (fichas por CWE, o das Rodadas "
+                         "1-6). O catálogo com fichas por regra do Semgrep, da "
+                         "Rodada 7, é data/catalogo_cwe_por_regra.json. O hash "
+                         "do arquivo vai para cada linha do CSV e para o "
+                         "manifesto, então rodadas com catálogos diferentes "
+                         "continuam distinguíveis.")
     ap.add_argument("--run-id", metavar="ID",
                     help="Reaproveita um run_id existente (retoma a rodada).")
     ap.add_argument("--reaproveitar-anteriores", action="store_true",
@@ -1287,7 +1295,11 @@ def main():
         casos = priorizar_locais(casos)[:args.amostra]
 
     bracos = definir_bracos(args)
-    catalogo = catalogo_padrao()
+    try:
+        catalogo = (Catalogo.carregar(args.catalogo) if args.catalogo
+                    else catalogo_padrao())
+    except CatalogoInvalido as e:
+        ap.error(str(e))
 
     n_arq, n_bytes = estatisticas_cache()
     por_trilha = contar_por_trilha(casos)
@@ -1298,8 +1310,10 @@ def main():
              n_bytes / 1024 / 1024, os.path.basename(CACHE_DIR))
     log.info("[+] Braços (%d): %s", len(bracos),
              ", ".join(str(b) for b in bracos))
-    log.info("[+] Catálogo CWE: %d fichas | sha256 %s...",
-             len(catalogo.cwes_especificas), catalogo.sha256[:12])
+    log.info("[+] Catálogo CWE: %s | %d fichas de CWE + %d de regra | "
+             "sha256 %s...", os.path.relpath(catalogo.caminho, BASE),
+             len(catalogo.cwes_especificas), len(catalogo.regras),
+             catalogo.sha256[:12])
 
     if args.dry_run:
         log.info("[+] --dry-run: nada foi executado.")
