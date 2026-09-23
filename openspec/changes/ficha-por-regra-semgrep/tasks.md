@@ -49,5 +49,5 @@ Tudo local (Ollama); nada de Gemini/GPT nesta mudança. Semente 42, temperatura 
 ## 7. Desfecho da Rodada 7 (2026-09-23)
 
 - [x] 7.1 Opção `--catalogo CAMINHO` no runner, para rodar catálogos diferentes em rodadas separadas; o catálogo por regra salvo em `data/catalogo_cwe_por_regra.json` (mesmos bytes, hash `3d2bc71d…`). Verificar: `--dry-run --catalogo data/catalogo_cwe_por_regra.json` mostra 15 fichas de CWE + 16 de regra.
-- [ ] 7.2 Depois que o último braço da Rodada 7 terminar, restaurar `data/catalogo_cwe.json` ao catálogo por CWE do commit `a875610` (padrão das Rodadas 1–6). Não antes: um braço que falhe e seja retomado recarregaria o padrão e misturaria catálogos na rodada. Verificar: `sha256sum data/catalogo_cwe.json` = `e5db7d40…` (CRLF) e `pytest -q` passa.
+- [x] 7.2 Depois que o último braço da Rodada 7 terminar, restaurar `data/catalogo_cwe.json` ao catálogo por CWE do commit `a875610` (padrão das Rodadas 1–6). Não antes: um braço que falhe e seja retomado recarregaria o padrão e misturaria catálogos na rodada. Verificar: `sha256sum data/catalogo_cwe.json` = `e5db7d40…` (CRLF) e `pytest -q` passa.
 
