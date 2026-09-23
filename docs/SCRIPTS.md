@@ -416,6 +416,23 @@ python scripts/medir_regras_locais.py --agregado     # só se tudo for `definica
 
 ---
 
+### `scripts/auditar_regras_ficha.py`
+
+**Propósito:** Tabela regra × CWE × detecções sobre o cache simbólico, com a
+origem da ficha que cada par recebe hoje (`regra`, `cwe` ou `fallback`). É o
+insumo da escolha de quais regras ganham ficha própria no bloco `regras` do
+catálogo.
+
+**Protocolo:** lê do cache só o `check_id` do alerta e o status — nunca o
+contexto hidratado —, para que a seleção das regras use apenas metadado.
+
+```bash
+python scripts/auditar_regras_ficha.py            # regras com >= 5 detecções
+python scripts/auditar_regras_ficha.py --minimo 1 # todas
+```
+
+---
+
 ### `scripts/medir_prompts.py`
 
 **Propósito:** Mede a distribuição de tamanho de prompt (em tokens estimados)
@@ -670,14 +687,17 @@ campo. Nada sob `cache/` é tocado.
 
 ### `src/catalogo.py`
 
-**Propósito:** Carrega e valida `data/catalogo_cwe.json`, resolve CWE sem ficha
-para `__fallback__` e calcula o SHA-256 dos bytes do arquivo.
+**Propósito:** Carrega e valida `data/catalogo_cwe.json`, resolve a ficha com a
+precedência regra > CWE > fallback e calcula o SHA-256 dos bytes do arquivo.
 
-**API:** `Catalogo.carregar(caminho)`, `.ficha(cwe, cwe_name)` → `Ficha`
-(com `.origem ∈ {especifica, fallback}`), `.sha256`, `.cwes_especificas`.
+**API:** `Catalogo.carregar(caminho)`, `.ficha(cwe, cwe_name, check_id=None)` →
+`Ficha` (com `.origem ∈ {regra, especifica, fallback}`), `.sha256`,
+`.cwes_especificas`, `.regras` (fichas do bloco `regras`, por `check_id`
+completo).
 
 **Exceção:** `CatalogoInvalido` quando falta o fallback, um campo obrigatório
-está vazio ou o JSON é inválido.
+está vazio (em ficha de CWE ou de regra), o bloco `regras` não é objeto ou o
+JSON é inválido.
 
 ---
 
@@ -691,6 +711,13 @@ nomeados e calcula a versão (hash curto) de cada template.
 
 O `baseline` recebe **só** o contexto — nem o identificador da CWE. É a condição
 de controle: qualquer camada da metodologia que vaze para ele mata o contraste.
+
+Tipos: `baseline`, `especialista` (modo filtro), `baseline_direto`,
+`especialista_direto` (modo triagem: perguntam pelo código, não pelo alerta) e
+as variantes `especialista_v2` / `especialista_direto_v2` — o original mais um
+parágrafo pedindo que o modelo não presuma mitigação ausente do trecho. As
+variantes são arquivos novos: os hashes dos originais estão travados em teste
+porque identificam as rodadas já gravadas.
 
 ---
 
