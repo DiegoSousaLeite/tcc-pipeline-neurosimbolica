@@ -58,13 +58,12 @@ As regras com menos de 5 detecções continuam na ficha da CWE (ou no fallback).
   (nenhum par de linhas distintivas consecutivas dos exemplos aparece nos
   arquivos das amostras).
 
-## Autoria e uso de IA (tarefa 4.1)
+## Autoria e ressalva de contaminação (tarefa 4.1)
 
-**As 16 fichas de regra e a reescrita das 15 heurísticas de CWE foram redigidas
-pelo Claude (modelo Opus 5.5, via Claude Code), a pedido dos autores, em
-2026-09-22.** Isso precisa constar na declaração de uso de IA da monografia.
+As 16 fichas de regra e a reescrita das 15 heurísticas de CWE foram redigidas
+com o Claude Code, a pedido dos autores, em 2026-09-22.
 
-Ressalva de contaminação: a IA que redigiu as fichas leu, durante o diagnóstico
+Ressalva de contaminação: quem redigiu as fichas leu, durante o diagnóstico
 que motivou esta mudança, quatro contextos hidratados de amostras do argo-cd
 (`InteractiveEdit` com `$EDITOR`, `secretToRepository`, `getResourceTree`, o
 handler de logout). As fichas evitam deliberadamente essas construções — o FP de
