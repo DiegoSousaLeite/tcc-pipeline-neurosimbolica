@@ -26,7 +26,7 @@
 - [x] 4.6 Reescrever as heurísticas das 15 fichas de CWE no formato "É VP quando ... / É FP quando ...", sem mudar definição nem exemplos. Verificar: teste novo em `tests/test_catalogo.py` exige as duas frases em toda heurística específica, de CWE e de regra.
 - [x] 4.7 Validar os exemplos: todo `codigo` é Go sintaticamente válido e todas as fichas de regra usam a construção da regra nos dois exemplos. Verificar: o teste de Go válido já existente cobre o bloco `regras`; teste novo: a ficha de `missing-ssl-minversion` usa `tls.Config` nos dois exemplos e não usa `md5`/`sha1`.
 - [x] 4.8 Verificar a não contaminação: nenhum trecho de exemplo (linhas não triviais) aparece em `cache/` ou `cache_simbolico/`. Verificar: script ou teste que procura cada linha não trivial dos exemplos nos arquivos do cache e retorna zero ocorrências.
-- [ ] 4.9 Congelar o catálogo num commit próprio e registrar o novo SHA-256. Verificar: `sha256sum data/catalogo_cwe.json` bate com o hash gravado no manifesto da primeira rodada nova.
+- [x] 4.9 Congelar o catálogo num commit próprio e registrar o novo SHA-256. Verificar: `sha256sum data/catalogo_cwe.json` bate com o hash gravado no manifesto da primeira rodada nova.
 
 ## 5. Rodada nova
 
