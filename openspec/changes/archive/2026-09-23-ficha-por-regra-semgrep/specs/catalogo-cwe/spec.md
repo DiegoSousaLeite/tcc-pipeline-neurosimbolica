@@ -27,11 +27,26 @@ O catálogo SHALL aceitar, num bloco `regras`, fichas indexadas pelo `check_id` 
 - **WHEN** o bloco `regras` contém uma ficha com campo obrigatório vazio ou exemplo sem `codigo` ou `porque`
 - **THEN** o carregamento falha com erro explícito que nomeia a regra
 
-### Requirement: Heurística declara a condição de VP
-Toda heurística do catálogo, de regra ou de CWE, exceto a do fallback, SHALL enunciar explicitamente a condição sob a qual o alerta é VP, além da condição sob a qual é FP.
+### Requirement: Catálogo selecionável por rodada
+O sistema SHALL usar por padrão o catálogo por CWE (`data/catalogo_cwe.json`, o das Rodadas 1–6) e SHALL permitir escolher outro catálogo por rodada com a opção `--catalogo`, de modo que o catálogo por CWE e o catálogo com fichas por regra (`data/catalogo_cwe_por_regra.json`) rodem em rodadas separadas e distinguíveis.
 
-#### Scenario: Condição de VP presente
-- **WHEN** qualquer heurística específica é inspecionada
+#### Scenario: Padrão é o catálogo por CWE
+- **WHEN** uma rodada é executada sem `--catalogo`
+- **THEN** o catálogo carregado é `data/catalogo_cwe.json`, e o hash gravado nas linhas é o mesmo das Rodadas 1–6
+
+#### Scenario: Catálogo alternativo por opção
+- **WHEN** uma rodada é executada com `--catalogo data/catalogo_cwe_por_regra.json`
+- **THEN** o especialista usa esse catálogo, e o hash dele vai para cada linha do CSV e para o manifesto
+
+#### Scenario: Catálogo inexistente é recusado
+- **WHEN** `--catalogo` aponta para um arquivo que não existe ou não é catálogo válido
+- **THEN** a execução é recusada com erro explícito antes do primeiro caso
+
+### Requirement: Heurísticas do catálogo por regra declaram a condição de VP
+No catálogo com fichas por regra, toda heurística específica, de regra ou de CWE, SHALL enunciar explicitamente a condição sob a qual o alerta é VP, além da condição sob a qual é FP. O catálogo por CWE mantém as heurísticas congeladas em 2026-07-29.
+
+#### Scenario: Condição de VP presente no catálogo por regra
+- **WHEN** qualquer heurística específica de `data/catalogo_cwe_por_regra.json` é inspecionada
 - **THEN** ela contém um enunciado da forma "É VP quando ..." e um enunciado da forma "É FP quando ..."
 
 ### Requirement: Ficha de regra alinhada ao alvo da regra

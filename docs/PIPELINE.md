@@ -645,7 +645,7 @@ A ficha é resolvida em `processar_caso` **depois** da candidatura, com o
 CWE. Quais regras ganham ficha sai de `scripts/auditar_regras_ficha.py`, que lê
 do cache simbólico só `check_id` e CWE (nunca o código hidratado); a seleção e
 a justificativa estão em
-`openspec/changes/ficha-por-regra-semgrep/regras-selecionadas.md` (16 fichas,
+`openspec/changes/archive/2026-09-23-ficha-por-regra-semgrep/regras-selecionadas.md` (16 fichas,
 522 das 791 detecções).
 
 Toda heurística específica, de CWE ou de regra, declara as duas condições no
