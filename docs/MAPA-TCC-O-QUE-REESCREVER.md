@@ -210,7 +210,7 @@ Semgrep Pro analisa entre arquivos. Portão: `scripts/verificar_pro.py`.
 | O tier gratuito entrega o modo entre-arquivos? | **Sim.** Projeto controlado: CE 0 trilhas entre arquivos, Pro 1. |
 | Ele produz trilha em repositórios reais? | **Sim.** 9 trilhas, em 3 de 10 repositórios, atravessando até 3 arquivos. |
 | Quanto custa? | **4–6× mais lento.** `seaweedfs` 124 s → 749 s; `mattermost` estourou 20 min por modo. |
-| **As trilhas alcançam os casos do gabarito?** | **Não, em nenhum dos 6 casos medidos.** Ver tabela abaixo. |
+| **As trilhas alcançam os casos do gabarito?** | **Não, em nenhum dos 5 casos com registro por caso.** Ver tabela e correção abaixo. |
 
 **A medição por caso** (`--etapa gabarito`, 2026-09-15/16), aplicando a mesma
 regra de pareamento da Fase 1 sobre o arquivo do gabarito, com o repositório
@@ -218,13 +218,24 @@ inteiro em escopo nos dois modos:
 
 | caso | CWE | CE | Pro | ganho |
 |---|---|---|---|---|
-| `seaweedfs/seaweedfs@4f8af455bf` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
+| `seaweedfs/seaweedfs@4f8af455bf` | 22 | — | — | sem registro por caso (ver correção) |
 | `1panel-dev/1panel@278a562320` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
 | `getarcaneapp/arcane@67fae1255d` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
 | `openlistteam/openlist@5a5d8d6e0e` | 22 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
 | `abhinavxd/libredesk@f7aa1ef2eb` | 918 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
 | `oasdiff/oasdiff@c01d48dae4` | 918 | NAO_DETECTADO | NAO_DETECTADO | nenhum |
 | `gogs/gogs@0089c4c8e5` | 918 | NAO_DETECTADO | *timeout 900 s* | sem dado |
+
+> **Correção de 2026-09-23.** Os registros gravados
+> (`data/viabilidade_pro_2026091{5,6}.json`, etapa `gabarito`) trazem veredito
+> por caso para **5** casos — 3 de CWE-22 (`1panel`, `arcane`, `openlist`) e 2
+> de CWE-918 (`libredesk`, `oasdiff`) — mais o *timeout* do `gogs`. O
+> `seaweedfs` só aparece na etapa `real`, com contagens do repositório inteiro
+> (CE 844 alertas e 0 trilhas entre arquivos; Pro 849 alertas e 6 trilhas entre
+> arquivos; 123,7 s → 749,2 s), **sem** veredito sobre o arquivo do gabarito.
+> A afirmação de que ele teve "0 alertas nos dois arquivos do gabarito" não tem
+> registro que a sustente. O capítulo de resultados usa **5 casos**. O texto
+> original abaixo foi mantido como estava.
 
 **6 casos com dado, 0 detecções novas.** Em 5 deles o arquivo do gabarito não
 recebeu **alerta nenhum** em nenhum dos dois motores; no `gogs` o CE emitiu 1
@@ -240,12 +251,13 @@ nenhuma examina.
 
 **O que isso autoriza escrever.** *"A análise entre arquivos do Semgrep Pro foi
 verificada como disponível e funcional no tier gratuito, e não produziu nenhuma
-detecção adicional em 6 casos da população (3 de CWE-22, 3 de CWE-918)
-avaliados sob os dois motores sobre o repositório completo."* A medição está em
+detecção adicional em 5 casos da população (3 de CWE-22, 2 de CWE-918)
+avaliados sob os dois motores sobre o repositório completo."* (Corrigido em
+2026-09-23; a versão anterior dizia 6 casos, 3 e 3.) A medição está em
 `data/viabilidade_pro_2026091{5,6}.json`.
 
 **O que ainda não autoriza.** Afirmar que o ganho é zero na população inteira:
-6 casos de 226 é amostra pequena, escolhida por espaçamento uniforme e não
+5 casos de 226 é amostra pequena, escolhida por espaçamento uniforme e não
 aleatória, e o timeout do `gogs` mostra que repositórios grandes ficam
 sub-representados — justamente os que teriam mais camadas para atravessar. O
 enunciado honesto é sobre os casos avaliados, não sobre a população.
@@ -303,7 +315,7 @@ para esta população.
 recall não é um parâmetro mal configurado, é cobertura de regra que não existe
 publicada para Go. Restam dois caminhos, ambos com custo próprio — regra própria
 (`regras-proprias-go`, assume o viés) ou mais alcance no motor
-(`semgrep-pro-entre-arquivos`, que o §3.5 já mediu como sem ganho em 6 casos).
+(`semgrep-pro-entre-arquivos`, que o §3.5 já mediu como sem ganho em 5 casos).
 
 Medições em `openspec/changes/archive/2026-09-17-ruleset-gosec/design.md`.
 
@@ -921,3 +933,322 @@ que interessa ao texto:
   `src/provedores/` e mexe na lógica de checkpoint que garante o pareamento entre
   braços. **Preço não foi o impedimento em nenhum momento deste trabalho; cota e
   vazão foram.**
+
+### 10.4 Modelo de fronteira não é requisito: há evidência publicada de que faixa média basta (lido em 2026-09-17)
+
+Registrado a partir da leitura dos dez artigos em `Artigos Neuro Simbolicos/`
+— o ZeroFalse e os trabalhos que o citam.
+
+**O achado.** Alatasi, Sarhan e Ishiaku (Innopolis) avaliaram triagem agêntica de
+alertas SAST sobre o OWASP Benchmark (Java e Python) e sobre o OpenVuln, com
+**sete modelos de backbone, três níveis de profundidade de contexto e duas
+versões de prompt**. Duas conclusões deles mudam a decisão de qual modelo rodar:
+
+1. **Faixa média empata com topo de linha.** *"mid-tier models (around \$0.007
+   per verdict) match flagship accuracy at one-twentieth the cost."* As melhores
+   configurações chegam a 80–91 % de acurácia com 71–91 % de redução de falsos
+   positivos a recall acima de 95 %, incluindo 91,4 % sobre alertas reais do
+   CodeQL.
+
+2. **Mais contexto pode piorar.** A ablação de profundidade, com o backbone
+   fixo, mostra que passar de `quick` para `standard` rende **+4,0 pontos de
+   acurácia a 12–15 % de tokens a mais**, enquanto passar de `standard` para
+   `deep` é **em média contraproducente**.
+
+**O que isso muda aqui.**
+
+- A `rodada-comercial` **não precisa de gpt-5 nem de grok-4**. Um modelo de faixa
+  média é defensável com citação, e derruba tanto o custo quanto o argumento de
+  que a conclusão depende de acesso a modelo caro. Isso reforça, de fora, a
+  recomendação que `docs/ESCOLHA-MODELO-COMERCIAL.md` já fazia por preço.
+- O item 2 corrobora, com ablação publicada, o que este projeto já havia medido
+  por outro caminho: contexto não é o gargalo (prompt mediano de ~1,1k tokens).
+  Serve para a discussão e **dispensa** abrir uma frente de "enriquecer mais o
+  contexto" — que a leitura sugere que teria retorno negativo.
+
+**Ressalva de peso de evidência.** O PDF não traz veículo nem DOI; a entrada
+`alatasi2026aisast` em `fixos/bibliografia.bib` está marcada com `% VERIFICAR`.
+Confirmar publicação antes da entrega, ou rebaixar a menção de "há evidência
+publicada" para "há relato preliminar".
+
+**Onde entra no texto.** Seção de comparação entre modelos (`sec:modelos` em
+`editaveis/resultados.tex`), como justificativa da escolha do modelo comercial —
+e não na discussão, porque é decisão de método, não interpretação de resultado.
+
+---
+
+## 11. MUDANÇA DE MÉTODO: ficha por regra do Semgrep (change `ficha-por-regra-semgrep`, 2026-09-22)
+
+### 11.1 O defeito que motivou a mudança
+
+A ficha do especialista era escolhida só pela CWE do caso, mas uma CWE agrupa
+regras que olham para construções diferentes. Contagem de `check_id` nas 791
+detecções do cache simbólico:
+
+| CWE | a ficha ensinava | a regra que dispara aponta |
+|---|---|---|
+| CWE-327 | `md5`/`sha1` em senha | `tls.Config` sem `MinVersion` (93 de 93) |
+| CWE-94 | texto de template vindo de entrada | `exec.Command` não constante (89 de 92) |
+| CWE-665 | chave zerada em `aes`/`hmac` | regras de **corretude** da Trail of Bits (75) |
+| CWE-319 | URL `http://` | `InsecureSkipVerify` e `ListenAndServe` (84) |
+| CWE-79 | `template.HTML` | `import text/template`, `w.Write`, `Fprintf` (119) |
+
+Em ~260 prompts (327, 94, 665) as camadas 1–3 do especialista não tinham relação
+com o código julgado. Nos números antigos isso ficou invisível: nessas CWEs
+quase tudo é FP e os dois braços acertam ~100 % dizendo FP.
+
+### 11.2 O que mudou
+
+- Um catálogo alternativo, `data/catalogo_cwe_por_regra.json`, com 16 fichas **por regra** (522 das 791 detecções), com
+  precedência regra > CWE > fallback. A ficha de CWE continua valendo quando não
+  há regra (candidato injetado na triagem) ou a regra não tem ficha.
+- Todas as heurísticas passaram a declarar "É VP quando ... / É FP quando ...".
+- Variantes `especialista_v2` e `especialista_direto_v2`: o mesmo prompt com um
+  parágrafo contra presumir mitigação ausente, medidas como braço separado.
+- Hash do catálogo: `3d2bc71df131…` (CRLF, o das rodadas) / `ec28ec8da048…` (LF,
+  git). O antigo era `e5db7d400842…` / `a81b6f5ca3a4…`.
+
+### 11.3 O que muda no texto
+
+> **Atualizado em 2026-09-23.** Uma versão anterior deste item dizia que todo
+> número do especialista das Rodadas 1–6 precisaria ser refeito a partir da
+> Rodada 7. Isso deixou de valer: a Rodada 7 mostrou o catálogo por regra
+> **pior** que o por CWE, e o por CWE continua sendo o oficial (§11.6).
+
+- **Os números das Rodadas 1–6 continuam valendo**, baseline e especialista.
+  Nada em `editaveis/resultados.tex` ou `docs/PLANO-ESCRITA-RESULTADOS.md`
+  precisa ser refeito por causa desta mudança.
+- **Metodologia**: a descrição do prompt especialista continua "ficha por CWE"
+  (§12). A ficha por regra só aparece, se aparecer, como ablação (§11.6).
+- **Discussão**: incorporar a leitura de §11.7 (a ficha desloca a postura do
+  modelo local, não aprofunda a análise do código).
+- **Ameaça à validade (contaminação)**: a exposição a quatro contextos de
+  amostras durante o diagnóstico está registrada em
+  `openspec/changes/archive/2026-09-23-ficha-por-regra-semgrep/regras-selecionadas.md`; o teste de
+  não contaminação passa.
+
+### 11.4 Rodada 7 (local, 2026-09-22 21:30 → 2026-09-23 19:02; análise em `docs/ANALISE-RODADA-7.md`)
+
+Só o que ainda não foi testado; nada comercial.
+
+| modo | qwen2.5-coder:7b | gemma2:9b |
+|---|---|---|
+| filtro | `especialista`, `especialista_v2` | `baseline`, `especialista`, `especialista_v2` |
+| triagem | `especialista_direto`, `especialista_direto_v2` | `especialista_direto`, `especialista_direto_v2` |
+
+Baselines já medidos não são refeitos. **Custo aceito:** na triagem, baseline ×
+especialista não tem McNemar (os CSVs das Rodadas 5 e 6 foram apagados); a
+comparação é contra os agregados publicados. No filtro, é pareada nos dois
+modelos (qwen contra o CSV de `20260908T094808Z-9a00cb2`).
+
+### 11.5 Limitação a declarar
+
+As CWEs corrigidas quase não têm classe positiva (0 vulneráveis em 327 e 665, 1
+em 94). O ganho da mudança é de **validade** — o especialista passa a receber
+orientação pertinente ao alerta em todas as CWEs —, não de recall mensurável
+nessas CWEs. Não vender melhora que a amostra não consegue medir.
+
+### 11.6 Se a Rodada 7 entrar no texto: o enquadramento (decidido em 2026-09-23)
+
+**Não escrever** "corrigimos o desalinhamento e ficou pior": isso sugere que as
+Rodadas 1–6 estavam erradas. O enquadramento é de **granularidade da
+orientação**:
+
+> As fichas do catálogo nunca pretenderam descrever a regra do Semgrep. Pelo
+> protocolo, são **orientações por CWE**, escritas às cegas a partir da
+> definição do MITRE e da documentação da stdlib, sem consultar as amostras
+> nem as regras. A Rodada 7 testa um desenho alternativo, a **orientação por
+> regra**, com uma ficha para cada regra que dispara. São duas granularidades
+> de orientação, e a por CWE teve desempenho melhor.
+
+Fatos que sustentam o enquadramento:
+
+- **O desalinhamento não afetou os números das Rodadas 1–6.** Nas CWEs em que a
+  ficha falava de outra API, baseline e especialista acertam igual (CWE-327:
+  91/93 nos dois; CWE-94: 93/94; CWE-665: 75/75). Não há resultado anterior a
+  corrigir.
+- **Por CWE vence em 3 de 4 cenários, todos pareados** (atualizado em
+  2026-09-24, após a reexecução das Rodadas 5 e 6):
+
+  | cenário | por CWE × por regra (casos em que só um acerta) | p |
+  |---|---|---|
+  | qwen/filtro | 12 × 4 | 0,077 |
+  | qwen/triagem | **80 × 2** | ≈ 10⁻¹⁷ |
+  | gemma/triagem | **116 × 12** | ≈ 10⁻¹⁹ |
+  | gemma/filtro | 19 × **121** | ≈ 10⁻¹⁷ |
+
+  O recall é praticamente o mesmo nas duas; a diferença está nos falsos alarmes.
+- **A exceção tem de entrar no parágrafo**, e tem explicação: no gemma/filtro o
+  modelo vê a mensagem do alerta de TLS **e** uma ficha por CWE que fala de
+  `md5`, e junta as duas num falso alarme (57 só na CWE-327). Formulação
+  sugerida: *"a orientação por CWE teve desempenho melhor em três dos quatro
+  cenários; a exceção ocorre quando a ficha por CWE descreve uma fraqueza que
+  não é a apontada pelo alerta e o modelo combina as duas"*.
+- **Mecanismo, visto nas justificativas do modelo:** a ficha por regra descreve
+  o perigo da construção exata do alerta, e o modelo pequeno a repete em vez de
+  aplicar a condição (WebSocket: 16/17 seguros viram alarme com "aceita qualquer
+  origem", o que é falso para o gorilla sem `CheckOrigin`); e o formato "É VP
+  quando..." em destaque ancora o veredito em VP (CWE-328, só com a heurística
+  reescrita: 29/41 seguros viram alarme).
+- **Leitura comum aos quatro cenários:** o modelo local alarma quando o texto
+  do prompt descreve um perigo que casa com algo que ele vê; a granularidade
+  que vence é a que menos oferece esse casamento.
+- Tamanho sugerido: **um parágrafo** em ameaças à validade ou como ablação, não
+  seção própria.
+
+**Catálogo oficial do texto: o por CWE** (`data/catalogo_cwe.json`, commit
+`a875610`). O por regra fica em `data/catalogo_cwe_por_regra.json` e só entra
+como ablação.
+
+### 11.7 O que o especialista de fato faz (para a discussão)
+
+O código julgado é idêntico nos dois braços. O especialista recebe a mais só
+orientação sobre a **classe** da fraqueza. Nos modelos locais, essa orientação
+funcionou como **ajuste de postura**, não como análise mais funda do código:
+
+| qwen/filtro, mesmos casos | vulneráveis acertados | falsos alarmes |
+|---|---|---|
+| baseline | 8/19 | 116 |
+| especialista (fichas por CWE) | 3/19 | 12 |
+
+As fichas por CWE terminam sempre em "...não caracteriza a fraqueza" e trazem
+um exemplo inofensivo: ensinam o modelo a **desconfiar do alerta**. Numa
+população com ~97 % de alertas falsos isso sobe acurácia e MCC, mas à custa de
+recall. Se o modelo estivesse usando o contexto para entender o código, recall
+e falsos alarmes melhorariam **juntos**, e isso não acontece. **Não escrever**
+"o especialista compreende melhor o contexto"; escrever que a orientação desloca
+o limiar de decisão do modelo local na direção do ceticismo.
+
+### 11.8 Pendente para a rodada comercial (os autores rodam depois)
+
+Hipótese a testar: um modelo capaz de seguir condições usa a ficha como
+contexto de verdade (recall igual ou maior que o do baseline **e** poucos falsos
+alarmes); os modelos de 7–9 B só mudam de postura.
+
+Os dois catálogos rodam em rodadas separadas, com a opção `--catalogo`:
+
+```bash
+# 1. Comparável com as Rodadas 1-6 (catálogo por CWE, o padrão):
+python run_pipeline.py --tudo --matriz --run-id rodada-comercial-cwe
+
+# 2. Ablação com o catálogo por regra (só o especialista; modo filtro basta):
+python run_pipeline.py --tudo --modelo gpt-4o-mini --modelo gemini-2.5-flash-lite \
+  --prompt especialista --catalogo data/catalogo_cwe_por_regra.json \
+  --run-id rodada-comercial-regra
+```
+
+O `Hash_Catalogo` de cada linha e o manifesto identificam qual catálogo produziu
+cada número, então as duas rodadas nunca se misturam por engano. Ler o
+resultado 2 contra o especialista da rodada 1, pareado por `ID_Caso`. Se o
+modelo comercial acertar com as fichas por regra, o achado é "fichas
+detalhadas só funcionam em modelo que segue condições".
+
+---
+
+## 12. De onde vem cada parte do prompt (para a Metodologia)
+
+Os templates ficam em `prompts/` e são preenchidos por `montar_prompt`
+(`src/prompts.py`). Qual template entra depende do braço (modelo × tipo de
+prompt) e do modo de montagem:
+
+| modo | controle | tratamento |
+|---|---|---|
+| filtro (padrão) | `prompts/baseline.md` | `prompts/especialista.md` |
+| triagem | `prompts/baseline_direto.md` | `prompts/especialista_direto.md` |
+
+(As variantes `*_v2` só existem como ablação da Rodada 7.)
+
+### 12.1 O especialista, parte a parte
+
+| parte do prompt | placeholder | de onde vem |
+|---|---|---|
+| papel e pergunta ("Atue como Arquiteto de Segurança Sênior...", VP/FP) | — | texto fixo do template |
+| cabeçalho da CWE, "CWE-79 — Improper Neutralization..." | `{cwe_header}` | a **CWE do gabarito do caso** (ver 12.2) e o nome dela, vindo do `cwe_name` do dataset |
+| Camada 1: definição da fraqueza | `{definicao}` | a ficha do catálogo (ver 12.3) |
+| Camada 2: heurística de triagem em Go | `{heuristica_go}` | a mesma ficha |
+| Camada 3: par VP/FP, código e "por quê" | `{exemplo_vp_codigo}`, `{exemplo_vp_porque}`, `{exemplo_fp_codigo}`, `{exemplo_fp_porque}` | a mesma ficha |
+| alerta e código | `{contexto}` | Fases 1 e 2 (ver 12.4) |
+| contrato de saída JSON | — | texto fixo, **idêntico em todos os templates** |
+
+O **baseline** recebe só o papel, a pergunta, `{contexto}` e o contrato. Não vê
+CWE, definição, heurística nem exemplos: é a condição de controle.
+
+### 12.2 De onde vem a CWE de cada caso
+
+A CWE é a do **gabarito**, não a da regra que disparou:
+
+| trilha | arquivo | campo |
+|---|---|---|
+| FP (791 casos) e TP_dataset (57) | `data/dataset_go_limpo.json` (SastBench filtrado para Go) | `metadata.cwe_id` e `metadata.cwe_name` |
+| TP_ouro, TP_prata, TP_alcancavel | `tp_pairs.json`, `tp_pairs_osv.json`, `tp_pairs_osv_alcancavel.json` (pares reconstruídos de commits de correção de CVE/OSV) | `cwe_id` do par; o nome vem do dataset, quando a CWE aparece lá |
+
+A Fase 1 só aceita alerta de regra cuja tag contém **essa** CWE
+(`src/fase1_semgrep.py`); alerta de outra CWE vira `NAO_DETECTADO` com motivo
+`ALERTA_OUTRA_CWE`. Por isso o número da CWE no cabeçalho e o do alerta sempre
+coincidem, mesmo quando a construção apontada pela regra não é a que a ficha
+descreve (§11.1). Três CWEs não têm nome no dataset (CWE-300, 328 e 489), e o
+cabeçalho sai só com o identificador.
+
+### 12.3 De onde vem a ficha
+
+`data/catalogo_cwe.json` (catálogo por CWE, o oficial): 15 fichas específicas,
+as CWEs de maior volume (85,4 % das amostras), mais `__fallback__` para as
+demais. Escritas à mão a partir do MITRE e da documentação da stdlib de Go, sem
+consultar as amostras, e congeladas antes da primeira rodada. O hash dos bytes
+do arquivo vai para cada linha do CSV (`Hash_Catalogo`); a coluna `Ficha_CWE`
+diz se a ficha foi `especifica` ou `fallback`. O briefing de escrita está em
+`openspec/changes/archive/2026-07-29-experimento-parte2/tasks.md`.
+
+Com `--catalogo data/catalogo_cwe_por_regra.json` (Rodada 7), a ficha é escolhida
+pela **regra do alerta** primeiro (`Ficha_CWE = regra`), depois pela CWE, depois
+pelo fallback.
+
+### 12.4 De onde vem o `{contexto}`
+
+1. **Arquivo:** o arquivo do caso no commit exato, resolvido por `src/fonte.py`
+   (cache local → clone → raw.githubusercontent).
+2. **Alerta (Fase 1):** o Semgrep (`p/default`) roda sobre esse arquivo isolado.
+   Do alerta emparelhado saem o `check_id` da regra, a mensagem da regra e a
+   linha.
+3. **Recorte (Fase 2, `src/fase2_middleware.py`):** a **função inteira** que
+   contém a linha do alerta.
+4. **Formato:** no modo filtro, `Alerta Semgrep: <check_id>`,
+   `Mensagem: <mensagem da regra>`, `Localização: linha N`, seguidos do nome do
+   arquivo, das linhas e da função. No modo triagem o cabeçalho do alerta é
+   **omitido**, para que o modelo não saiba se o candidato veio de um alerta ou
+   do gabarito; o candidato injetado usa a linha declarada no gabarito.
+
+O contexto é gerado uma vez por caso e reaproveitado em todos os braços, byte a
+byte (cache simbólico), de modo que baseline e especialista julgam exatamente o
+mesmo código.
+
+### 12.5 O que fica gravado para rastrear cada veredito
+
+`Versao_Prompt` (hash do template), `Hash_Catalogo` (hash do catálogo),
+`Ficha_CWE` (origem da ficha), `Procedencia` (alerta ou gabarito, na triagem),
+além do manifesto da rodada (commit, modelo, versão do Ollama, semente 42,
+temperatura 0, `num_ctx`).
+
+### 11.9 Reexecução das Rodadas 4–6 (2026-09-23/24): o que muda no texto
+
+Os CSVs das Rodadas 4–6 tinham sido apagados. As três foram **reexecutadas com a
+mesma configuração e o mesmo run_id** — não são rodadas novas — e estão
+versionadas em `resultados_parte2/`, com a conferência em
+`resultados_parte2/*/REEXECUCAO.md`.
+
+- **R4 e R6 reproduzem** os números publicados (diferenças de 1–6 casos).
+- **R5 reproduz a direção, não a significância.** O McNemar baseline_direto ×
+  especialista_direto passa de 36 × 63, p = 0,0090, para 40 × 58, **p = 0,086**;
+  a precisão do especialista direto cai de 53,3 % para 49,4 % (≈ taxa-base).
+- **Frases a suavizar no `resultados.tex`** (não editado — decisão dos autores):
+  - "Com a pergunta coerente, o eixo do *prompt* volta a ser estatisticamente
+    detectável ... ($p = 0{,}0090$)" → indicação de vantagem do especialista
+    direto, que não se mantém significativa numa reexecução com a mesma
+    configuração;
+  - qualquer menção a "precisão acima da taxa-base" do especialista direto do
+    qwen (vem da R5/R6).
+- **Oportunidade para a metodologia:** as reexecuções dão uma medida de
+  reprodutibilidade (mesma configuração, resultados a 1–6 casos de distância),
+  e mostram que resultados no limiar de significância não devem ser lidos como
+  firmes.
+
