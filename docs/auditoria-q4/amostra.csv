@@ -1,0 +1,2005 @@
+Estrato,ID_Caso,Repositorio,CWE,Gabarito,Tipo_Prompt,Veredito_LLM,Celula,Justificativa,Contexto,Eixo1_Fundamento,Eixo2_SeguroDeFato,Nota,Status_Classificacao
+E-VP,TPA:mailpit:CWE-918:ProxyHandler:64a5036e:vuln,axllent/mailpit,CWE-918,vulneravel,baseline,VP,VP,O alerta é um VERDADEIRO POSITIVO (VP) porque o código permite que uma URL seja inserida pelo usuário (`r.URL.Query().Get(,"Alerta Semgrep: go.lang.security.injection.tainted-url-host.tainted-url-host
+Mensagem: A request was found to be crafted from user-input `r`. This can lead to Server-Side Request Forgery (SSRF) vulnerabilities, potentially exposing sensitive data. It is recommend where possible to not allow user-input to craft the base request, but to be treated as part of the path or query parameter. When user-input is necessary to craft the request, it is recommended to follow OWASP best practices to prevent abuse, including using an allowlist.
+Localização: linha 46
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: proxy.go | Linhas 21 a 115]
+func ProxyHandler(w http.ResponseWriter, r *http.Request) {
+	uri := strings.TrimSpace(r.URL.Query().Get(""url""))
+	if uri == """" {
+		logger.Log().Warn(""[proxy] URL missing"")
+		httpError(w, ""Error: URL missing"")
+		return
+	}
+
+	if !linkRe.MatchString(uri) {
+		logger.Log().Warnf(""[proxy] invalid URL %s"", uri)
+		httpError(w, ""Error: invalid URL"")
+		return
+	}
+
+	tr := &http.Transport{}
+
+	if config.AllowUntrustedTLS {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec
+	}
+
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   10 * time.Second,
+	}
+
+	req, err := http.NewRequest(""GET"", uri, nil)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, err.Error())
+		return
+	}
+
+	// use requesting useragent
+	req.Header.Set(""User-Agent"", r.UserAgent())
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, err.Error())
+		return
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, err.Error())
+		return
+	}
+
+	// relay common headers
+	if resp.Header.Get(""content-type"") != """" {
+		w.Header().Set(""content-type"", resp.Header.Get(""content-type""))
+	}
+	if resp.Header.Get(""last-modified"") != """" {
+		w.Header().Set(""last-modified"", resp.Header.Get(""last-modified""))
+	}
+	if resp.Header.Get(""content-disposition"") != """" {
+		w.Header().Set(""content-disposition"", resp.Header.Get(""content-disposition""))
+	}
+	if resp.Header.Get(""cache-control"") != """" {
+		w.Header().Set(""cache-control"", resp.Header.Get(""cache-control""))
+	}
+
+	// replace url() values with proxy address, eg: fonts & images
+	if strings.HasPrefix(resp.Header.Get(""content-type""), ""text/css"") {
+		var re = regexp.MustCompile(`(?mi)(url\((\'|\"")?([^\)\'\""]+)(\'|\"")?\))`)
+		body = re.ReplaceAllFunc(body, func(s []byte) []byte {
+			parts := re.FindStringSubmatch(string(s))
+
+			// don't resolve inline `data:..`
+			if strings.HasPrefix(parts[3], ""data:"") {
+				return []byte(parts[3])
+			}
+
+			address, err := absoluteURL(parts[3], uri)
+			if err != nil {
+				logger.Log().Errorf(""[proxy] %s"", err.Error())
+				return []byte(parts[3])
+			}
+
+			return []byte(""url("" + parts[2] + config.Webroot + ""proxy?url="" + url.QueryEscape(address) + parts[4] + "")"")
+		})
+	}
+
+	logger.Log().Debugf(""[proxy] %s (%d)"", uri, resp.StatusCode)
+
+	// relay status code - WriteHeader must come after Header.Set()
+	w.WriteHeader(resp.StatusCode)
+
+	if _, err := w.Write(body); err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+	}
+}",,,,
+E-VP,TPA:mailpit:CWE-918:ProxyHandler:64a5036e:vuln,axllent/mailpit,CWE-918,vulneravel,especialista,VP,VP,A entrada `uri` é controlada pelo cliente através de `r.URL.Query().Get(,"Alerta Semgrep: go.lang.security.injection.tainted-url-host.tainted-url-host
+Mensagem: A request was found to be crafted from user-input `r`. This can lead to Server-Side Request Forgery (SSRF) vulnerabilities, potentially exposing sensitive data. It is recommend where possible to not allow user-input to craft the base request, but to be treated as part of the path or query parameter. When user-input is necessary to craft the request, it is recommended to follow OWASP best practices to prevent abuse, including using an allowlist.
+Localização: linha 46
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: proxy.go | Linhas 21 a 115]
+func ProxyHandler(w http.ResponseWriter, r *http.Request) {
+	uri := strings.TrimSpace(r.URL.Query().Get(""url""))
+	if uri == """" {
+		logger.Log().Warn(""[proxy] URL missing"")
+		httpError(w, ""Error: URL missing"")
+		return
+	}
+
+	if !linkRe.MatchString(uri) {
+		logger.Log().Warnf(""[proxy] invalid URL %s"", uri)
+		httpError(w, ""Error: invalid URL"")
+		return
+	}
+
+	tr := &http.Transport{}
+
+	if config.AllowUntrustedTLS {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec
+	}
+
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   10 * time.Second,
+	}
+
+	req, err := http.NewRequest(""GET"", uri, nil)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, err.Error())
+		return
+	}
+
+	// use requesting useragent
+	req.Header.Set(""User-Agent"", r.UserAgent())
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, err.Error())
+		return
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, err.Error())
+		return
+	}
+
+	// relay common headers
+	if resp.Header.Get(""content-type"") != """" {
+		w.Header().Set(""content-type"", resp.Header.Get(""content-type""))
+	}
+	if resp.Header.Get(""last-modified"") != """" {
+		w.Header().Set(""last-modified"", resp.Header.Get(""last-modified""))
+	}
+	if resp.Header.Get(""content-disposition"") != """" {
+		w.Header().Set(""content-disposition"", resp.Header.Get(""content-disposition""))
+	}
+	if resp.Header.Get(""cache-control"") != """" {
+		w.Header().Set(""cache-control"", resp.Header.Get(""cache-control""))
+	}
+
+	// replace url() values with proxy address, eg: fonts & images
+	if strings.HasPrefix(resp.Header.Get(""content-type""), ""text/css"") {
+		var re = regexp.MustCompile(`(?mi)(url\((\'|\"")?([^\)\'\""]+)(\'|\"")?\))`)
+		body = re.ReplaceAllFunc(body, func(s []byte) []byte {
+			parts := re.FindStringSubmatch(string(s))
+
+			// don't resolve inline `data:..`
+			if strings.HasPrefix(parts[3], ""data:"") {
+				return []byte(parts[3])
+			}
+
+			address, err := absoluteURL(parts[3], uri)
+			if err != nil {
+				logger.Log().Errorf(""[proxy] %s"", err.Error())
+				return []byte(parts[3])
+			}
+
+			return []byte(""url("" + parts[2] + config.Webroot + ""proxy?url="" + url.QueryEscape(address) + parts[4] + "")"")
+		})
+	}
+
+	logger.Log().Debugf(""[proxy] %s (%d)"", uri, resp.StatusCode)
+
+	// relay status code - WriteHeader must come after Header.Set()
+	w.WriteHeader(resp.StatusCode)
+
+	if _, err := w.Write(body); err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+	}
+}",,,,
+E-VP,TPA:nebula-mesh:CWE-614:HandleCallback:59e3155a:vuln,forgekeep/nebula-mesh,CWE-614,vulneravel,baseline,VP,VP,"O alerta é um VERDADEIRO POSITIVO (VP) porque a função `HandleLogin` está criando uma cookie de sessão (`oidcStateCookieName`) sem definir o sinalizador 'Secure'. Isso significa que a cookie pode ser transmitida em canais inseguros, como HTTP. Para mitigar isso, é necessário garantir que o sinalizador 'Secure' seja definido como 'true', conforme sugerido no alerta.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 113
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 105 a 123]
+func (o *OIDC) HandleLogin(rw http.ResponseWriter, r *http.Request) {
+	state, err := randomToken()
+	if err != nil {
+		o.logger.Error(""oidc state"", ""error"", err)
+		http.Error(rw, ""internal error"", http.StatusInternalServerError)
+		return
+	}
+	o.rememberState(state)
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oidcStateCookieName,
+		Value:    state,
+		Path:     ""/"",
+		HttpOnly: true,
+		Secure:   o.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oidcStateTTL.Seconds()),
+	})
+	http.Redirect(rw, r, o.oauth.AuthCodeURL(state), http.StatusSeeOther)
+}",,,,
+E-VP,TPA:nebula-mesh:CWE-614:HandleCallback:59e3155a:vuln,forgekeep/nebula-mesh,CWE-614,vulneravel,especialista,VP,VP,"O cookie de estado OIDC (oidcStateCookieName) é usado para armazenar um token de estado temporário durante o processo de autenticação. Este tipo de cookie geralmente contém informações sensíveis que devem ser protegidas contra a transmissão por conexões HTTP não seguras. Portanto, a ausência do atributo 'Secure' neste contexto constitui uma vulnerabilidade real.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 113
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 105 a 123]
+func (o *OIDC) HandleLogin(rw http.ResponseWriter, r *http.Request) {
+	state, err := randomToken()
+	if err != nil {
+		o.logger.Error(""oidc state"", ""error"", err)
+		http.Error(rw, ""internal error"", http.StatusInternalServerError)
+		return
+	}
+	o.rememberState(state)
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oidcStateCookieName,
+		Value:    state,
+		Path:     ""/"",
+		HttpOnly: true,
+		Secure:   o.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oidcStateTTL.Seconds()),
+	})
+	http.Redirect(rw, r, o.oauth.AuthCodeURL(state), http.StatusSeeOther)
+}",,,,
+E-VP,TPA:nebula-mesh:CWE-614:rememberState:59e3155a:vuln,forgekeep/nebula-mesh,CWE-614,vulneravel,baseline,VP,VP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código não está definindo a flag 'Secure' para o cookie de sessão. A flag 'Secure' deve ser definida como 'true' para garantir que o cookie só seja enviado por conexões HTTPS, o que ajuda a proteger contra ataques de cookies em sessão via HTTP.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 113
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 105 a 123]
+func (o *OIDC) HandleLogin(rw http.ResponseWriter, r *http.Request) {
+	state, err := randomToken()
+	if err != nil {
+		o.logger.Error(""oidc state"", ""error"", err)
+		http.Error(rw, ""internal error"", http.StatusInternalServerError)
+		return
+	}
+	o.rememberState(state)
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oidcStateCookieName,
+		Value:    state,
+		Path:     ""/"",
+		HttpOnly: true,
+		Secure:   o.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oidcStateTTL.Seconds()),
+	})
+	http.Redirect(rw, r, o.oauth.AuthCodeURL(state), http.StatusSeeOther)
+}",,,,
+E-VP,TPA:nebula-mesh:CWE-614:rememberState:59e3155a:vuln,forgekeep/nebula-mesh,CWE-614,vulneravel,especialista,VP,VP,"O cookie de estado OIDC (oidcStateCookieName) é usado para armazenar um token de estado temporário durante o processo de autenticação. Este tipo de cookie geralmente contém informações sensíveis que devem ser protegidas contra a transmissão por conexões HTTP não seguras. Portanto, a ausência do atributo 'Secure' neste contexto constitui uma vulnerabilidade real.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 113
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 105 a 123]
+func (o *OIDC) HandleLogin(rw http.ResponseWriter, r *http.Request) {
+	state, err := randomToken()
+	if err != nil {
+		o.logger.Error(""oidc state"", ""error"", err)
+		http.Error(rw, ""internal error"", http.StatusInternalServerError)
+		return
+	}
+	o.rememberState(state)
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oidcStateCookieName,
+		Value:    state,
+		Path:     ""/"",
+		HttpOnly: true,
+		Secure:   o.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oidcStateTTL.Seconds()),
+	})
+	http.Redirect(rw, r, o.oauth.AuthCodeURL(state), http.StatusSeeOther)
+}",,,,
+E-FP,18ce5c27:CWE-614:false_positive#1,argoproj/argo-cd,CWE-614,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código não está configurando a bandeira 'Secure' para o cookie de sessão. A bandeira 'Secure' deve ser definida como 'true' para garantir que o cookie só seja transmitido por canais seguros, como HTTPS. No contexto fornecido, a variável `a.secureCookie` é usada para determinar se a bandeira 'Secure' deve ser definida, mas não há uma verificação explícita de seu valor ou garantia de que ele esteja sendo configurado corretamente.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 206
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 189 a 215]
+func (a *ClientApp) generateAppState(returnURL string, w http.ResponseWriter) (string, error) {
+	// According to the spec (https://www.rfc-editor.org/rfc/rfc6749#section-10.10), this must be guessable with
+	// probability <= 2^(-128). The following call generates one of 52^24 random strings, ~= 2^136 possibilities.
+	randStr, err := rand.String(24)
+	if err != nil {
+		return """", fmt.Errorf(""failed to generate app state: %w"", err)
+	}
+	if returnURL == """" {
+		returnURL = a.baseHRef
+	}
+	cookieValue := fmt.Sprintf(""%s:%s"", randStr, returnURL)
+	if encrypted, err := crypto.Encrypt([]byte(cookieValue), a.encryptionKey); err != nil {
+		return """", err
+	} else {
+		cookieValue = hex.EncodeToString(encrypted)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     common.StateCookieName,
+		Value:    cookieValue,
+		Expires:  time.Now().Add(common.StateCookieMaxAge),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   a.secureCookie,
+	})
+	return randStr, nil
+}",,,,
+E-FP,18ce5c27:CWE-614:false_positive#1,argoproj/argo-cd,CWE-614,seguro,especialista,VP,FP,"O cookie de estado (state) está sendo criado sem o atributo 'Secure', o que pode expor o valor sensível na rede em caso de conexões HTTP não cifradas. De acordo com a especificação RFC6749, este valor deve ser guessable com probabilidade <= 2^(-128), tornando-o um dado sensível.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 206
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 189 a 215]
+func (a *ClientApp) generateAppState(returnURL string, w http.ResponseWriter) (string, error) {
+	// According to the spec (https://www.rfc-editor.org/rfc/rfc6749#section-10.10), this must be guessable with
+	// probability <= 2^(-128). The following call generates one of 52^24 random strings, ~= 2^136 possibilities.
+	randStr, err := rand.String(24)
+	if err != nil {
+		return """", fmt.Errorf(""failed to generate app state: %w"", err)
+	}
+	if returnURL == """" {
+		returnURL = a.baseHRef
+	}
+	cookieValue := fmt.Sprintf(""%s:%s"", randStr, returnURL)
+	if encrypted, err := crypto.Encrypt([]byte(cookieValue), a.encryptionKey); err != nil {
+		return """", err
+	} else {
+		cookieValue = hex.EncodeToString(encrypted)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     common.StateCookieName,
+		Value:    cookieValue,
+		Expires:  time.Now().Add(common.StateCookieMaxAge),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   a.secureCookie,
+	})
+	return randStr, nil
+}",,,,
+E-FP,1f40a88b:CWE-614:false_positive#1,beego/beego,CWE-614,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código não está configurando a bandeira 'Secure' para o cookie de sessão. Isso significa que o cookie pode ser enviado em conexões HTTP inseguras, o que expõe os dados do usuário a riscos de interceptação.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 214
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: session.go | Linhas 188 a 238]
+func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session Store, err error) {
+	sid, errs := manager.getSid(r)
+	if errs != nil {
+		return nil, errs
+	}
+
+	if sid != """" {
+		exists, err := manager.provider.SessionExist(context.Background(), sid)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return manager.provider.SessionRead(context.Background(), sid)
+		}
+	}
+
+	// Generate a new session
+	sid, errs = manager.sessionID()
+	if errs != nil {
+		return nil, errs
+	}
+
+	session, err = manager.provider.SessionRead(context.Background(), sid)
+	if err != nil {
+		return nil, err
+	}
+	cookie := &http.Cookie{
+		Name:     manager.config.CookieName,
+		Value:    url.QueryEscape(sid),
+		Path:     ""/"",
+		HttpOnly: !manager.config.DisableHTTPOnly,
+		Secure:   manager.isSecure(r),
+		Domain:   manager.config.Domain,
+		SameSite: manager.config.CookieSameSite,
+	}
+	if manager.config.CookieLifeTime > 0 {
+		cookie.MaxAge = manager.config.CookieLifeTime
+		cookie.Expires = time.Now().Add(time.Duration(manager.config.CookieLifeTime) * time.Second)
+	}
+	if manager.config.EnableSetCookie {
+		http.SetCookie(w, cookie)
+	}
+	r.AddCookie(cookie)
+
+	if manager.config.EnableSidInHTTPHeader {
+		r.Header.Set(manager.config.SessionNameInHTTPHeader, sid)
+		w.Header().Set(manager.config.SessionNameInHTTPHeader, sid)
+	}
+
+	return
+}",,,,
+E-FP,1f40a88b:CWE-614:false_positive#1,beego/beego,CWE-614,seguro,especialista,VP,FP,"O cookie de sessão está sendo criado sem o atributo 'Secure', o que pode expor o valor sensível na rede em caso de conexões HTTP não cifradas.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 214
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: session.go | Linhas 188 a 238]
+func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session Store, err error) {
+	sid, errs := manager.getSid(r)
+	if errs != nil {
+		return nil, errs
+	}
+
+	if sid != """" {
+		exists, err := manager.provider.SessionExist(context.Background(), sid)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return manager.provider.SessionRead(context.Background(), sid)
+		}
+	}
+
+	// Generate a new session
+	sid, errs = manager.sessionID()
+	if errs != nil {
+		return nil, errs
+	}
+
+	session, err = manager.provider.SessionRead(context.Background(), sid)
+	if err != nil {
+		return nil, err
+	}
+	cookie := &http.Cookie{
+		Name:     manager.config.CookieName,
+		Value:    url.QueryEscape(sid),
+		Path:     ""/"",
+		HttpOnly: !manager.config.DisableHTTPOnly,
+		Secure:   manager.isSecure(r),
+		Domain:   manager.config.Domain,
+		SameSite: manager.config.CookieSameSite,
+	}
+	if manager.config.CookieLifeTime > 0 {
+		cookie.MaxAge = manager.config.CookieLifeTime
+		cookie.Expires = time.Now().Add(time.Duration(manager.config.CookieLifeTime) * time.Second)
+	}
+	if manager.config.EnableSetCookie {
+		http.SetCookie(w, cookie)
+	}
+	r.AddCookie(cookie)
+
+	if manager.config.EnableSidInHTTPHeader {
+		r.Header.Set(manager.config.SessionNameInHTTPHeader, sid)
+		w.Header().Set(manager.config.SessionNameInHTTPHeader, sid)
+	}
+
+	return
+}",,,,
+E-FP,4611d05d:CWE-614:false_positive,drakkan/sftpgo,CWE-614,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque a função `createAndSetCookie` está criando uma cookie de sessão sem definir o sinalizador 'Secure'. O sinalizador 'Secure' deve ser definido como 'true' para garantir que a cookie não seja transmitida por canais inseguros, como HTTP. A função verifica se a conexão é segura usando `isTLS(r)`, mas isso não garante que o sinalizador 'Secure' esteja sendo definido corretamente em todos os casos.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 264
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: auth_utils.go | Linhas 247 a 276]
+func (c *jwtTokenClaims) createAndSetCookie(w http.ResponseWriter, r *http.Request, tokenAuth *jwtauth.JWTAuth,
+	audience tokenAudience, ip string,
+) error {
+	resp, err := c.createTokenResponse(tokenAuth, audience, ip)
+	if err != nil {
+		return err
+	}
+	var basePath string
+	if audience == tokenAudienceWebAdmin || audience == tokenAudienceWebAdminPartial {
+		basePath = webBaseAdminPath
+	} else {
+		basePath = webBaseClientPath
+	}
+	duration := tokenDuration
+	if audience == tokenAudienceWebShare {
+		duration = shareTokenDuration
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     jwtCookieKey,
+		Value:    resp[""access_token""].(string),
+		Path:     basePath,
+		Expires:  time.Now().Add(duration),
+		MaxAge:   int(duration / time.Second),
+		HttpOnly: true,
+		Secure:   isTLS(r),
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	return nil
+}",,,,
+E-FP,4611d05d:CWE-614:false_positive,drakkan/sftpgo,CWE-614,seguro,especialista,VP,FP,"O cookie de autenticação JWT criado pela função `createAndSetCookie` não tem o atributo 'Secure' definido. Isso significa que, se a conexão HTTP for usada em vez da HTTPS, o cookie será enviado em texto claro na rede, expôsindo o token de acesso sensível.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 264
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: auth_utils.go | Linhas 247 a 276]
+func (c *jwtTokenClaims) createAndSetCookie(w http.ResponseWriter, r *http.Request, tokenAuth *jwtauth.JWTAuth,
+	audience tokenAudience, ip string,
+) error {
+	resp, err := c.createTokenResponse(tokenAuth, audience, ip)
+	if err != nil {
+		return err
+	}
+	var basePath string
+	if audience == tokenAudienceWebAdmin || audience == tokenAudienceWebAdminPartial {
+		basePath = webBaseAdminPath
+	} else {
+		basePath = webBaseClientPath
+	}
+	duration := tokenDuration
+	if audience == tokenAudienceWebShare {
+		duration = shareTokenDuration
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     jwtCookieKey,
+		Value:    resp[""access_token""].(string),
+		Path:     basePath,
+		Expires:  time.Now().Add(duration),
+		MaxAge:   int(duration / time.Second),
+		HttpOnly: true,
+		Secure:   isTLS(r),
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	return nil
+}",,,,
+E-FP,4611d05d:CWE-614:false_positive#1,drakkan/sftpgo,CWE-614,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque a função `setFlashMessage` está criando uma cookie de sessão (`flashCookieName`) sem definir o sinalizador 'Secure'. Isso significa que a cookie pode ser transmitida via HTTP em vez de HTTPS, tornando-a vulnerável a ataques de interceptação. A função `isTLS(r)` deve estar retornando `false` em algum momento, permitindo que a cookie seja enviada sem o sinalizador 'Secure' ativado.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 57
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: flash.go | Linhas 52 a 68]
+func setFlashMessage(w http.ResponseWriter, r *http.Request, message flashMessage) {
+	value, err := json.Marshal(message)
+	if err != nil {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     flashCookieName,
+		Value:    base64.URLEncoding.EncodeToString(value),
+		Path:     ""/"",
+		Expires:  time.Now().Add(60 * time.Second),
+		MaxAge:   60,
+		HttpOnly: true,
+		Secure:   isTLS(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+	w.Header().Add(""Cache-Control"", `no-cache=""Set-Cookie""`)
+}",,,,
+E-FP,4611d05d:CWE-614:false_positive#1,drakkan/sftpgo,CWE-614,seguro,especialista,VP,FP,"O cookie de sessão 'flashCookieName' está sendo configurado sem o atributo 'Secure'. Embora a função `isTLS(r)` verifique se a conexão é segura, não há garantia de que essa verificação sempre retorne verdadeiro. Se a verificação falhar ou retornar falso em algum cenário, o cookie ainda será enviado por conexões HTTP não cifradas, expôsindo o valor sensível na rede.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 57
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: flash.go | Linhas 52 a 68]
+func setFlashMessage(w http.ResponseWriter, r *http.Request, message flashMessage) {
+	value, err := json.Marshal(message)
+	if err != nil {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     flashCookieName,
+		Value:    base64.URLEncoding.EncodeToString(value),
+		Path:     ""/"",
+		Expires:  time.Now().Add(60 * time.Second),
+		MaxAge:   60,
+		HttpOnly: true,
+		Secure:   isTLS(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+	w.Header().Add(""Cache-Control"", `no-cache=""Set-Cookie""`)
+}",,,,
+E-FP,5e5c4b7d:CWE-614:false_positive#1,argoproj/argo-cd,CWE-614,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código gera uma cookie de sessão sem definir a flag 'Secure'. A flag 'Secure' é essencial para garantir que a cookie só seja enviada por conexões HTTPS, protegendo-a contra ataques em trânsito. No contexto fornecido, a variável `a.secureCookie` deve ser um valor booleano que determina se a flag 'Secure' deve ser definida na cookie. Se `a.secureCookie` for `false`, a cookie não terá a flag 'Secure', o que constitui uma vulnerabilidade de segurança.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 206
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 189 a 215]
+func (a *ClientApp) generateAppState(returnURL string, pkceVerifier string, w http.ResponseWriter) (string, error) {
+	// According to the spec (https://www.rfc-editor.org/rfc/rfc6749#section-10.10), this must be guessable with
+	// probability <= 2^(-128). The following call generates one of 52^24 random strings, ~= 2^136 possibilities.
+	randStr, err := rand.String(24)
+	if err != nil {
+		return """", fmt.Errorf(""failed to generate app state: %w"", err)
+	}
+	if returnURL == """" {
+		returnURL = a.baseHRef
+	}
+	cookieValue := fmt.Sprintf(""%s\n%s\n%s"", randStr, returnURL, pkceVerifier)
+	if encrypted, err := crypto.Encrypt([]byte(cookieValue), a.encryptionKey); err != nil {
+		return """", err
+	} else {
+		cookieValue = hex.EncodeToString(encrypted)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     common.StateCookieName,
+		Value:    cookieValue,
+		Expires:  time.Now().Add(common.StateCookieMaxAge),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   a.secureCookie,
+	})
+	return randStr, nil
+}",,,,
+E-FP,5e5c4b7d:CWE-614:false_positive#1,argoproj/argo-cd,CWE-614,seguro,especialista,VP,FP,"O cookie de estado (state) é criado sem o atributo 'Secure', o que pode expor seu valor em conexões HTTP não cifradas, mesmo que a aplicação esteja sendo acessada via HTTPS. De acordo com a RFC 6749, o valor do state deve ser guessable com probabilidade <= 2^(-128), e transmitir esse cookie por HTTP não seguro pode comprometer a segurança da sessão.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 206
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 189 a 215]
+func (a *ClientApp) generateAppState(returnURL string, pkceVerifier string, w http.ResponseWriter) (string, error) {
+	// According to the spec (https://www.rfc-editor.org/rfc/rfc6749#section-10.10), this must be guessable with
+	// probability <= 2^(-128). The following call generates one of 52^24 random strings, ~= 2^136 possibilities.
+	randStr, err := rand.String(24)
+	if err != nil {
+		return """", fmt.Errorf(""failed to generate app state: %w"", err)
+	}
+	if returnURL == """" {
+		returnURL = a.baseHRef
+	}
+	cookieValue := fmt.Sprintf(""%s\n%s\n%s"", randStr, returnURL, pkceVerifier)
+	if encrypted, err := crypto.Encrypt([]byte(cookieValue), a.encryptionKey); err != nil {
+		return """", err
+	} else {
+		cookieValue = hex.EncodeToString(encrypted)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     common.StateCookieName,
+		Value:    cookieValue,
+		Expires:  time.Now().Add(common.StateCookieMaxAge),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   a.secureCookie,
+	})
+	return randStr, nil
+}",,,,
+E-FP,731afbee:CWE-400:false_positive,portainer/portainer,CWE-400,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código não limita a quantidade máxima de bytes lidos durante a decompressão do arquivo tar.gz, o que pode permitir uma ataques de bomba de descompressão (zip bomb), resultando em um consumo excessivo de recursos e potencialmente paralizando o sistema.","Alerta Semgrep: go.lang.security.decompression_bomb.potential-dos-via-decompression-bomb
+Mensagem: Detected a possible denial-of-service via a zip bomb attack. By limiting the max bytes read, you can mitigate this attack. `io.CopyN()` can specify a size. 
+Localização: linha 116
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: targz.go | Linhas 84 a 128]
+func ExtractTarGz(r io.Reader, outputDirPath string) error {
+	zipReader, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	defer zipReader.Close()
+
+	tarReader := tar.NewReader(zipReader)
+
+	for {
+		header, err := tarReader.Next()
+
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			// skip, dir will be created with a file
+		case tar.TypeReg:
+			p := filepath.Clean(filepath.Join(outputDirPath, header.Name))
+			if err := os.MkdirAll(filepath.Dir(p), 0o744); err != nil {
+				return fmt.Errorf(""Failed to extract dir %s"", filepath.Dir(p))
+			}
+			outFile, err := os.Create(p)
+			if err != nil {
+				return fmt.Errorf(""Failed to create file %s"", header.Name)
+			}
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				return fmt.Errorf(""Failed to extract file %s"", header.Name)
+			}
+			outFile.Close()
+		default:
+			return fmt.Errorf(""tar: unknown type: %v in %s"",
+				header.Typeflag,
+				header.Name)
+		}
+	}
+
+	return nil
+}",,,,
+E-FP,731afbee:CWE-400:false_positive,portainer/portainer,CWE-400,seguro,especialista,VP,FP,"A função ExtractTarGz lida com um leitor de gzip, que pode ser usado para extrair arquivos de tar. Se o comprimento do arquivo for muito grande, isso pode resultar em uma bomba de descompressão (zip bomb), levando a um consumo excesivo de recursos e potencialmente a um ataque de negação de serviço (DoS). Embora o código use io.CopyN() para limitar o número de bytes lidos, isso não garante que a entrada seja controlada pelo usuário. Se uma entrada maliciosa for fornecida, ainda pode levar a um DoS. Portanto, este é um VERDADEIRO POSITIVO.","Alerta Semgrep: go.lang.security.decompression_bomb.potential-dos-via-decompression-bomb
+Mensagem: Detected a possible denial-of-service via a zip bomb attack. By limiting the max bytes read, you can mitigate this attack. `io.CopyN()` can specify a size. 
+Localização: linha 116
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: targz.go | Linhas 84 a 128]
+func ExtractTarGz(r io.Reader, outputDirPath string) error {
+	zipReader, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	defer zipReader.Close()
+
+	tarReader := tar.NewReader(zipReader)
+
+	for {
+		header, err := tarReader.Next()
+
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			// skip, dir will be created with a file
+		case tar.TypeReg:
+			p := filepath.Clean(filepath.Join(outputDirPath, header.Name))
+			if err := os.MkdirAll(filepath.Dir(p), 0o744); err != nil {
+				return fmt.Errorf(""Failed to extract dir %s"", filepath.Dir(p))
+			}
+			outFile, err := os.Create(p)
+			if err != nil {
+				return fmt.Errorf(""Failed to create file %s"", header.Name)
+			}
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				return fmt.Errorf(""Failed to extract file %s"", header.Name)
+			}
+			outFile.Close()
+		default:
+			return fmt.Errorf(""tar: unknown type: %v in %s"",
+				header.Typeflag,
+				header.Name)
+		}
+	}
+
+	return nil
+}",,,,
+E-FP,TPA:mailpit:CWE-918:ProxyHandler:64a5036e:fix,axllent/mailpit,CWE-918,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código permite que uma entrada do usuário (`uri`) seja usada para construir uma solicitação HTTP (`http.NewRequest`). Isso pode levar a uma vulnerabilidade de Injeção de URL (SSRF), onde um atacante poderia fazer com que o servidor faça solicitações maliciosas em seu nome. O código não implementa medidas adequadas para validar ou limpar a entrada do usuário, como usar uma lista branca (`allowlist`) conforme recomendado pela OWASP.","Alerta Semgrep: go.lang.security.injection.tainted-url-host.tainted-url-host
+Mensagem: A request was found to be crafted from user-input `r`. This can lead to Server-Side Request Forgery (SSRF) vulnerabilities, potentially exposing sensitive data. It is recommend where possible to not allow user-input to craft the base request, but to be treated as part of the path or query parameter. When user-input is necessary to craft the request, it is recommended to follow OWASP best practices to prevent abuse, including using an allowlist.
+Localização: linha 116
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: proxy.go | Linhas 62 a 209]
+func ProxyHandler(w http.ResponseWriter, r *http.Request) {
+	encoded := strings.TrimSpace(r.URL.Query().Get(""data""))
+	if encoded == """" {
+		logger.Log().Warn(""[proxy] Data missing"")
+		httpError(w, ""Error: Data missing"")
+		return
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] Data parameter corrupted: %s"", err.Error())
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	parts := strings.SplitN(string(decoded), "":"", 2)
+	if len(parts) != 2 {
+		logger.Log().Warnf(""[proxy] Invalid data parameter: %s"", string(decoded))
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	id := parts[0]
+	uri := parts[1]
+
+	links, err := getAssets(id)
+	if err != nil {
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	if !tools.InArray(uri, links) {
+		logger.Log().Warnf(""[proxy] URL %s not found in message %s"", uri, id)
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	if !linkRe.MatchString(uri) {
+		logger.Log().Warnf(""[proxy] invalid request %s"", uri)
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	tr := &http.Transport{}
+
+	if config.AllowUntrustedTLS {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec
+	}
+
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   10 * time.Second,
+	}
+
+	req, err := http.NewRequest(""GET"", uri, nil)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	// use requesting useragent
+	req.Header.Set(""User-Agent"", r.UserAgent())
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		logger.Log().Warnf(""[proxy] received status code %d for %s"", resp.StatusCode, uri)
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	ct := strings.ToLower(resp.Header.Get(""content-type""))
+	if !supportedProxyContentType(ct) {
+		logger.Log().Warnf(""[proxy] blocking unsupported content-type %s for %s"", ct, uri)
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	// relay common headers
+	w.Header().Set(""content-type"", ct)
+	if resp.Header.Get(""last-modified"") != """" {
+		w.Header().Set(""last-modified"", resp.Header.Get(""last-modified""))
+	}
+	if resp.Header.Get(""content-disposition"") != """" {
+		w.Header().Set(""content-disposition"", resp.Header.Get(""content-disposition""))
+	}
+	if resp.Header.Get(""cache-control"") != """" {
+		w.Header().Set(""cache-control"", resp.Header.Get(""cache-control""))
+	}
+
+	// replace CSS url() values with proxy address, eg: fonts & images
+	if strings.HasPrefix(resp.Header.Get(""content-type""), ""text/css"") {
+		var re = regexp.MustCompile(`(?mi)(url\((\'|\"")?([^\)\'\""]+)(\'|\"")?\))`)
+		body = re.ReplaceAllFunc(body, func(s []byte) []byte {
+			parts := re.FindStringSubmatch(string(s))
+
+			// don't resolve inline `data:..`
+			if strings.HasPrefix(parts[3], ""data:"") {
+				return []byte(parts[3])
+			}
+
+			address, err := absoluteURL(parts[3], uri)
+			if err != nil {
+				logger.Log().Errorf(""[proxy] %s"", err.Error())
+				return []byte(parts[3])
+			}
+
+			// store asset address against message ID
+			if result, ok := assets[id]; ok {
+				if !tools.InArray(address, result.Assets) {
+					assetsMutex.Lock()
+					result.Assets = append(result.Assets, address)
+					assets[id] = result
+					assetsMutex.Unlock()
+				}
+			}
+
+			// encode with base64 to handle any special characters and group message ID with URL
+			encoded := base64.StdEncoding.EncodeToString([]byte(id + "":"" + address))
+
+			return []byte(""url("" + parts[2] + config.Webroot + ""proxy?data="" + encoded + parts[4] + "")"")
+		})
+	}
+
+	logger.Log().Debugf(""[proxy] %s (%d)"", uri, resp.StatusCode)
+
+	// relay status code - WriteHeader must come after Header.Set()
+	w.WriteHeader(resp.StatusCode)
+
+	if _, err := w.Write(body); err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+	}
+}",,,,
+E-FP,TPA:mailpit:CWE-918:ProxyHandler:64a5036e:fix,axllent/mailpit,CWE-918,seguro,especialista,VP,FP,"A entrada `uri` é controlada pelo usuário através do parâmetro `data` no URL. Embora haja verificações adicionais como a verificação de se o URI está na lista permitida (`tools.InArray(uri, links)`) e a correspondência com um padrão regex (`linkRe.MatchString(uri)`), essas verificações podem ser evitadas ou contornadas por um atacante. Além disso, a função `absoluteURL` pode manipular URLs de forma inesperada, potencialmente permitindo uma SSRF se não for corretamente implementada. Portanto, este código representa uma fraqueza real.","Alerta Semgrep: go.lang.security.injection.tainted-url-host.tainted-url-host
+Mensagem: A request was found to be crafted from user-input `r`. This can lead to Server-Side Request Forgery (SSRF) vulnerabilities, potentially exposing sensitive data. It is recommend where possible to not allow user-input to craft the base request, but to be treated as part of the path or query parameter. When user-input is necessary to craft the request, it is recommended to follow OWASP best practices to prevent abuse, including using an allowlist.
+Localização: linha 116
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: proxy.go | Linhas 62 a 209]
+func ProxyHandler(w http.ResponseWriter, r *http.Request) {
+	encoded := strings.TrimSpace(r.URL.Query().Get(""data""))
+	if encoded == """" {
+		logger.Log().Warn(""[proxy] Data missing"")
+		httpError(w, ""Error: Data missing"")
+		return
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] Data parameter corrupted: %s"", err.Error())
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	parts := strings.SplitN(string(decoded), "":"", 2)
+	if len(parts) != 2 {
+		logger.Log().Warnf(""[proxy] Invalid data parameter: %s"", string(decoded))
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	id := parts[0]
+	uri := parts[1]
+
+	links, err := getAssets(id)
+	if err != nil {
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	if !tools.InArray(uri, links) {
+		logger.Log().Warnf(""[proxy] URL %s not found in message %s"", uri, id)
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	if !linkRe.MatchString(uri) {
+		logger.Log().Warnf(""[proxy] invalid request %s"", uri)
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	tr := &http.Transport{}
+
+	if config.AllowUntrustedTLS {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec
+	}
+
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   10 * time.Second,
+	}
+
+	req, err := http.NewRequest(""GET"", uri, nil)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	// use requesting useragent
+	req.Header.Set(""User-Agent"", r.UserAgent())
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		logger.Log().Warnf(""[proxy] received status code %d for %s"", resp.StatusCode, uri)
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	ct := strings.ToLower(resp.Header.Get(""content-type""))
+	if !supportedProxyContentType(ct) {
+		logger.Log().Warnf(""[proxy] blocking unsupported content-type %s for %s"", ct, uri)
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+		httpError(w, ""Error: invalid request"")
+		return
+	}
+
+	// relay common headers
+	w.Header().Set(""content-type"", ct)
+	if resp.Header.Get(""last-modified"") != """" {
+		w.Header().Set(""last-modified"", resp.Header.Get(""last-modified""))
+	}
+	if resp.Header.Get(""content-disposition"") != """" {
+		w.Header().Set(""content-disposition"", resp.Header.Get(""content-disposition""))
+	}
+	if resp.Header.Get(""cache-control"") != """" {
+		w.Header().Set(""cache-control"", resp.Header.Get(""cache-control""))
+	}
+
+	// replace CSS url() values with proxy address, eg: fonts & images
+	if strings.HasPrefix(resp.Header.Get(""content-type""), ""text/css"") {
+		var re = regexp.MustCompile(`(?mi)(url\((\'|\"")?([^\)\'\""]+)(\'|\"")?\))`)
+		body = re.ReplaceAllFunc(body, func(s []byte) []byte {
+			parts := re.FindStringSubmatch(string(s))
+
+			// don't resolve inline `data:..`
+			if strings.HasPrefix(parts[3], ""data:"") {
+				return []byte(parts[3])
+			}
+
+			address, err := absoluteURL(parts[3], uri)
+			if err != nil {
+				logger.Log().Errorf(""[proxy] %s"", err.Error())
+				return []byte(parts[3])
+			}
+
+			// store asset address against message ID
+			if result, ok := assets[id]; ok {
+				if !tools.InArray(address, result.Assets) {
+					assetsMutex.Lock()
+					result.Assets = append(result.Assets, address)
+					assets[id] = result
+					assetsMutex.Unlock()
+				}
+			}
+
+			// encode with base64 to handle any special characters and group message ID with URL
+			encoded := base64.StdEncoding.EncodeToString([]byte(id + "":"" + address))
+
+			return []byte(""url("" + parts[2] + config.Webroot + ""proxy?data="" + encoded + parts[4] + "")"")
+		})
+	}
+
+	logger.Log().Debugf(""[proxy] %s (%d)"", uri, resp.StatusCode)
+
+	// relay status code - WriteHeader must come after Header.Set()
+	w.WriteHeader(resp.StatusCode)
+
+	if _, err := w.Write(body); err != nil {
+		logger.Log().Warnf(""[proxy] %s"", err.Error())
+	}
+}",,,,
+E-FP,TPA:nebula-mesh:CWE-614:HandleCallback:59e3155a:fix,forgekeep/nebula-mesh,CWE-614,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código não está definindo a flag 'Secure' para o cookie de sessão. A flag 'Secure' deve ser definida como 'true' para garantir que o cookie só seja enviado por conexões HTTPS, o que ajuda a proteger contra ataques de cookies em sessão via HTTP.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 113
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 105 a 123]
+func (o *OIDC) HandleLogin(rw http.ResponseWriter, r *http.Request) {
+	state, err := randomToken()
+	if err != nil {
+		o.logger.Error(""oidc state"", ""error"", err)
+		http.Error(rw, ""internal error"", http.StatusInternalServerError)
+		return
+	}
+	o.rememberState(state)
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oidcStateCookieName,
+		Value:    state,
+		Path:     ""/"",
+		HttpOnly: true,
+		Secure:   o.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oidcStateTTL.Seconds()),
+	})
+	http.Redirect(rw, r, o.oauth.AuthCodeURL(state), http.StatusSeeOther)
+}",,,,
+E-FP,TPA:nebula-mesh:CWE-614:HandleCallback:59e3155a:fix,forgekeep/nebula-mesh,CWE-614,seguro,especialista,VP,FP,"O cookie de estado OIDC (oidcStateCookieName) é usado para armazenar um token de estado temporário durante o processo de autenticação. Este tipo de cookie geralmente contém informações sensíveis que devem ser protegidas contra a transmissão por conexões HTTP não seguras. Portanto, a ausência do atributo 'Secure' neste contexto constitui uma vulnerabilidade real.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 113
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 105 a 123]
+func (o *OIDC) HandleLogin(rw http.ResponseWriter, r *http.Request) {
+	state, err := randomToken()
+	if err != nil {
+		o.logger.Error(""oidc state"", ""error"", err)
+		http.Error(rw, ""internal error"", http.StatusInternalServerError)
+		return
+	}
+	o.rememberState(state)
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oidcStateCookieName,
+		Value:    state,
+		Path:     ""/"",
+		HttpOnly: true,
+		Secure:   o.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oidcStateTTL.Seconds()),
+	})
+	http.Redirect(rw, r, o.oauth.AuthCodeURL(state), http.StatusSeeOther)
+}",,,,
+E-FP,TPA:nebula-mesh:CWE-614:rememberState:59e3155a:fix,forgekeep/nebula-mesh,CWE-614,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código não está definindo a flag 'Secure' para o cookie de sessão. A flag 'Secure' deve ser definida como 'true' para garantir que o cookie só seja enviado por conexões HTTPS, o que ajuda a proteger contra ataques de cookies em sessão via HTTP.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 113
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 105 a 123]
+func (o *OIDC) HandleLogin(rw http.ResponseWriter, r *http.Request) {
+	state, err := randomToken()
+	if err != nil {
+		o.logger.Error(""oidc state"", ""error"", err)
+		http.Error(rw, ""internal error"", http.StatusInternalServerError)
+		return
+	}
+	o.rememberState(state)
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oidcStateCookieName,
+		Value:    state,
+		Path:     ""/"",
+		HttpOnly: true,
+		Secure:   o.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oidcStateTTL.Seconds()),
+	})
+	http.Redirect(rw, r, o.oauth.AuthCodeURL(state), http.StatusSeeOther)
+}",,,,
+E-FP,TPA:nebula-mesh:CWE-614:rememberState:59e3155a:fix,forgekeep/nebula-mesh,CWE-614,seguro,especialista,VP,FP,"O cookie de estado OIDC (oidcStateCookieName) é usado para armazenar um token de estado temporário durante o processo de autenticação. Este tipo de cookie geralmente contém informações sensíveis que devem ser protegidas contra a transmissão por conexões HTTP não seguras. Portanto, a ausência do atributo 'Secure' neste contexto constitui uma vulnerabilidade real.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 113
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 105 a 123]
+func (o *OIDC) HandleLogin(rw http.ResponseWriter, r *http.Request) {
+	state, err := randomToken()
+	if err != nil {
+		o.logger.Error(""oidc state"", ""error"", err)
+		http.Error(rw, ""internal error"", http.StatusInternalServerError)
+		return
+	}
+	o.rememberState(state)
+	http.SetCookie(rw, &http.Cookie{
+		Name:     oidcStateCookieName,
+		Value:    state,
+		Path:     ""/"",
+		HttpOnly: true,
+		Secure:   o.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oidcStateTTL.Seconds()),
+	})
+	http.Redirect(rw, r, o.oauth.AuthCodeURL(state), http.StatusSeeOther)
+}",,,,
+E-FP,c2b310d3:CWE-327:false_positive#6,lxc/incus,CWE-327,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código não está configurando explicitamente a versão mínima do TLS como TLS 1.3, conforme recomendado pela ferramenta Semgrep e pela orientação da comunidade de segurança. O código verifica se uma variável de ambiente `INCUS_INSECURE_TLS` é falsa ou vazia para definir a versão mínima do TLS como TLS 1.2, o que não atende à recomendação de usar TLS 1.3 por padrão em aplicativos web.","Alerta Semgrep: go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion
+Mensagem: `MinVersion` is missing from this TLS configuration.  By default, as of Go 1.22, TLS 1.2 is currently used as the minimum. General purpose web applications should default to TLS 1.3 with all other protocols disabled.  Only where it is known that a web server must support legacy clients with unsupported an insecure browsers (such as Internet Explorer 10), it may be necessary to enable TLS 1.0 to provide support. Add `MinVersion: tls.VersionTLS13' to the TLS configuration to bump the minimum version to TLS 1.3.
+Localização: linha 64
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: tls.go | Linhas 63 a 74]
+func InitTLSConfig() *tls.Config {
+	config := &tls.Config{}
+
+	// Restrict to TLS 1.3 unless INCUS_INSECURE_TLS is set.
+	if util.IsFalseOrEmpty(os.Getenv(""INCUS_INSECURE_TLS"")) {
+		config.MinVersion = tls.VersionTLS13
+	} else {
+		config.MinVersion = tls.VersionTLS12
+	}
+
+	return config
+}",,,,
+E-FP,c2b310d3:CWE-327:false_positive#6,lxc/incus,CWE-327,seguro,especialista,VP,FP,"O código configura explicitamente a versão mínima do TLS como TLS 1.3, a menos que uma variável de ambiente indique o contrário. Isso é considerado uma prática recomendada para garantir a segurança das conexões, conforme indicado na mensagem do alerta.","Alerta Semgrep: go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion
+Mensagem: `MinVersion` is missing from this TLS configuration.  By default, as of Go 1.22, TLS 1.2 is currently used as the minimum. General purpose web applications should default to TLS 1.3 with all other protocols disabled.  Only where it is known that a web server must support legacy clients with unsupported an insecure browsers (such as Internet Explorer 10), it may be necessary to enable TLS 1.0 to provide support. Add `MinVersion: tls.VersionTLS13' to the TLS configuration to bump the minimum version to TLS 1.3.
+Localização: linha 64
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: tls.go | Linhas 63 a 74]
+func InitTLSConfig() *tls.Config {
+	config := &tls.Config{}
+
+	// Restrict to TLS 1.3 unless INCUS_INSECURE_TLS is set.
+	if util.IsFalseOrEmpty(os.Getenv(""INCUS_INSECURE_TLS"")) {
+		config.MinVersion = tls.VersionTLS13
+	} else {
+		config.MinVersion = tls.VersionTLS12
+	}
+
+	return config
+}",,,,
+E-FP,d137a063:CWE-327:false_positive#6,lxc/incus,CWE-327,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código não está configurando explicitamente a versão mínima do TLS como TLS 1.3, conforme recomendado pela ferramenta Semgrep e pela orientação da comunidade de segurança. O código verifica se uma variável de ambiente `INCUS_INSECURE_TLS` é falsa ou vazia para definir a versão mínima do TLS como TLS 1.2, o que não atende à recomendação de usar TLS 1.3 por padrão em aplicativos web.","Alerta Semgrep: go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion
+Mensagem: `MinVersion` is missing from this TLS configuration.  By default, as of Go 1.22, TLS 1.2 is currently used as the minimum. General purpose web applications should default to TLS 1.3 with all other protocols disabled.  Only where it is known that a web server must support legacy clients with unsupported an insecure browsers (such as Internet Explorer 10), it may be necessary to enable TLS 1.0 to provide support. Add `MinVersion: tls.VersionTLS13' to the TLS configuration to bump the minimum version to TLS 1.3.
+Localização: linha 63
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: tls.go | Linhas 62 a 73]
+func InitTLSConfig() *tls.Config {
+	config := &tls.Config{}
+
+	// Restrict to TLS 1.3 unless INCUS_INSECURE_TLS is set.
+	if util.IsFalseOrEmpty(os.Getenv(""INCUS_INSECURE_TLS"")) {
+		config.MinVersion = tls.VersionTLS13
+	} else {
+		config.MinVersion = tls.VersionTLS12
+	}
+
+	return config
+}",,,,
+E-FP,d137a063:CWE-327:false_positive#6,lxc/incus,CWE-327,seguro,especialista,VP,FP,"O código configura explicitamente a versão mínima do TLS como TLS 1.3 quando a variável de ambiente INCUS_INSECURE_TLS não está definida ou é falsa. Isso atende aos requisitos recomendados para aplicativos web gerais, que devem usar pelo menos TLS 1.3. A ausência de uma configuração explícita para TLS 1.2 em ambientes onde a segurança é priorizada constitui uma vulnerabilidade.","Alerta Semgrep: go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion
+Mensagem: `MinVersion` is missing from this TLS configuration.  By default, as of Go 1.22, TLS 1.2 is currently used as the minimum. General purpose web applications should default to TLS 1.3 with all other protocols disabled.  Only where it is known that a web server must support legacy clients with unsupported an insecure browsers (such as Internet Explorer 10), it may be necessary to enable TLS 1.0 to provide support. Add `MinVersion: tls.VersionTLS13' to the TLS configuration to bump the minimum version to TLS 1.3.
+Localização: linha 63
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: tls.go | Linhas 62 a 73]
+func InitTLSConfig() *tls.Config {
+	config := &tls.Config{}
+
+	// Restrict to TLS 1.3 unless INCUS_INSECURE_TLS is set.
+	if util.IsFalseOrEmpty(os.Getenv(""INCUS_INSECURE_TLS"")) {
+		config.MinVersion = tls.VersionTLS13
+	} else {
+		config.MinVersion = tls.VersionTLS12
+	}
+
+	return config
+}",,,,
+E-FP,e4311d83:CWE-614:false_positive#1,argoproj/argo-cd,CWE-614,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código não está definindo a flag 'Secure' para o cookie de sessão. A flag 'Secure' deve ser definida como 'true' para garantir que o cookie só seja transmitido por canais seguros, como HTTPS. O valor atual da variável `a.secureCookie` pode não estar sendo corretamente configurado ou pode estar sendo ignorado em algum lugar no código.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 206
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 189 a 215]
+func (a *ClientApp) generateAppState(returnURL string, w http.ResponseWriter) (string, error) {
+	// According to the spec (https://www.rfc-editor.org/rfc/rfc6749#section-10.10), this must be guessable with
+	// probability <= 2^(-128). The following call generates one of 52^24 random strings, ~= 2^136 possibilities.
+	randStr, err := rand.String(24)
+	if err != nil {
+		return """", fmt.Errorf(""failed to generate app state: %w"", err)
+	}
+	if returnURL == """" {
+		returnURL = a.baseHRef
+	}
+	cookieValue := fmt.Sprintf(""%s:%s"", randStr, returnURL)
+	if encrypted, err := crypto.Encrypt([]byte(cookieValue), a.encryptionKey); err != nil {
+		return """", err
+	} else {
+		cookieValue = hex.EncodeToString(encrypted)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     common.StateCookieName,
+		Value:    cookieValue,
+		Expires:  time.Now().Add(common.StateCookieMaxAge),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   a.secureCookie,
+	})
+	return randStr, nil
+}",,,,
+E-FP,e4311d83:CWE-614:false_positive#1,argoproj/argo-cd,CWE-614,seguro,especialista,VP,FP,"O cookie de estado (state cookie) está sendo gerado e enviado sem o atributo 'Secure'. Embora o valor do cookie seja criptografado, a ausência do atributo 'Secure' significa que ele ainda pode ser transmitido por conexões HTTP não cifradas. Isso expõe o valor sensível na rede, mesmo que criptografado, e constitui uma vulnerabilidade de segurança.","Alerta Semgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure
+Mensagem: A session cookie was detected without setting the 'Secure' flag. The 'secure' flag for cookies prevents the client from transmitting the cookie over insecure channels such as HTTP. Set the 'Secure' flag by setting 'Secure' to 'true' in the Options struct.
+Localização: linha 206
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: oidc.go | Linhas 189 a 215]
+func (a *ClientApp) generateAppState(returnURL string, w http.ResponseWriter) (string, error) {
+	// According to the spec (https://www.rfc-editor.org/rfc/rfc6749#section-10.10), this must be guessable with
+	// probability <= 2^(-128). The following call generates one of 52^24 random strings, ~= 2^136 possibilities.
+	randStr, err := rand.String(24)
+	if err != nil {
+		return """", fmt.Errorf(""failed to generate app state: %w"", err)
+	}
+	if returnURL == """" {
+		returnURL = a.baseHRef
+	}
+	cookieValue := fmt.Sprintf(""%s:%s"", randStr, returnURL)
+	if encrypted, err := crypto.Encrypt([]byte(cookieValue), a.encryptionKey); err != nil {
+		return """", err
+	} else {
+		cookieValue = hex.EncodeToString(encrypted)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     common.StateCookieName,
+		Value:    cookieValue,
+		Expires:  time.Now().Add(common.StateCookieMaxAge),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   a.secureCookie,
+	})
+	return randStr, nil
+}",,,,
+E-FN,TPA:anubis:CWE-601:ServeHTTPNext:d5149d03:vuln,techarohq/anubis,CWE-601,vulneravel,baseline,VP,VP,"O código está sujeito a uma vulnerabilidade de redirecionamento aberto (open redirect) porque ele aceita um valor de entrada do usuário (`redir`) para construir o URL de redirecionamento. Se um atacante enviar uma URL maliciosa como entrada, o servidor pode ser enganado em redirecionar os usuários para esse site malicioso.","Alerta Semgrep: go.lang.security.injection.open-redirect.open-redirect
+Mensagem: An HTTP redirect was found to be crafted from user-input `r`. This can lead to open redirect vulnerabilities, potentially allowing attackers to redirect users to malicious web sites. It is recommend where possible to not allow user-input to craft the redirect URL. When user-input is necessary to craft the request, it is recommended to follow OWASP best practices to restrict the URL to domains in an allowlist.
+Localização: linha 391
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: http.go | Linhas 367 a 403]
+func (s *Server) ServeHTTPNext(w http.ResponseWriter, r *http.Request) {
+	if s.next == nil {
+		localizer := localization.GetLocalizer(r)
+
+		redir := r.FormValue(""redir"")
+		urlParsed, err := r.URL.Parse(redir)
+		if err != nil {
+			s.respondWithStatus(w, r, localizer.T(""redirect_not_parseable""), makeCode(err), http.StatusBadRequest)
+			return
+		}
+
+		hostNotAllowed := len(urlParsed.Host) > 0 &&
+			len(s.opts.RedirectDomains) != 0 &&
+			!matchRedirectDomain(s.opts.RedirectDomains, urlParsed.Host)
+		hostMismatch := r.URL.Host != """" && urlParsed.Host != r.URL.Host
+
+		if hostNotAllowed || hostMismatch {
+			lg := internal.GetRequestLogger(s.logger, r)
+			lg.Debug(""domain not allowed"", ""domain"", urlParsed.Host)
+			s.respondWithStatus(w, r, localizer.T(""redirect_domain_not_allowed""), makeCode(err), http.StatusBadRequest)
+			return
+		}
+
+		if redir != """" {
+			http.Redirect(w, r, redir, http.StatusFound)
+			return
+		}
+
+		templ.Handler(
+			web.Base(localizer.T(""you_are_not_a_bot""), web.StaticHappy(localizer), s.policy.Impressum, localizer),
+		).ServeHTTP(w, r)
+	} else {
+		requestsProxied.WithLabelValues(r.Host).Inc()
+		r = s.stripBasePrefixFromRequest(r)
+		s.next.ServeHTTP(w, r)
+	}
+}",,,,
+E-FN,TPA:anubis:CWE-601:ServeHTTPNext:d5149d03:vuln,techarohq/anubis,CWE-601,vulneravel,especialista,FP,FN,"O código implementa uma verificação adequada para garantir que o destino do redirecionamento seja um domínio permitido. A função `matchRedirectDomain` é usada para verificar se o domínio do URL de redirecionamento está na lista de domínios confiáveis (`s.opts.RedirectDomains`). Se o domínio não estiver na lista ou for diferente do domínio da requisição original, um erro é retornado e o redirecionamento não ocorre. Portanto, este código não constitui uma vulnerabilidade de redirecionamento aberto.","Alerta Semgrep: go.lang.security.injection.open-redirect.open-redirect
+Mensagem: An HTTP redirect was found to be crafted from user-input `r`. This can lead to open redirect vulnerabilities, potentially allowing attackers to redirect users to malicious web sites. It is recommend where possible to not allow user-input to craft the redirect URL. When user-input is necessary to craft the request, it is recommended to follow OWASP best practices to restrict the URL to domains in an allowlist.
+Localização: linha 391
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: http.go | Linhas 367 a 403]
+func (s *Server) ServeHTTPNext(w http.ResponseWriter, r *http.Request) {
+	if s.next == nil {
+		localizer := localization.GetLocalizer(r)
+
+		redir := r.FormValue(""redir"")
+		urlParsed, err := r.URL.Parse(redir)
+		if err != nil {
+			s.respondWithStatus(w, r, localizer.T(""redirect_not_parseable""), makeCode(err), http.StatusBadRequest)
+			return
+		}
+
+		hostNotAllowed := len(urlParsed.Host) > 0 &&
+			len(s.opts.RedirectDomains) != 0 &&
+			!matchRedirectDomain(s.opts.RedirectDomains, urlParsed.Host)
+		hostMismatch := r.URL.Host != """" && urlParsed.Host != r.URL.Host
+
+		if hostNotAllowed || hostMismatch {
+			lg := internal.GetRequestLogger(s.logger, r)
+			lg.Debug(""domain not allowed"", ""domain"", urlParsed.Host)
+			s.respondWithStatus(w, r, localizer.T(""redirect_domain_not_allowed""), makeCode(err), http.StatusBadRequest)
+			return
+		}
+
+		if redir != """" {
+			http.Redirect(w, r, redir, http.StatusFound)
+			return
+		}
+
+		templ.Handler(
+			web.Base(localizer.T(""you_are_not_a_bot""), web.StaticHappy(localizer), s.policy.Impressum, localizer),
+		).ServeHTTP(w, r)
+	} else {
+		requestsProxied.WithLabelValues(r.Host).Inc()
+		r = s.stripBasePrefixFromRequest(r)
+		s.next.ServeHTTP(w, r)
+	}
+}",,,,
+E-FN,TPA:cri-o:CWE-94:pinNamespaces:f69a77e0:vuln,cri-o/cri-o,CWE-94,vulneravel,baseline,FP,FN,"O alerta é um FALSO POSITIVO porque o código não executa comandos dinâmicos baseados em entradas de usuários. A função `exec.Command` está sendo usada para chamar um comando fixo (`pinns`) com argumentos construídos internamente, sem receber entrada do usuário que possa ser manipulada para injeção de código.","Alerta Semgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+Mensagem: Detected non-static command inside Command. Audit the input to 'exec.Command'. If unverified user data can reach this call site, this is a code injection vulnerability. A malicious actor can inject a malicious script to execute arbitrary code.
+Localização: linha 97
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: namespaces_linux.go | Linhas 59 a 129]
+func pinNamespaces(nsTypes []NSType, cfg *config.Config, sysctls map[string]string) ([]NamespaceIface, error) {
+	typeToArg := map[NSType]string{
+		IPCNS:  ""-i"",
+		UTSNS:  ""-u"",
+		USERNS: ""-U"",
+		NETNS:  ""-n"",
+	}
+
+	pinnedNamespace := uuid.New().String()
+	pinnsArgs := []string{
+		""-d"", cfg.NamespacesDir,
+		""-f"", pinnedNamespace,
+	}
+
+	if len(sysctls) != 0 {
+		pinnsArgs = append(pinnsArgs, ""-s"", getSysctlForPinns(sysctls))
+	}
+
+	type namespaceInfo struct {
+		path   string
+		nsType NSType
+	}
+
+	mountedNamespaces := make([]namespaceInfo, 0, len(nsTypes))
+	for _, nsType := range nsTypes {
+		arg, ok := typeToArg[nsType]
+		if !ok {
+			return nil, errors.Errorf(""Invalid namespace type: %s"", nsType)
+		}
+		pinnsArgs = append(pinnsArgs, arg)
+		mountedNamespaces = append(mountedNamespaces, namespaceInfo{
+			path:   filepath.Join(cfg.NamespacesDir, fmt.Sprintf(""%sns"", string(nsType)), pinnedNamespace),
+			nsType: nsType,
+		})
+	}
+	pinns := cfg.PinnsPath
+
+	logrus.Debugf(""calling pinns with %v"", pinnsArgs)
+	output, err := exec.Command(pinns, pinnsArgs...).Output()
+	if len(output) != 0 {
+		logrus.Debugf(""pinns output: %s"", string(output))
+	}
+	if err != nil {
+		// cleanup after ourselves
+		failedUmounts := make([]string, 0)
+		for _, info := range mountedNamespaces {
+			if unmountErr := unix.Unmount(info.path, unix.MNT_DETACH); unmountErr != nil {
+				failedUmounts = append(failedUmounts, info.path)
+			}
+		}
+		if len(failedUmounts) != 0 {
+			return nil, fmt.Errorf(""failed to cleanup %v after pinns failure %s %v"", failedUmounts, output, err)
+		}
+		return nil, fmt.Errorf(""failed to pin namespaces %v: %s %v"", nsTypes, output, err)
+	}
+
+	returnedNamespaces := make([]NamespaceIface, 0)
+	for _, info := range mountedNamespaces {
+		ret, err := nspkg.GetNS(info.path)
+		if err != nil {
+			return nil, err
+		}
+
+		returnedNamespaces = append(returnedNamespaces, &Namespace{
+			ns:     ret.(NS),
+			nsType: info.nsType,
+			nsPath: info.path,
+		})
+	}
+	return returnedNamespaces, nil
+}",,,,
+E-FN,TPA:cri-o:CWE-94:pinNamespaces:f69a77e0:vuln,cri-o/cri-o,CWE-94,vulneravel,especialista,FP,FN,"O texto do comando 'pinns' é constante do programa; a entrada externa é apenas dado interpolado, não código de comando.","Alerta Semgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+Mensagem: Detected non-static command inside Command. Audit the input to 'exec.Command'. If unverified user data can reach this call site, this is a code injection vulnerability. A malicious actor can inject a malicious script to execute arbitrary code.
+Localização: linha 97
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: namespaces_linux.go | Linhas 59 a 129]
+func pinNamespaces(nsTypes []NSType, cfg *config.Config, sysctls map[string]string) ([]NamespaceIface, error) {
+	typeToArg := map[NSType]string{
+		IPCNS:  ""-i"",
+		UTSNS:  ""-u"",
+		USERNS: ""-U"",
+		NETNS:  ""-n"",
+	}
+
+	pinnedNamespace := uuid.New().String()
+	pinnsArgs := []string{
+		""-d"", cfg.NamespacesDir,
+		""-f"", pinnedNamespace,
+	}
+
+	if len(sysctls) != 0 {
+		pinnsArgs = append(pinnsArgs, ""-s"", getSysctlForPinns(sysctls))
+	}
+
+	type namespaceInfo struct {
+		path   string
+		nsType NSType
+	}
+
+	mountedNamespaces := make([]namespaceInfo, 0, len(nsTypes))
+	for _, nsType := range nsTypes {
+		arg, ok := typeToArg[nsType]
+		if !ok {
+			return nil, errors.Errorf(""Invalid namespace type: %s"", nsType)
+		}
+		pinnsArgs = append(pinnsArgs, arg)
+		mountedNamespaces = append(mountedNamespaces, namespaceInfo{
+			path:   filepath.Join(cfg.NamespacesDir, fmt.Sprintf(""%sns"", string(nsType)), pinnedNamespace),
+			nsType: nsType,
+		})
+	}
+	pinns := cfg.PinnsPath
+
+	logrus.Debugf(""calling pinns with %v"", pinnsArgs)
+	output, err := exec.Command(pinns, pinnsArgs...).Output()
+	if len(output) != 0 {
+		logrus.Debugf(""pinns output: %s"", string(output))
+	}
+	if err != nil {
+		// cleanup after ourselves
+		failedUmounts := make([]string, 0)
+		for _, info := range mountedNamespaces {
+			if unmountErr := unix.Unmount(info.path, unix.MNT_DETACH); unmountErr != nil {
+				failedUmounts = append(failedUmounts, info.path)
+			}
+		}
+		if len(failedUmounts) != 0 {
+			return nil, fmt.Errorf(""failed to cleanup %v after pinns failure %s %v"", failedUmounts, output, err)
+		}
+		return nil, fmt.Errorf(""failed to pin namespaces %v: %s %v"", nsTypes, output, err)
+	}
+
+	returnedNamespaces := make([]NamespaceIface, 0)
+	for _, info := range mountedNamespaces {
+		ret, err := nspkg.GetNS(info.path)
+		if err != nil {
+			return nil, err
+		}
+
+		returnedNamespaces = append(returnedNamespaces, &Namespace{
+			ns:     ret.(NS),
+			nsType: info.nsType,
+			nsPath: info.path,
+		})
+	}
+	return returnedNamespaces, nil
+}",,,,
+E-FN,TPA:ekuiper:CWE-79:Worker:7bf04f98:vuln,lf-edge/ekuiper,CWE-79,vulneravel,baseline,FP,FN,"O alerta é um FALSO POSITIVO porque o código não está diretamente envolvido em operações de renderização de conteúdo HTML. O `text/template` package do Go é usado aqui para processar dados JSON, que não são destinados a serem exibidos diretamente no navegador e, portanto, não estão sujeitos a ataques XSS.","Alerta Semgrep: go.lang.security.audit.xss.import-text-template.import-text-template
+Mensagem: When working with web applications that involve rendering user-generated  content, it's important to properly escape any HTML content to prevent  Cross-Site Scripting (XSS) attacks. In Go, the `text/template` package does  not automatically escape HTML content, which can leave your application  vulnerable to these types of attacks. To mitigate this risk, it's  recommended to use the `html/template` package instead, which provides  built-in functionality for HTML escaping. By using `html/template` to render  your HTML content, you can help to ensure that your web application is more  secure and less susceptible to XSS vulnerabilities.
+Localização: linha 21
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: transform_op.go | Linhas 1 a 45]
+// Copyright 2024 EMQ Technologies Co., Ltd.
+//
+// Licensed under the Apache License, Version 2.0 (the ""License"");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an ""AS IS"" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package node
+
+import (
+	""bytes""
+	""encoding/json""
+	""fmt""
+	""text/template""
+
+	""github.com/lf-edge/ekuiper/contract/v2/api""
+
+	""github.com/lf-edge/ekuiper/v2/internal/pkg/def""
+	""github.com/lf-edge/ekuiper/v2/internal/topo/transform""
+	""github.com/lf-edge/ekuiper/v2/internal/xsql""
+	""github.com/lf-edge/ekuiper/v2/pkg/infra""
+	""github.com/lf-edge/ekuiper/v2/pkg/timex""
+)
+
+// TransformOp transforms the row/collection to sink tuples
+// Immutable: false
+// Change trigger frequency: true, by sendSingle property
+// Input: Row/Collection
+// Output: MessageTuple, SinkTupleList, RawTuple
+type TransformOp struct {
+	*defaultSinkNode
+	dataField   string
+	fields      []string
+	sendSingle  bool
+	omitIfEmpty bool
+	// If the result format is text, the dataTemplate should be used to format the data and skip the encode step. Otherwise, the text must be unmarshall back to map
+	isTextFormat bool
+	dt           *template.Template",,,,
+E-FN,TPA:ekuiper:CWE-79:Worker:7bf04f98:vuln,lf-edge/ekuiper,CWE-79,vulneravel,especialista,FP,FN,"O código não está utilizando a função `template.HTML` para incorporar dados de entrada do usuário diretamente na saída HTML. Em vez disso, o código utiliza a função `text/template` que já aplica escape automático ao conteúdo HTML, mitigando assim a vulnerabilidade XSS.","Alerta Semgrep: go.lang.security.audit.xss.import-text-template.import-text-template
+Mensagem: When working with web applications that involve rendering user-generated  content, it's important to properly escape any HTML content to prevent  Cross-Site Scripting (XSS) attacks. In Go, the `text/template` package does  not automatically escape HTML content, which can leave your application  vulnerable to these types of attacks. To mitigate this risk, it's  recommended to use the `html/template` package instead, which provides  built-in functionality for HTML escaping. By using `html/template` to render  your HTML content, you can help to ensure that your web application is more  secure and less susceptible to XSS vulnerabilities.
+Localização: linha 21
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: transform_op.go | Linhas 1 a 45]
+// Copyright 2024 EMQ Technologies Co., Ltd.
+//
+// Licensed under the Apache License, Version 2.0 (the ""License"");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an ""AS IS"" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package node
+
+import (
+	""bytes""
+	""encoding/json""
+	""fmt""
+	""text/template""
+
+	""github.com/lf-edge/ekuiper/contract/v2/api""
+
+	""github.com/lf-edge/ekuiper/v2/internal/pkg/def""
+	""github.com/lf-edge/ekuiper/v2/internal/topo/transform""
+	""github.com/lf-edge/ekuiper/v2/internal/xsql""
+	""github.com/lf-edge/ekuiper/v2/pkg/infra""
+	""github.com/lf-edge/ekuiper/v2/pkg/timex""
+)
+
+// TransformOp transforms the row/collection to sink tuples
+// Immutable: false
+// Change trigger frequency: true, by sendSingle property
+// Input: Row/Collection
+// Output: MessageTuple, SinkTupleList, RawTuple
+type TransformOp struct {
+	*defaultSinkNode
+	dataField   string
+	fields      []string
+	sendSingle  bool
+	omitIfEmpty bool
+	// If the result format is text, the dataTemplate should be used to format the data and skip the encode step. Otherwise, the text must be unmarshall back to map
+	isTextFormat bool
+	dt           *template.Template",,,,
+E-FN,TPA:prest:CWE-89:ReturningByRequest:159caf80:vuln,prest/prest,CWE-89,vulneravel,baseline,FP,FN,"O código não está construindo uma string SQL manualmente. Em vez disso, ele está usando a função `fmt.Sprintf` para formatar uma consulta SQL baseada em parâmetros de entrada do usuário. Este método é seguro contra injeção SQL porque os valores dos campos são inseridos como parâmetros da consulta, não diretamente na string SQL. A ferramenta Semgrep está incorretamente identificando isso como uma vulnerabilidade.","Alerta Semgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
+Mensagem: User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate data from the database. Instead, use prepared statements (`db.Query(""SELECT * FROM t WHERE id = ?"", id)`) or a safe library.
+Localização: linha 656
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: postgres.go | Linhas 635 a 658]
+func (adapter *Postgres) CountByRequest(req *http.Request) (countQuery string, err error) {
+	queries := req.URL.Query()
+	countFields := queries.Get(""_count"")
+	selectFields := queries.Get(""_select"")
+	if countFields == """" {
+		return
+	}
+	if selectFields != """" {
+		selectFields = fmt.Sprintf("", %s"", selectFields)
+	}
+	fields := strings.Split(countFields, "","")
+	for i, field := range fields {
+		if field != ""*"" && chkInvalidIdentifier(field) {
+			err = ErrInvalidIdentifier
+			return
+		}
+		if field != `*` {
+			f := strings.Split(field, ""."")
+			fields[i] = fmt.Sprintf(`""%s""`, strings.Join(f, `"".""`))
+		}
+	}
+	countQuery = fmt.Sprintf(""SELECT COUNT(%s)%s FROM"", strings.Join(fields, "",""), selectFields)
+	return
+}",,,,
+E-FN,TPA:prest:CWE-89:ReturningByRequest:159caf80:vuln,prest/prest,CWE-89,vulneravel,especialista,FP,FN,"A entrada 'countFields' é controlada pelo cliente através da requisição HTTP, mas o código utiliza uma abordagem segura para construir a consulta SQL. Ele verifica se os identificadores são válidos e as colunas são corretamente escapadas usando aspas duplas. Além disso, a função 'CountByRequest' retorna apenas a string da consulta SQL sem executá-la diretamente no banco de dados, minimizando o risco de injeção SQL.","Alerta Semgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
+Mensagem: User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate data from the database. Instead, use prepared statements (`db.Query(""SELECT * FROM t WHERE id = ?"", id)`) or a safe library.
+Localização: linha 656
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: postgres.go | Linhas 635 a 658]
+func (adapter *Postgres) CountByRequest(req *http.Request) (countQuery string, err error) {
+	queries := req.URL.Query()
+	countFields := queries.Get(""_count"")
+	selectFields := queries.Get(""_select"")
+	if countFields == """" {
+		return
+	}
+	if selectFields != """" {
+		selectFields = fmt.Sprintf("", %s"", selectFields)
+	}
+	fields := strings.Split(countFields, "","")
+	for i, field := range fields {
+		if field != ""*"" && chkInvalidIdentifier(field) {
+			err = ErrInvalidIdentifier
+			return
+		}
+		if field != `*` {
+			f := strings.Split(field, ""."")
+			fields[i] = fmt.Sprintf(`""%s""`, strings.Join(f, `"".""`))
+		}
+	}
+	countQuery = fmt.Sprintf(""SELECT COUNT(%s)%s FROM"", strings.Join(fields, "",""), selectFields)
+	return
+}",,,,
+E-FN,TPD:1f40a88b:CWE-79:true_positive,beego/beego,CWE-79,vulneravel,baseline,FP,FN,"O código não está utilizando a função 'template.HTML()' diretamente, mas sim encapsulando uma string em um tipo 'template.HTML'. Isso significa que o conteúdo da variável 'raw' é provavelmente gerado pelo sistema e não por entrada do usuário. Portanto, não há risco de injeção de código XSS neste contexto.","Alerta Semgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type
+Mensagem: Semgrep could not determine that the argument to 'template.HTML()' is a constant. 'template.HTML()' and similar does not escape contents. Be absolutely sure there is no user-controlled data in this template. If user data can reach this template, you may have a XSS vulnerability. Instead, do not use this function and use 'template.Execute()'.
+Localização: linha 194
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: templatefunc.go | Linhas 193 a 195]
+func Str2html(raw string) template.HTML {
+	return template.HTML(raw)
+}",,,,
+E-FN,TPD:1f40a88b:CWE-79:true_positive,beego/beego,CWE-79,vulneravel,especialista,FP,FN,"O código não envolve a incorporação de dados do usuário em uma saída HTML. A função Str2html é usada para converter uma string em template.HTML, mas essa conversão ocorre dentro de outra função que deve ser responsável por garantir a segurança contra XSS. O alerta foi emitido porque Semgrep não pôde determinar se o argumento passado para 'template.HTML()' é uma constante, o que leva a um falso positivo.","Alerta Semgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type
+Mensagem: Semgrep could not determine that the argument to 'template.HTML()' is a constant. 'template.HTML()' and similar does not escape contents. Be absolutely sure there is no user-controlled data in this template. If user data can reach this template, you may have a XSS vulnerability. Instead, do not use this function and use 'template.Execute()'.
+Localização: linha 194
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: templatefunc.go | Linhas 193 a 195]
+func Str2html(raw string) template.HTML {
+	return template.HTML(raw)
+}",,,,
+E-VN/B-FP,191ea16c:CWE-328:false_positive,kovidgoyal/kitty,CWE-328,seguro,baseline,VP,FP,"O uso do algoritmo MD5 na linha 114 é uma vulnerabilidade real. MD5 é considerado inseguro devido à sua falta de resistência a colisões, o que significa que pode haver dois diferentes dados que produzem o mesmo hash. Isso torna o MD5 inadequado para uso em contextos onde segurança é crítica, como autenticação e integridade de dados.","Alerta Semgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-md5
+Mensagem: Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.
+Localização: linha 114
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: collect.go | Linhas 108 a 118]
+func hash_for_path(path string) (string, error) {
+	return hash_cache.GetOrCreate(path, func(path string) (string, error) {
+		ans, err := data_for_path(path)
+		if err != nil {
+			return """", err
+		}
+		hash := md5.Sum(utils.UnsafeStringToBytes(ans))
+		return utils.UnsafeBytesToString(hash[:]), err
+	})
+
+}",,,,
+E-VN/B-FP,191ea16c:CWE-328:false_positive,kovidgoyal/kitty,CWE-328,seguro,especialista,FP,VN,"A função MD5 é usada aqui para calcular um hash de integridade de conteúdo, não para armazenar senhas ou segredos. Como a mensagem do alerta indica, MD5 não é resistente a colisão e, portanto, é adequado para esse propósito.","Alerta Semgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-md5
+Mensagem: Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.
+Localização: linha 114
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: collect.go | Linhas 108 a 118]
+func hash_for_path(path string) (string, error) {
+	return hash_cache.GetOrCreate(path, func(path string) (string, error) {
+		ans, err := data_for_path(path)
+		if err != nil {
+			return """", err
+		}
+		hash := md5.Sum(utils.UnsafeStringToBytes(ans))
+		return utils.UnsafeBytesToString(hash[:]), err
+	})
+
+}",,,,
+E-VN/B-FP,1f40a88b:CWE-338:false_positive,beego/beego,CWE-338,seguro,baseline,VP,FP,"O alerta é um VERDADEIRO POSITIVO (VP) porque o código está usando a biblioteca `math/rand` para gerar números aleatórios, que não é seguro para uso em contextos onde a segurança é crítica. A ferramenta recomenda usar `crypto/rand` em vez disso, pois ela fornece geração de números aleatórios criptograficamente seguros.","Alerta Semgrep: go.lang.security.audit.crypto.math_random.math-random-used
+Mensagem: Do not use `math/rand`. Use `crypto/rand` instead.
+Localização: linha 19
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: random_expired_cache.go | Linhas 1 a 43]
+// Copyright 2014 beego Author. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the ""License"");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an ""AS IS"" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cache
+
+import (
+	""context""
+	""math/rand""
+	""sync/atomic""
+	""time""
+)
+
+// RandomExpireCacheOption implement genreate random time offset expired option
+type RandomExpireCacheOption func(*RandomExpireCache)
+
+// WithRandomExpireOffsetFunc returns a RandomExpireCacheOption that configures the offset function
+func WithRandomExpireOffsetFunc(fn func() time.Duration) RandomExpireCacheOption {
+	return func(cache *RandomExpireCache) {
+		cache.offset = fn
+	}
+}
+
+// RandomExpireCache prevent cache batch invalidation
+// Cache random time offset expired
+type RandomExpireCache struct {
+	Cache
+	offset func() time.Duration
+}
+
+// Put random time offset expired
+func (rec *RandomExpireCache) Put(ctx context.Context, key string, val interface{}, timeout time.Duration) error {
+	timeout += rec.offset()",,,,
+E-VN/B-FP,1f40a88b:CWE-338:false_positive,beego/beego,CWE-338,seguro,especialista,FP,VN,"O uso de `math/rand` neste contexto não constitui uma vulnerabilidade real. A função `Put` do `RandomExpireCache` adiciona um deslocamento aleatório ao tempo de expiração, mas o gerador de números pseudoaleatórios (`math/rand`) é usado apenas para calcular esse deslocamento. O valor final de `timeout` não é diretamente utilizado como token, chave ou nonce que dependem de imprevisibilidade. Em vez disso, ele afeta a validade do cache por um período aleatório, o que é uma prática comum e segura em sistemas de cache.","Alerta Semgrep: go.lang.security.audit.crypto.math_random.math-random-used
+Mensagem: Do not use `math/rand`. Use `crypto/rand` instead.
+Localização: linha 19
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: random_expired_cache.go | Linhas 1 a 43]
+// Copyright 2014 beego Author. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the ""License"");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an ""AS IS"" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cache
+
+import (
+	""context""
+	""math/rand""
+	""sync/atomic""
+	""time""
+)
+
+// RandomExpireCacheOption implement genreate random time offset expired option
+type RandomExpireCacheOption func(*RandomExpireCache)
+
+// WithRandomExpireOffsetFunc returns a RandomExpireCacheOption that configures the offset function
+func WithRandomExpireOffsetFunc(fn func() time.Duration) RandomExpireCacheOption {
+	return func(cache *RandomExpireCache) {
+		cache.offset = fn
+	}
+}
+
+// RandomExpireCache prevent cache batch invalidation
+// Cache random time offset expired
+type RandomExpireCache struct {
+	Cache
+	offset func() time.Duration
+}
+
+// Put random time offset expired
+func (rec *RandomExpireCache) Put(ctx context.Context, key string, val interface{}, timeout time.Duration) error {
+	timeout += rec.offset()",,,,
+E-VN/B-FP,53d08d80:CWE-319:false_positive,kyverno/kyverno,CWE-319,seguro,baseline,VP,FP,"O código desabilita a verificação de certificados TLS/SSL, o que torna o sistema vulnerável a ataques Man-in-the-Middle (MTM). Esta prática deve ser usada apenas para fins de depuração e não em produção.","Alerta Semgrep: problem-based-packs.insecure-transport.go-stdlib.bypass-tls-verification.bypass-tls-verification
+Mensagem: Checks for disabling of TLS/SSL certificate verification. This should only be used for debugging purposes because it leads to vulnerability to MTM attacks.
+Localização: linha 120
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: client.go | Linhas 118 a 124]
+func WithAllowInsecureRegistry() Option {
+	return func(c *config) error {
+		c.transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
+		c.allowInsecureRegistry = true
+		return nil
+	}
+}",,,,
+E-VN/B-FP,53d08d80:CWE-319:false_positive,kyverno/kyverno,CWE-319,seguro,especialista,FP,VN,"O código desabilita a verificação de certificados TLS/SSL apenas para fins de depuração, conforme indicado no comentário 'nolint:gosec'. Isso não constitui uma vulnerabilidade real porque é um comportamento intencional e controlado. A desativação da verificação de certificados só deve ser usada em ambientes de desenvolvimento ou teste, onde a segurança não é um problema crítico.","Alerta Semgrep: problem-based-packs.insecure-transport.go-stdlib.bypass-tls-verification.bypass-tls-verification
+Mensagem: Checks for disabling of TLS/SSL certificate verification. This should only be used for debugging purposes because it leads to vulnerability to MTM attacks.
+Localização: linha 120
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: client.go | Linhas 118 a 124]
+func WithAllowInsecureRegistry() Option {
+	return func(c *config) error {
+		c.transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
+		c.allowInsecureRegistry = true
+		return nil
+	}
+}",,,,
+E-VN/B-FP,f1684882:CWE-319:false_positive#1,goauthentik/authentik,CWE-319,seguro,baseline,VP,FP,"O alerta indica que o servidor HTTP está sendo iniciado sem TLS, o que expõe a aplicação a ataques de interceptação e man-in-the-middle. A função `http.ListenAndServe` é usada em vez da segura `http.ListenAndServeTLS`, o que viola as diretrizes de segurança recomendadas para comunicações sensíveis.","Alerta Semgrep: go.lang.security.audit.net.use-tls.use-tls
+Mensagem: Found an HTTP server without TLS. Use 'http.ListenAndServeTLS' instead. See https://golang.org/pkg/net/http/#ListenAndServeTLS for more information.
+Localização: linha 37
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: metrics.go | Linhas 27 a 41]
+func RunServer() {
+	m := mux.NewRouter()
+	l := log.WithField(""logger"", ""authentik.outpost.metrics"")
+	m.Use(sentry.SentryNoSampleMiddleware)
+	m.HandleFunc(""/outpost.goauthentik.io/ping"", func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(204)
+	})
+	m.Path(""/metrics"").Handler(promhttp.Handler())
+	listen := config.Get().Listen.Metrics
+	l.WithField(""listen"", listen).Info(""Starting Metrics server"")
+	err := http.ListenAndServe(listen, m)
+	if err != nil {
+		l.WithError(err).Warning(""Failed to start metrics listener"")
+	}
+}",,,,
+E-VN/B-FP,f1684882:CWE-319:false_positive#1,goauthentik/authentik,CWE-319,seguro,especialista,FP,VN,"A chamada a `http.ListenAndServe` não transmite dados sensíveis. Ela está sendo usada para iniciar um servidor de métricas, que geralmente não contém informações confidenciais. Além disso, o alerta é específico para servidores HTTP sem TLS, mas neste caso, o código usa `http.ListenAndServe`, que não envia dados em texto claro.","Alerta Semgrep: go.lang.security.audit.net.use-tls.use-tls
+Mensagem: Found an HTTP server without TLS. Use 'http.ListenAndServeTLS' instead. See https://golang.org/pkg/net/http/#ListenAndServeTLS for more information.
+Localização: linha 37
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: metrics.go | Linhas 27 a 41]
+func RunServer() {
+	m := mux.NewRouter()
+	l := log.WithField(""logger"", ""authentik.outpost.metrics"")
+	m.Use(sentry.SentryNoSampleMiddleware)
+	m.HandleFunc(""/outpost.goauthentik.io/ping"", func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(204)
+	})
+	m.Path(""/metrics"").Handler(promhttp.Handler())
+	listen := config.Get().Listen.Metrics
+	l.WithField(""listen"", listen).Info(""Starting Metrics server"")
+	err := http.ListenAndServe(listen, m)
+	if err != nil {
+		l.WithError(err).Warning(""Failed to start metrics listener"")
+	}
+}",,,,
+E-VN/B-FP,f2513077:CWE-328:false_positive#1,cilium/cilium,CWE-328,seguro,baseline,VP,FP,"O uso do algoritmo MD5 é considerado inseguro devido à sua falta de resistência a colisões. O código fornecido usa MD5 para calcular um hash, o que expõe os dados aos riscos associados a essa vulnerabilidade.","Alerta Semgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-md5
+Mensagem: Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.
+Localização: linha 124
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: metric_config_watcher.go | Linhas 123 a 126]
+func calculateMetricHash(file []byte) uint64 {
+	sum := md5.Sum(file)
+	return binary.LittleEndian.Uint64(sum[0:16])
+}",,,,
+E-VN/B-FP,f2513077:CWE-328:false_positive#1,cilium/cilium,CWE-328,seguro,especialista,FP,VN,"A função md5.Sum é usada aqui para calcular um hash de métrica, que não requer a resistência à colisão ou segurança criptográfica. O contexto desta função é o cálculo de um hash único para fins de identificação ou integridade de arquivo, e não para armazenamento seguro de senhas ou dados confidenciais.","Alerta Semgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-md5
+Mensagem: Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.
+Localização: linha 124
+
+--- CÓDIGO FONTE RELEVANTE ---
+
+[Arquivo: metric_config_watcher.go | Linhas 123 a 126]
+func calculateMetricHash(file []byte) uint64 {
+	sum := md5.Sum(file)
+	return binary.LittleEndian.Uint64(sum[0:16])
+}",,,,
