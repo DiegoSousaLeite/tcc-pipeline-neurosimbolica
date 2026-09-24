@@ -1,10 +1,10 @@
 {
   "run_id": "rodada-5-direto",
-  "commit": "19cd852",
-  "comando": "run_pipeline.py --tudo --modo-montagem triagem --run-id rodada-5-direto --modelo ollama:qwen2.5-coder:7b --prompt baseline_direto",
-  "inicio_utc": "2026-09-24T07:12:41.029336+00:00",
-  "fim_utc": "2026-09-24T09:12:54.959554+00:00",
-  "duracao_s": 7213.93,
+  "commit": "1ad91fc",
+  "comando": "run_pipeline.py --tudo --modo-montagem triagem --run-id rodada-5-direto --modelo ollama:qwen2.5-coder:7b --prompt especialista_direto",
+  "inicio_utc": "2026-09-24T09:13:21.503328+00:00",
+  "fim_utc": "2026-09-24T11:18:54.765020+00:00",
+  "duracao_s": 7533.26,
   "semgrep": {
     "versao": "1.167.0",
     "ruleset": "p/default",
@@ -54,8 +54,8 @@
   "bracos": [
     {
       "modelo": "ollama:qwen2.5-coder:7b",
-      "prompt": "baseline_direto",
-      "csv": "ollama-qwen2.5-coder-7b__baseline_direto.csv"
+      "prompt": "especialista_direto",
+      "csv": "ollama-qwen2.5-coder-7b__especialista_direto.csv"
     }
   ],
   "precos": {
