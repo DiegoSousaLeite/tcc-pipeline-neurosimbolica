@@ -1,5 +1,11 @@
 # Rodada 6 — o modelo maior não levanta o teto, e a métrica agregada engana
 
+> **Reexecução (2026-09-24).** Os CSVs originais desta rodada foram apagados de
+> `results/`. A rodada foi reexecutada com a mesma configuração e o mesmo run_id
+> (**não é uma rodada nova**); os CSVs estão versionados em
+> `resultados_parte2/rodada-6-gemma/`, e a conferência contra os números abaixo está em
+> `resultados_parte2/rodada-6-gemma/REEXECUCAO.md`.
+
 > **O que esta rodada testa.** Mesmo enquadramento da Rodada 5 (templates
 > `*_direto`), mesma população, mesmo cache simbólico, **semente 42 e temperatura
 > 0**. A única variável é o **modelo**: `qwen2.5-coder:7b` → `gemma2:9b`.

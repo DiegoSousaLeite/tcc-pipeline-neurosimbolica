@@ -1,5 +1,11 @@
 # Rodada 4 — o braço de triagem, e o que o grupo de controle revelou
 
+> **Reexecução (2026-09-24).** Os CSVs originais desta rodada foram apagados de
+> `results/`. A rodada foi reexecutada com a mesma configuração e o mesmo run_id
+> (**não é uma rodada nova**); os CSVs estão versionados em
+> `resultados_parte2/rodada-4-triagem/`, e a conferência contra os números abaixo está em
+> `resultados_parte2/rodada-4-triagem/REEXECUCAO.md`.
+
 > **Rodada fechada.** Piloto 00:43–02:52, população inteira 03:25–05:33, 3.171
 > chamadas de LLM, tudo sem supervisão. Todos os números abaixo são finais.
 

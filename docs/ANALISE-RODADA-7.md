@@ -6,14 +6,15 @@
 > instrução do `*_v2` contra presumir mitigação ausente. Change
 > `ficha-por-regra-semgrep`.
 >
-> **Conclusão (revista em 2026-09-23 23h, após a Rodada 7b).** O efeito da
-> granularidade da ficha **depende do modelo**. No qwen, a ficha por regra não
-> melhora o recall e aumenta os falsos alarmes (pareado, não significativo). No
-> gemma/filtro é o contrário, e com força: com a ficha por CWE o gemma gera 173
-> falsos alarmes — 57 só na CWE-327, onde a ficha fala de `md5` e o alerta é de
-> TLS —, contra 69 com a ficha por regra (pareado, p ≈ 10⁻¹⁷); com a ficha por
-> CWE o especialista do gemma fica **pior que o baseline**. O v2 troca muitos
-> falsos alarmes por alguns acertos a mais e, no balanço, piora a acurácia.
+> **Conclusão (final, 2026-09-24, com todas as comparações pareadas).** A ficha
+> por CWE vence em **3 de 4 cenários**, e nos dois da triagem com folga
+> (qwen 80 × 2, gemma 116 × 12, pareados). A ficha por regra só vence no
+> gemma/filtro (19 × 121), e por um motivo localizado: ali o modelo vê a
+> mensagem do alerta de TLS **e** uma ficha por CWE que fala de `md5`, e junta as
+> duas num falso alarme (57 só na CWE-327). Na triagem, sem o cabeçalho do
+> alerta, a ficha por regra — que descreve o perigo da construção exata — é a que
+> induz o alarme. O v2 troca muitos falsos alarmes por alguns acertos a mais e,
+> no balanço, piora a acurácia.
 
 ## 1. Identificação
 
@@ -173,15 +174,25 @@ não depende disso.
 |---|---|---|
 | qwen/filtro (pareado) | 12 × 4, p = 0,077 | por CWE levemente melhor, não significativo |
 | gemma/filtro (pareado) | 19 × **121**, p ≈ 10⁻¹⁷ | por regra muito melhor |
-| qwen/triagem (vs R5, agregado) | FP 35 → 119 | por regra pior |
-| gemma/triagem (vs R6, agregado) | FP 107 → 212 | por regra pior |
+| qwen/triagem (pareado, contra a reexecução da R5) | **80** × 2, p ≈ 10⁻¹⁷ | por CWE muito melhor |
+| gemma/triagem (pareado, contra a reexecução da R6) | **116** × 12, p ≈ 10⁻¹⁹ | por CWE muito melhor |
+
+A triagem foi pareada depois que as Rodadas 5 e 6 foram reexecutadas
+(2026-09-24, mesma configuração, `resultados_parte2/rodada-{5-direto,6-gemma}/`).
+Nos candidatos com alerta, a ficha por regra multiplica os falsos alarmes
+(qwen 39 → 119; gemma 105 → 212) sem ganho relevante de recall; nos injetados
+do gabarito o recall é o mesmo com as duas fichas (qwen 34 × 35 de ~757; gemma
+48 × 50 de 736).
 
 O qwen ignorou o desalinhamento: nas CWEs desalinhadas ele já dizia FP com
-qualquer ficha. O gemma o seguiu: leu a ficha errada e alarmou. A mesma ficha é
-inócua num modelo e danosa no outro, e a ficha por regra corrige o gemma no
-filtro mas piora os dois na triagem (onde o cabeçalho do alerta é removido e a
-ficha detalhada vira a principal pista sobre o perigo). Não há granularidade que
-seja melhor nos quatro cenários.
+qualquer ficha. O gemma o seguiu no filtro: leu a ficha errada ao lado da
+mensagem do alerta e alarmou. Na triagem, sem o cabeçalho do alerta, a ficha
+por CWE desalinhada não tem com o que se combinar, e a ficha por regra — que
+descreve o perigo da construção exata — passa a ser a pista que induz o alarme,
+nos dois modelos. O padrão comum aos quatro cenários: **o modelo local alarma
+quando o texto do prompt descreve um perigo que casa com algo que ele vê**; a
+granularidade que vence é a que menos oferece esse casamento. A por CWE vence
+em 3 de 4.
 
 ### 3.2 O que o especialista faz, afinal
 
@@ -205,9 +216,9 @@ alertas falsos — não aceita.
 
 - **Catálogo oficial: por CWE** (`data/catalogo_cwe.json`, hash `e5db7d40…`), o
   das Rodadas 1–6. Restaurado como padrão ao fim da rodada (commit `5db626a`).
-  **A Rodada 7b pôs essa decisão em questão** (§3.1b): no gemma/filtro o
-  catálogo por CWE é o pior dos três braços especialistas e perde para o
-  baseline. Decisão a rever pelos autores.
+  A Rodada 7b mostrou uma exceção (gemma/filtro, §2.2), mas as comparações
+  pareadas da triagem, feitas depois da reexecução das Rodadas 5 e 6,
+  confirmam o por CWE como melhor em 3 de 4 cenários (§3.1b).
 - O catálogo por regra fica em `data/catalogo_cwe_por_regra.json`, usável com
   `--catalogo`. Para o texto: enquadramento de granularidade (MAPA §11.6).
 - O v2 não entra como braço principal.
@@ -219,8 +230,10 @@ alertas falsos — não aceita.
 
 - **Classe positiva pequena no filtro** (19–22 vulneráveis com veredito): as
   diferenças de recall são indicativas, não conclusivas.
-- **Triagem sem pareamento com as fichas antigas**: CSVs das Rodadas 5 e 6
-  apagados; comparação só com os agregados publicados.
+- **Triagem pareada só depois da reexecução**: os CSVs originais das Rodadas 5
+  e 6 foram apagados; a comparação pareada da triagem usa as reexecuções
+  (mesma configuração), conferidas contra os números publicados em
+  `resultados_parte2/*/REEXECUCAO.md`.
 - **Linha duplicada**: por ~1 min duas instâncias rodaram juntas; uma linha
   (`175964b1:CWE-328:false_positive`, `especialista_v2` qwen/filtro) aparece duas
   vezes. `src/metricas.py` e estas contagens usam a primeira ocorrência.
