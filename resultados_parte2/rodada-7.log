@@ -1,0 +1,21 @@
+[2026-09-22 21:30:05] INICIO rodada-7-filtro-qwen (tentativa 1)
+[2026-09-22 23:06:47] INICIO rodada-7-filtro-qwen (tentativa 1)
+[2026-09-22 23:10:35] INICIO rodada-7-filtro-qwen especialista (tentativa 1)
+[2026-09-23 00:04:12] FIM rodada-7-filtro-qwen especialista rc=0
+[2026-09-23 00:04:12] INICIO rodada-7-filtro-qwen especialista_v2 (tentativa 1)
+[2026-09-23 00:22:08] FIM rodada-7-filtro-qwen especialista_v2 rc=0
+[2026-09-23 00:22:08] INICIO rodada-7-triagem-qwen especialista_direto (tentativa 1)
+[2026-09-23 02:26:48] FIM rodada-7-triagem-qwen especialista_direto rc=0
+[2026-09-23 02:26:48] INICIO rodada-7-triagem-qwen especialista_direto_v2 (tentativa 1)
+[2026-09-23 04:32:20] FIM rodada-7-triagem-qwen especialista_direto_v2 rc=0
+[2026-09-23 04:32:20] INICIO rodada-7-filtro-gemma baseline (tentativa 1)
+[2026-09-23 06:26:41] FIM rodada-7-filtro-gemma baseline rc=0
+[2026-09-23 06:26:41] INICIO rodada-7-filtro-gemma especialista (tentativa 1)
+[2026-09-23 08:37:57] FIM rodada-7-filtro-gemma especialista rc=0
+[2026-09-23 08:37:57] INICIO rodada-7-filtro-gemma especialista_v2 (tentativa 1)
+[2026-09-23 10:53:38] FIM rodada-7-filtro-gemma especialista_v2 rc=0
+[2026-09-23 10:53:38] INICIO rodada-7-triagem-gemma especialista_direto (tentativa 1)
+[2026-09-23 14:55:51] FIM rodada-7-triagem-gemma especialista_direto rc=0
+[2026-09-23 14:55:51] INICIO rodada-7-triagem-gemma especialista_direto_v2 (tentativa 1)
+[2026-09-23 19:02:50] FIM rodada-7-triagem-gemma especialista_direto_v2 rc=0
+[2026-09-23 19:02:50] RODADA 7 CONCLUIDA

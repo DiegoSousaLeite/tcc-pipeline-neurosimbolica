@@ -1,0 +1,91 @@
+{
+  "run_id": "20260730T180648Z-14d6af8",
+  "commit": "14d6af8",
+  "comando": "run_pipeline.py --tudo --modelo ollama:qwen2.5-coder:7b --prompt baseline --prompt especialista",
+  "inicio_utc": "2026-07-30T18:06:48.417424+00:00",
+  "fim_utc": "2026-07-30T20:57:11.928663+00:00",
+  "duracao_s": 10223.51,
+  "semgrep": {
+    "versao": "1.167.0",
+    "ruleset": "p/default"
+  },
+  "catalogo_cwe": {
+    "caminho": "data\\catalogo_cwe.json",
+    "sha256": "a81b6f5ca3a4f70c2cdbca1436fd138ccc84976ee981aa1726e3dff9ae4e4311",
+    "cwes_especificas": [
+      "CWE-1004",
+      "CWE-115",
+      "CWE-319",
+      "CWE-327",
+      "CWE-328",
+      "CWE-338",
+      "CWE-352",
+      "CWE-470",
+      "CWE-601",
+      "CWE-614",
+      "CWE-665",
+      "CWE-667",
+      "CWE-681",
+      "CWE-79",
+      "CWE-94"
+    ]
+  },
+  "prompts": {
+    "baseline": "baseline:597fcfa9",
+    "especialista": "especialista:d1145f8b"
+  },
+  "bracos": [
+    {
+      "modelo": "ollama:qwen2.5-coder:7b",
+      "prompt": "baseline",
+      "csv": "ollama-qwen2.5-coder-7b__baseline.csv"
+    },
+    {
+      "modelo": "ollama:qwen2.5-coder:7b",
+      "prompt": "especialista",
+      "csv": "ollama-qwen2.5-coder-7b__especialista.csv"
+    }
+  ],
+  "precos": {
+    "versao_tabela": "2026-07-29",
+    "data_consulta": "2026-07-29",
+    "fontes": {
+      "gemini": "https://ai.google.dev/gemini-api/docs/pricing",
+      "openai": "https://platform.openai.com/docs/pricing"
+    },
+    "precos": {},
+    "modelos_sem_preco": [],
+    "modelos_locais_sem_custo": [
+      "ollama:qwen2.5-coder:7b"
+    ]
+  },
+  "modelos_locais": {
+    "ollama:qwen2.5-coder:7b": {
+      "modelo": "ollama:qwen2.5-coder:7b",
+      "tag": "qwen2.5-coder:7b",
+      "servidor": "http://localhost:11434",
+      "versao_ollama": "0.32.5",
+      "digest": "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364",
+      "quantizacao": "Q4_K_M",
+      "parametros": "7.6B",
+      "janela_maxima_declarada": 32768,
+      "num_ctx": 8192,
+      "num_predict": 512,
+      "semente": 42,
+      "processador": "100% GPU"
+    }
+  },
+  "populacao": {
+    "total": 948,
+    "por_trilha": {
+      "FP": 791,
+      "TP_ouro": 32,
+      "TP_prata": 68,
+      "TP_dataset": 57
+    }
+  },
+  "modo": {
+    "sem_llm": false,
+    "cache_simbolico_ativo": true
+  }
+}
