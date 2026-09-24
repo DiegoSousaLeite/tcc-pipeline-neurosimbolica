@@ -1,10 +1,10 @@
 {
   "run_id": "rodada-6-gemma",
-  "commit": "350978e",
-  "comando": "run_pipeline.py --tudo --modo-montagem triagem --run-id rodada-6-gemma --modelo ollama:gemma2:9b --prompt baseline_direto",
-  "inicio_utc": "2026-09-24T11:19:22.684310+00:00",
-  "fim_utc": "2026-09-24T14:50:12.321050+00:00",
-  "duracao_s": 12649.64,
+  "commit": "2d2245d",
+  "comando": "run_pipeline.py --tudo --modo-montagem triagem --run-id rodada-6-gemma --modelo ollama:gemma2:9b --prompt especialista_direto",
+  "inicio_utc": "2026-09-24T14:50:38.673809+00:00",
+  "fim_utc": "2026-09-24T18:52:46.130530+00:00",
+  "duracao_s": 14527.46,
   "semgrep": {
     "versao": "1.167.0",
     "ruleset": "p/default",
@@ -54,8 +54,8 @@
   "bracos": [
     {
       "modelo": "ollama:gemma2:9b",
-      "prompt": "baseline_direto",
-      "csv": "ollama-gemma2-9b__baseline_direto.csv"
+      "prompt": "especialista_direto",
+      "csv": "ollama-gemma2-9b__especialista_direto.csv"
     }
   ],
   "precos": {
