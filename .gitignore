@@ -62,3 +62,10 @@ TCC2___Ana_Luiz_e_Pedro.pdf
 # allowlist de permissões por sessão. Os comandos e skills do OpenSpec em
 # .claude/commands/ e .claude/skills/ SÃO versionados; só este arquivo não é.
 .claude/settings.local.json
+
+# Artigos de terceiros lidos como referência (ZeroFalse e os trabalhos que o
+# citam). Ficam fora pelo mesmo motivo dos PDFs de TCC de terceiros acima: são
+# material de outros autores, 19 MB, e parte deles é de publicações que não
+# permitem redistribuição (ACM). O repositório é público.
+# As referências entram por fixos/bibliografia.bib, que é o artefato citável.
+Artigos Neuro Simbolicos/
