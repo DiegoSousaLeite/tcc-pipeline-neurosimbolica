@@ -6,10 +6,14 @@
 > instrução do `*_v2` contra presumir mitigação ausente. Change
 > `ficha-por-regra-semgrep`.
 >
-> **Conclusão.** A ficha por regra **não melhora o recall e aumenta os falsos
-> alarmes**, nos dois modelos. O catálogo por CWE continua sendo o oficial. O v2
-> troca muitos falsos alarmes por alguns acertos a mais e, no balanço, piora a
-> acurácia — exceto no gemma/filtro, onde sobe o MCC.
+> **Conclusão (revista em 2026-09-23 23h, após a Rodada 7b).** O efeito da
+> granularidade da ficha **depende do modelo**. No qwen, a ficha por regra não
+> melhora o recall e aumenta os falsos alarmes (pareado, não significativo). No
+> gemma/filtro é o contrário, e com força: com a ficha por CWE o gemma gera 173
+> falsos alarmes — 57 só na CWE-327, onde a ficha fala de `md5` e o alerta é de
+> TLS —, contra 69 com a ficha por regra (pareado, p ≈ 10⁻¹⁷); com a ficha por
+> CWE o especialista do gemma fica **pior que o baseline**. O v2 troca muitos
+> falsos alarmes por alguns acertos a mais e, no balanço, piora a acurácia.
 
 ## 1. Identificação
 
@@ -65,18 +69,40 @@ casos com **0 VP** e 6 vulneráveis perdidos (CWE-89 ×4, CWE-94, CWE-79).
 
 ### 2.2 Filtro — gemma2:9b
 
-O gemma nunca tinha rodado no filtro: não há referência com o catálogo por CWE.
+O gemma nunca tinha rodado no filtro. O especialista com o catálogo por CWE foi
+rodado depois, na **Rodada 7b** (`rodada-7b-filtro-gemma-cwe`, 2026-09-23
+20:51 → 23:08, 833 chamadas, hash `e5db7d40…`; parte da rodada com 7 % do
+modelo na CPU).
 
 | braço | n | VP | VN | FP | FN | P | R | MCC | esp |
 |---|---|---|---|---|---|---|---|---|---|
 | baseline | 828 | 5 | 679 | 127 | 17 | 0,038 | 0,227 | 0,031 | 0,842 |
-| especialista (por regra) | 826 | 4 | 736 | 69 | 17 | 0,055 | 0,190 | 0,058 | 0,914 |
+| especialista, **por CWE** (R7b) | 827 | 4 | 633 | 173 | 17 | 0,023 | 0,190 | −0,009 | 0,785 |
+| especialista, por regra | 826 | 4 | 736 | 69 | 17 | 0,055 | 0,190 | 0,058 | 0,914 |
 | especialista_v2 (por regra) | 822 | 12 | 625 | 178 | 7 | 0,063 | **0,632** | **0,146** | 0,778 |
 
 | comparação | só A acerta | só B acerta | p |
 |---|---|---|---|
-| baseline × especialista | 34 | 89 | 1,1·10⁻⁶ |
-| especialista × especialista_v2 | 107 | 8 | 6,3·10⁻²⁰ |
+| baseline × especialista por CWE | **96** | 49 | 1,3·10⁻⁴ |
+| especialista por CWE × por regra | 19 | **121** | 1,4·10⁻¹⁷ |
+| baseline × especialista por regra | 34 | 89 | 1,1·10⁻⁶ |
+| especialista por regra × especialista_v2 | 107 | 8 | 6,3·10⁻²⁰ |
+
+Com o catálogo **oficial**, o especialista do gemma perde para o baseline no
+filtro. Os falsos alarmes por CWE mostram a causa:
+
+| CWE | por CWE | por regra | baseline | ficha por CWE fala de | a regra aponta |
+|---|---|---|---|---|---|
+| CWE-327 | **57** | 0 | 10 | `md5`/`sha1` em senha | `tls.Config` sem `MinVersion` |
+| CWE-319 | 39 | 20 | 25 | URL `http://` | `InsecureSkipVerify`, `ListenAndServe` |
+| CWE-328 | 27 | 15 | 33 | hash rápido em segredo | `md5`/`sha1` (mesma coisa) |
+| CWE-352 | 8 | 0 | 3 | `SameSite` de cookie | WebSocket sem `CheckOrigin` |
+| CWE-300 | 6 | 0 | 3 | (fallback genérico) | gRPC sem TLS |
+
+Na CWE-327 o gemma lê "algoritmo criptográfico quebrado" na ficha e aplica ao
+alerta de TLS ("desabilita a verificação... tornando o sistema vulnerável a
+protocolos inseguros"). A ficha por regra, que explica o padrão TLS 1.2 do Go
+moderno, zera esses 57. **É o desalinhamento produzindo erro** — no gemma.
 
 O gemma/filtro é o único lugar em que o v2 sobe o MCC: acha 12 de 19
 vulneráveis, ao custo de 178 falsos alarmes. Em acerto por caso ele perde
@@ -141,6 +167,22 @@ A rodada não separa as duas causas. Separá-las pede um catálogo só com as fi
 por regra e as heurísticas originais — não feito, porque a decisão de catálogo
 não depende disso.
 
+### 3.1b O efeito depende do modelo
+
+| modelo/modo | por CWE × por regra | leitura |
+|---|---|---|
+| qwen/filtro (pareado) | 12 × 4, p = 0,077 | por CWE levemente melhor, não significativo |
+| gemma/filtro (pareado) | 19 × **121**, p ≈ 10⁻¹⁷ | por regra muito melhor |
+| qwen/triagem (vs R5, agregado) | FP 35 → 119 | por regra pior |
+| gemma/triagem (vs R6, agregado) | FP 107 → 212 | por regra pior |
+
+O qwen ignorou o desalinhamento: nas CWEs desalinhadas ele já dizia FP com
+qualquer ficha. O gemma o seguiu: leu a ficha errada e alarmou. A mesma ficha é
+inócua num modelo e danosa no outro, e a ficha por regra corrige o gemma no
+filtro mas piora os dois na triagem (onde o cabeçalho do alerta é removido e a
+ficha detalhada vira a principal pista sobre o perigo). Não há granularidade que
+seja melhor nos quatro cenários.
+
 ### 3.2 O que o especialista faz, afinal
 
 O baseline e o especialista julgam o mesmo código; o especialista recebe a mais
@@ -163,6 +205,9 @@ alertas falsos — não aceita.
 
 - **Catálogo oficial: por CWE** (`data/catalogo_cwe.json`, hash `e5db7d40…`), o
   das Rodadas 1–6. Restaurado como padrão ao fim da rodada (commit `5db626a`).
+  **A Rodada 7b pôs essa decisão em questão** (§3.1b): no gemma/filtro o
+  catálogo por CWE é o pior dos três braços especialistas e perde para o
+  baseline. Decisão a rever pelos autores.
 - O catálogo por regra fica em `data/catalogo_cwe_por_regra.json`, usável com
   `--catalogo`. Para o texto: enquadramento de granularidade (MAPA §11.6).
 - O v2 não entra como braço principal.
