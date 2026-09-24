@@ -1,5 +1,11 @@
 # Rodada 5 — o enquadramento do prompt era mesmo parte do resultado
 
+> **Reexecução (2026-09-24).** Os CSVs originais desta rodada foram apagados de
+> `results/`. A rodada foi reexecutada com a mesma configuração e o mesmo run_id
+> (**não é uma rodada nova**); os CSVs estão versionados em
+> `resultados_parte2/rodada-5-direto/`, e a conferência contra os números abaixo está em
+> `resultados_parte2/rodada-5-direto/REEXECUCAO.md`.
+
 > **O que esta rodada testa, e só isso.** Mesmo modelo da Rodada 4
 > (`qwen2.5-coder:7b`), mesma população, mesmo cache simbólico, **semente 42 e
 > temperatura 0**. A única variável é o **enquadramento da pergunta**. Qualquer
