@@ -46,8 +46,21 @@ def avaliar(contexto_hidratado: str, cwe_id: str, cwe_name: str = "",
             description: str = "", provedor=None,
             tipo_prompt: str = "especialista", ficha=None) -> RespostaLLM:
     """Mesma coisa, devolvendo a `RespostaLLM` completa (tokens, custo, modelo)."""
-    prompt = montar_prompt(tipo_prompt, contexto=contexto_hidratado,
-                           cwe_id=cwe_id, cwe_name=cwe_name,
-                           description=description, ficha=ficha)
+    prompt = montar(contexto_hidratado, cwe_id, cwe_name, description,
+                    tipo_prompt=tipo_prompt, ficha=ficha)
     provedor = provedor or _obter_provedor_padrao()
     return provedor.avaliar(prompt)
+
+
+def montar(contexto_hidratado: str, cwe_id: str, cwe_name: str = "",
+           description: str = "", tipo_prompt: str = "especialista",
+           ficha=None) -> str:
+    """Só a Fase 3: o prompt que `avaliar` enviaria, sem enviá-lo.
+
+    É o que o modo de envio em lote acumula no lugar da chamada. Sai daqui, e
+    não de uma montagem própria do lote, para que os dois modos perguntem
+    exatamente a mesma coisa.
+    """
+    return montar_prompt(tipo_prompt, contexto=contexto_hidratado,
+                         cwe_id=cwe_id, cwe_name=cwe_name,
+                         description=description, ficha=ficha)

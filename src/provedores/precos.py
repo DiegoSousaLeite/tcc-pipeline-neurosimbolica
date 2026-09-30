@@ -11,8 +11,15 @@ Atualizar preços aqui **muda resultados já gravados** se recalculados. Suba
 """
 from dataclasses import dataclass
 
-VERSAO_TABELA = "2026-07-29"
+VERSAO_TABELA = "2026-09-30"
+# Data da consulta da tabela ORIGINAL. Modelo acrescentado depois tem a sua em
+# `CONSULTA_POR_MODELO`: dar a todos a data mais recente afirmaria que os preços
+# antigos foram reconferidos, e não foram.
 DATA_CONSULTA = "2026-07-29"
+CONSULTA_POR_MODELO = {
+    # developers.openai.com/api/docs/models/gpt-6-luna
+    "gpt-6-luna": "2026-09-30",
+}
 FONTES = {
     "gemini": "https://ai.google.dev/gemini-api/docs/pricing",
     "openai": "https://platform.openai.com/docs/pricing",
@@ -36,6 +43,9 @@ TABELA: dict[str, Preco] = {
     "gpt-4o-mini": Preco(entrada_por_1m=0.15, saida_por_1m=0.60),
     "gpt-4o": Preco(entrada_por_1m=2.50, saida_por_1m=10.00),
     "gpt-4.1-mini": Preco(entrada_por_1m=0.40, saida_por_1m=1.60),
+    # Preço padrão. O de lote é a metade, e fica no manifesto, não aqui: a
+    # tabela é uma só para os dois modos de envio (spec `envio-em-lote`).
+    "gpt-6-luna": Preco(entrada_por_1m=0.10, saida_por_1m=0.50),
 }
 
 
@@ -74,6 +84,8 @@ def tabela_para_manifesto(modelos, modelos_locais=()) -> dict:
     return {
         "versao_tabela": VERSAO_TABELA,
         "data_consulta": DATA_CONSULTA,
+        "data_consulta_por_modelo": {m: CONSULTA_POR_MODELO[m] for m in modelos
+                                     if m in CONSULTA_POR_MODELO},
         "fontes": FONTES,
         "precos": {
             m: {"entrada_por_1m_usd": TABELA[m].entrada_por_1m,

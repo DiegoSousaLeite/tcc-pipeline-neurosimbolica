@@ -50,11 +50,19 @@ CABECALHO = [
 # "indisponível", nunca como erro.
 COLUNAS_PARTE2 = CABECALHO[13:]
 
+# Requisição do modo de envio em lote que expirou sem que o modelo a visse. É
+# falha de esteira, e por isso está em CATEGORIAS_ERRO (fora das duas matrizes e
+# do checkpoint) — mas com status e veredito PRÓPRIOS, e não `API_ERROR`/`ERROR`:
+# somar as duas inflaria a taxa de erro do modelo com o que ele nunca recebeu.
+STATUS_LOTE_EXPIRADO = "LOTE_EXPIRADO"
+VEREDITO_EXPIRADO = "EXPIRADO"
+
 CATEGORIAS_ERRO = {
     "FETCH_FAIL",                    # falha ao obter o arquivo-alvo (rede/git)
     "CLONE_FAIL", "CHECKOUT_FAIL",   # legado: CSVs gerados antes do cache
     "SEMGREP_TIMEOUT", "SEMGREP_ERROR", "SEMGREP_FILE_NOT_FOUND",
     "API_ERROR", "ERRO_DESCONHECIDO",
+    STATUS_LOTE_EXPIRADO,
 }
 
 
@@ -140,7 +148,13 @@ def registrar_resultado(
     motivo = "N/A"
     regras = ""
 
-    if status_semgrep in CATEGORIAS_ERRO:
+    if status_semgrep == STATUS_LOTE_EXPIRADO:
+        classificacao_semgrep = "N/A (Falha de Esteira)"
+        veredito_llm = VEREDITO_EXPIRADO
+        classificacao_llm = "N/A (Expirado no lote)"
+        justificativa = erro_msg or ""
+
+    elif status_semgrep in CATEGORIAS_ERRO:
         classificacao_semgrep = "N/A (Falha de Esteira)"
         veredito_llm = "N/A"
         classificacao_llm = "N/A (Falha de Esteira)"

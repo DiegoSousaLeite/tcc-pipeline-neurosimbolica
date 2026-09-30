@@ -528,7 +528,9 @@ def test_manifesto_completo(tmp_path, catalogo):
     assert m["populacao"]["por_trilha"]["FP"] == 791
     assert m["inicio_utc"] and m["fim_utc"] and m["duracao_s"] >= 0
     assert m["modo"] == {"sem_llm": False, "cache_simbolico_ativo": True,
-                         "montagem": "filtro"}
+                         "montagem": "filtro", "envio": "sincrono"}
+    # Rodada síncrona não ganha campos de lote, nem vazios.
+    assert "lotes" not in m
 
 
 def test_rodadas_nao_se_sobrescrevem(tmp_path, catalogo, simbolico_dublado):
