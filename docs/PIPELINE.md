@@ -504,6 +504,96 @@ os dois braços é a medida do teto do desenho de filtro puro.
 
 ---
 
+## Modo de Envio (`--modo-envio`)
+
+Eixo de execução independente de modelo, prompt e modo de montagem: decide
+**como as requisições ao LLM trafegam**, e nada além disso. Os mesmos modelos
+cruzam os mesmos prompts sobre a mesma população; o conjunto de `ID_Caso`
+submetido é idêntico nos dois modos.
+
+| Modo | Como envia | Quando serve |
+|---|---|---|
+| `sincrono` (**padrão**) | uma chamada por caso e braço, veredito gravado ao chegar | provedor local; qualquer rodada sem motivo para lote |
+| `lote` | prompts acumulados e enviados pela API de lote do fornecedor; vereditos gravados quando o lote volta | rodada comercial: sem RPM a estourar, 50 % de desconto, máquina livre |
+
+**O padrão é síncrono, e o modo síncrono não mudou um byte:** uma rodada sem
+`--modo-envio` grava CSV idêntico ao de antes do eixo existir (verificado byte a
+byte em 2026-09-28).
+
+**O modo não varia dentro de uma rodada.** É o argumento do modo de montagem,
+mais forte: a comparação pareada entre braços sustenta o McNemar, e um braço
+síncrono contra um em lote poria o modo de envio como variável do experimento —
+com um desfecho, a expiração, que só um dos lados tem. `executar_matriz` recebe
+um modo só para todos os braços, e retomar uma rodada (`--run-id`) com modo
+diferente do gravado no manifesto é recusado antes de qualquer chamada.
+
+### Correlação pela chave de checkpoint
+
+Cada requisição do lote leva como identificador a tripla que o checkpoint já usa:
+`<ID_Caso>|<Modelo_LLM>|<Tipo_Prompt>`. Os fornecedores não garantem a ordem das
+respostas (a OpenAI declara isso; o Gemini promete ordem, e a pipeline não se
+apoia na promessa), e correlacionar por posição gravaria veredito no caso errado
+em silêncio. Com a chave como identificador, esse erro não é representável:
+resposta com chave que não foi submetida é **órfã** — não é gravada e sai no log
+como `[ANOMALIA]`.
+
+### O que é idêntico entre os modos
+
+- **O prompt:** o lote acumula o que `src/fases3_4_llm.montar` produz, a mesma
+  função que o síncrono usa antes de chamar.
+- **A requisição:** o corpo de cada item do lote é o `_payload` do provedor
+  síncrono (temperatura 0, saída JSON).
+- **A validação:** o veredito sai de `validar_resposta` — fora de `{VP, FP}` é
+  `ERROR`, nunca `FP` — e há teste que passa a mesma resposta bruta pelos dois
+  caminhos e exige `RespostaLLM` idêntica.
+- **O custo no CSV:** `Custo_USD` é o preço de **tabela**, pelo mesmo
+  `precos.custo_usd`, para que rodadas em lote e síncronas sigam comparáveis. O
+  desconto de lote (50 %) aparece no manifesto, em
+  `lotes[].custo_estimado_usd`, e `src/metricas.py` o aplica: numa rodada em
+  lote a tabela dos braços traz **duas** colunas, "Custo tabela USD" (a soma do
+  CSV) e "Custo faturado USD" (o que o fornecedor cobrou), com um aviso antes
+  dos números. **Para citar quanto a rodada custou, use o faturado** — somar a
+  coluna do CSV daria o dobro.
+- **O filtro:** no modo de montagem `filtro`, caso `NAO_DETECTADO` não entra no
+  lote, exatamente como não vira chamada no síncrono.
+
+### Desfecho `EXPIRADO` — distinto de `ERROR`
+
+Requisição que o fornecedor não processou dentro da janela do lote (no Gemini, o
+lote inteiro expira após 48 h) é gravada com `Status_Semgrep = LOTE_EXPIRADO` e
+`Veredito_LLM = EXPIRADO`. **Não é `ERROR`:** `ERROR` é resposta do modelo que
+não passou na validação (ou falha ao falar com ele); `EXPIRADO` é requisição que
+o modelo nunca viu. Somar as duas inflaria a taxa de erro do modelo com uma
+falha de esteira. Como `API_ERROR`, fica fora das duas matrizes e do checkpoint;
+e seu custo é zero quando o fornecedor não cobra a expirada.
+
+Requisições expiradas **não são reenviadas automaticamente** — reenviar custa, e
+o custo tem de ser escolhido por quem executa.
+
+### Retomada sem novo gasto
+
+O estado do lote vive em `results/<run_id>/lote.json`, gravado **antes** de cada
+submissão (com um rótulo do cliente, já que o identificador do fornecedor só
+existe depois). Interromper o acompanhamento não perde nada: rodar o mesmo
+comando com `--run-id <run_id>` recupera o lote pendente sem ressubmeter. O
+procedimento está em `docs/SCRIPTS.md`, "Modo de envio em lote".
+
+### Partição pelos limites do fornecedor
+
+O provedor declara seus limites (`src/provedores/gemini_lote.py`,
+`src/provedores/openai_lote.py`): tokens de entrada enfileiráveis por modelo,
+somados sobre **todos** os lotes ativos (Tier 1: 10.000.000 no
+`gemini-2.5-flash-lite`, 3.000.000 no `gemini-2.5-flash`, 5.000.000 no
+`gpt-6-luna`), 20 MB por submissão inline no Gemini e 50.000 requisições /
+200 MB por lote na OpenAI. A rodada é partida em lotes que caibam neles, e as
+partições são submetidas **uma de cada vez** — juntas, estourariam o mesmo teto
+somado. O conjunto das partições é uma rodada só.
+
+Provedores com lote: **Gemini e OpenAI**. O local (`ollama`) não tem API de
+lote e é recusado antes da Fase 1; `--sem-llm` com `--modo-envio lote` também.
+
+---
+
 ## Métricas (Seção 3.5 do TCC)
 
 Calculadas pelo `src/metricas.py`, sobre uma rodada (`results/<run_id>/`) ou
@@ -920,6 +1010,12 @@ só é variável independente se trocar de provedor não mudar mais nada:
 | `openai.py` | REST `/v1/chat/completions`, chave em `Authorization: Bearer` |
 | `ollama.py` | REST `/api/chat` num servidor local, **sem chave** |
 | `precos.py` | tabela de preços por 1M de tokens, datada e versionada |
+| `lote.py` | protocolo `ProvedorLote` (entrega em lote), chave de correlação, desfecho `EXPIRADO`, partição |
+| `gemini_lote.py` | REST `batchGenerateContent` do Gemini, com os limites de enfileiramento declarados |
+| `openai_lote.py` | Batch API da OpenAI: JSONL pela Files API, lote em `/v1/batches`, resultado nos arquivos de saída e de erro |
+
+A entrega em lote é um protocolo **à parte**: `ProvedorLLM.avaliar` não mudou.
+Ver "Modo de Envio (`--modo-envio`)".
 
 Decisões que afetam os números:
 
@@ -934,6 +1030,12 @@ Decisões que afetam os números:
   Resposta fora do schema vira **`ERROR`**, com o texto bruto truncado na
   justificativa — **nunca `FP`**. Contar uma falha de esteira como "o modelo
   achou seguro" inventaria um verdadeiro negativo.
+- **Modelo de raciocínio roda sem raciocínio.** `gpt-6-luna` e `gpt-6-sol`
+  recebem `reasoning_effort: "none"` (lista explícita em `openai.py`). É o que
+  a OpenAI exige para aceitar `temperature: 0`, e é o que os põe nas condições
+  dos outros braços: resposta direta, sem raciocínio escondido — que o prompt
+  não controla e que seria cobrado como saída. Modelo que não conhece o
+  parâmetro (o `gpt-4o-mini`) não o recebe.
 - **Custo é derivado, não medido.** A API devolve contagem de tokens, não valor
   cobrado. A tabela de `precos.py` tem data de consulta e vai para o manifesto
   da rodada; sem ela o custo total não é auditável.

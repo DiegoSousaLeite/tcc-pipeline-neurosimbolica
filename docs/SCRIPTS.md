@@ -252,6 +252,32 @@ python scripts/tp_reconstruct.py --init
 
 ---
 
+### `scripts/validar_lote.py`
+
+**Propósito:** validação barata da esteira de envio em lote contra o fornecedor
+**real** (tarefas 5.1–5.3 de `envio-em-lote-comercial`). Refazível antes de
+cada rodada comercial: o formato e os limites do fornecedor já mudaram uma vez.
+
+Escolhe 10 casos já `DETECTADO` no cache simbólico (variados em trilha, CWE e
+gabarito; o Semgrep não roda), submete os braços `baseline` e `especialista` do
+modelo de `--modelo` (padrão `gemini-2.5-flash-lite`; `gpt-6-luna` para a
+OpenAI) em lote — pelo mesmo `executar_matriz` do
+`run_pipeline.py` — e troca o prompt de **uma** requisição por um que pede
+veredito fora do domínio, para exercitar o caminho de erro. No fim, confere
+linha por linha e imprime o custo faturado em US$ e R$.
+
+```bash
+# 1. Submete e mata o processo na primeira consulta de estado (retomada real):
+python scripts/validar_lote.py --modelo gpt-6-luna --run-id validacao-lote-X   --parar-apos-submissao
+# 2. Retoma pelo lote.json, sem ressubmeter, e confere:
+python scripts/validar_lote.py --modelo gpt-6-luna --run-id validacao-lote-X
+```
+
+Exige conta com pagamento ativo. No tier grátis do Gemini a submissão é recusada
+com `HTTP 400 FAILED_PRECONDITION` e nada é cobrado.
+
+---
+
 ### `scripts/diag_gemini.py`
 
 **Propósito:** Lista modelos Gemini disponíveis e compatíveis com a chave
@@ -730,11 +756,18 @@ porque identificam as rodadas já gravadas.
 | `openai.py` | `ProvedorOpenAI` — REST `/v1/chat/completions`, `Authorization: Bearer` |
 | `ollama.py` | `ProvedorOllama` — REST `/api/chat` local, sem chave; `num_ctx` explícito, estouro vira `ERROR`; `sondar()` para a verificação prévia e o manifesto |
 | `precos.py` | `TABELA` por 1M de tokens, `custo_usd()`, `tabela_para_manifesto()` |
+| `lote.py` | protocolo `ProvedorLote` (`medir`, `submeter`, `estado`, `localizar`, `recuperar`), `chave_lote`/`ler_chave`, `EXPIRADO`, `LimitesLote`, `particionar`, `correlacionar` |
+| `gemini_lote.py` | `ProvedorGeminiLote` — REST `batchGenerateContent`; limites de enfileiramento por modelo (`TOKENS_ENFILEIRADOS_TIER1`); formato de submissão e de resposta documentado na docstring |
+| `openai_lote.py` | `ProvedorOpenAILote` — JSONL pela Files API, `POST /v1/batches` com o rótulo em `metadata`, resultado lido dos arquivos de saída e de erro (`batch_expired` → `EXPIRADO`); limites por modelo; formato na docstring |
 
 `criar_provedor(modelo)` escolhe a implementação pelo nome do modelo — o
 namespace `ollama:` é testado antes dos prefixos comerciais.
 `avaliar(prompt)` devolve sempre `RespostaLLM`, com veredito já validado
 (`VP`/`FP`/`ERROR`), tokens e custo.
+
+`criar_provedor_lote(modelo)` faz o mesmo para a entrega em lote, e
+`exigir_suporte_lote(modelo)` recusa com `LoteNaoSuportado` — nomeando o
+provedor — quem não a implementa (hoje: o local, `ollama`).
 
 ---
 
@@ -747,7 +780,9 @@ contém texto de prompt nem chamada HTTP.
 tipo_prompt, ficha)`
 
 **Saída:** `avaliar(...)` → `RespostaLLM`;
-`avaliar_vulnerabilidade(...)` → `{"verdict": "VP"|"FP"|"ERROR", "reasoning": "..."}`
+`avaliar_vulnerabilidade(...)` → `{"verdict": "VP"|"FP"|"ERROR", "reasoning": "..."}`;
+`montar(...)` → o prompt que `avaliar` enviaria, sem enviá-lo (é o que o modo
+de envio em lote acumula)
 
 ---
 
@@ -760,6 +795,9 @@ matrizes.
   do Semgrep (VP/VN/FP/FN do motor simbólico).
 - `classificar_acerto_llm(gabarito, verdict_llm)` — matriz de acerto do LLM.
 - `registrar_resultado(...)` — grava linha no CSV e imprime resumo.
+- `STATUS_LOTE_EXPIRADO` (`LOTE_EXPIRADO`) — requisição do modo de envio em
+  lote que expirou sem processamento. Grava `Veredito_LLM = EXPIRADO`, e não
+  `ERROR`; fica fora das duas matrizes e do checkpoint, como `API_ERROR`.
 
 **Colunas do CSV:** `ID_Caso, Repositorio, CWE, Origem, Modelo_LLM,
 Tipo_Prompt, Gabarito, Status_Semgrep, Classificacao_Semgrep, Veredito_LLM,
@@ -785,6 +823,13 @@ calcula as métricas do TCC (Seção 3.5), por braço.
 **Saída:** tabela lado a lado dos braços, cobertura do Semgrep à parte,
 estratificações, McNemar pareado e, com `--latex`, `tabela_bracos.tex` e
 `tabela_mcnemar.tex` no diretório da rodada.
+
+**Custo em rodada de lote.** Se o `manifesto.json` da rodada registra
+`modo.envio = "lote"`, a tabela dos braços troca a coluna "Custo USD" por duas:
+"Custo tabela USD" (soma de `Custo_USD` do CSV, a preço de tabela, comparável
+com rodadas síncronas) e "Custo faturado USD" (com o desconto de cada lote,
+lido do manifesto) — e um aviso sai antes dos números. O custo a citar como
+"quanto a rodada custou" é o faturado. Rodada síncrona não muda.
 
 **Uso:**
 ```bash
@@ -820,10 +865,13 @@ python src/metricas.py legacy/resultados_parte1/resultados_tcc.csv --por-cwe
 - `--sem-cache-simbolico` — reexecuta Fases 1-2 sempre
 - `--catalogo CAMINHO` — catálogo de fichas do especialista (padrão `data/catalogo_cwe.json`, por CWE; o por regra da Rodada 7 é `data/catalogo_cwe_por_regra.json`)
 - `--run-id ID` — retoma uma rodada existente
+- `--modo-envio sincrono|lote` — como as requisições trafegam (padrão
+  `sincrono`, o comportamento de sempre). Ver "Modo de envio em lote" abaixo.
 - `--verboso` — DEBUG (mostra cada invocação real do Semgrep)
 
-**Saída:** `results/<run_id>/` com `<modelo>__<prompt>.csv` por braço e
-`manifesto.json`. Nenhum CSV é criado na raiz.
+**Saída:** `results/<run_id>/` com `<modelo>__<prompt>.csv` por braço,
+`manifesto.json` e, no modo de envio `lote`, `lote.json`. Nenhum CSV é criado na
+raiz.
 
 **Checkpoint:** pela tripla `(ID_Caso, Modelo_LLM, Tipo_Prompt)`, lida **só da
 rodada corrente** (`results/<run_id>/`). Assim uma rodada nova começa do zero e
@@ -841,6 +889,87 @@ Um caso só conta como concluído se terminou em `NAO_DETECTADO` ou em
 `--sem-llm` produz (o Semgrep disparou, ninguém triou) e continua pendente.
 Casos em categoria de erro nunca são checkpointados — a rodada seguinte os
 re-tenta.
+
+#### Modo de envio em lote
+
+Envia os prompts pela API de lote do fornecedor em vez de um por vez: sem limite
+de requisições por minuto, 50 % de desconto, e a máquina livre enquanto o lote
+roda. Gemini e OpenAI implementam (`src/provedores/gemini_lote.py`,
+`src/provedores/openai_lote.py`). O desenho e o
+porquê de cada guarda estão em `docs/PIPELINE.md`, "Modo de Envio".
+
+**Pré-requisitos — Gemini.** `GEMINI_API_KEY` no `.env`, de um projeto com
+**billing ativo** (Tier 1 ou acima). O tier grátis não tem lote: a tabela de
+enfileiramento do fornecedor não o inclui. Se a conta estiver acima do Tier 1,
+informe o teto de tokens enfileiráveis em `GEMINI_LOTE_TOKENS_ENFILEIRADOS` (o
+Tier 2 enfileira 400.000.000); sem isso vale o do Tier 1.
+
+**Pré-requisitos — OpenAI.** `OPENAI_API_KEY` no `.env`, de conta com crédito
+(o Tier 1 exige pagamento). Acima do Tier 1, informe o teto em
+`OPENAI_LOTE_TOKENS_ENFILEIRADOS` (Tier 2 do `gpt-6-luna`: 20.000.000). Modelo
+recomendado: `gpt-6-luna`, que roda com `reasoning_effort: "none"` e
+temperatura 0 — ver `docs/PIPELINE.md`, "Camada de Provedores".
+
+**Submeter.** O mesmo comando de sempre, com `--modo-envio lote`:
+
+```bash
+python run_pipeline.py --amostra 10 --modelo gemini-2.5-flash-lite \
+  --prompt baseline --prompt especialista --modo-envio lote
+```
+
+A execução percorre a população normalmente (Fases 1-2, cache simbólico), mas
+**acumula** os prompts em vez de chamar. No fim, parte as requisições em lotes
+que caibam nos limites do modelo, submete o primeiro, consulta o estado a cada
+60 s e, quando ele termina, grava os vereditos nos CSVs e passa ao próximo. O log
+mostra o `run_id` logo no começo (`[+] Rodada: results/<run_id>/`) — anote-o.
+
+**Interromper e retomar.** Pode interromper a qualquer momento (Ctrl+C, queda,
+reinício da máquina): o lote continua no fornecedor, e os resultados ficam lá por
+6 semanas. Para retomar, rode **o mesmo comando com `--run-id`**:
+
+```bash
+python run_pipeline.py --amostra 10 --modelo gemini-2.5-flash-lite \
+  --prompt baseline --prompt especialista --modo-envio lote --run-id <run_id>
+```
+
+A retomada lê `results/<run_id>/lote.json`, reencontra o lote e recupera os
+resultados **sem submeter de novo**. Sem `--run-id`, uma execução em lote é
+recusada enquanto houver lote não recuperado em alguma rodada — a mensagem diz
+qual `run_id` retomar —, porque uma rodada nova pagaria outra vez.
+
+**`results/<run_id>/lote.json`.** Uma entrada por partição:
+
+| campo | significado |
+|---|---|
+| `rotulo` | nome dado pelo cliente ao lote (`display_name`), gravado **antes** da submissão |
+| `id_lote` | identificador do fornecedor (`batches/...`), rastreável no painel dele |
+| `estado` | `PREPARADA` → `SUBMETENDO` → `SUBMETIDA` → `GRAVANDO` → `RECUPERADA` |
+| `estado_fornecedor` | desfecho do lote: `CONCLUIDO`, `EXPIRADO`, `FALHOU`, `CANCELADO` |
+| `chaves` | as requisições da partição, `ID_Caso\|Modelo_LLM\|Tipo_Prompt` |
+| `custo_tabela_usd`, `custo_estimado_usd` | custo a preço de tabela (o do CSV) e com o desconto de lote |
+| `n_error`, `n_expirado`, `n_orfas` | desfechos sem veredito válido e respostas descartadas por chave desconhecida |
+
+O manifesto da rodada traz o mesmo resumo em `lotes`, sem as chaves, e
+`modo.envio = "lote"`.
+
+**Situações que pedem decisão de quem executa:**
+
+- *Partição parada em `SUBMETENDO`.* A submissão falhou ou o processo caiu
+  durante ela. A retomada procura o lote pelo `rotulo`: se ele existe no
+  fornecedor, é adotado; se não existe, a submissão nunca aconteceu e é feita
+  agora. Nada a fazer à mão.
+- *Requisições `EXPIRADO` ou `ERROR`.* **Não são reenviadas automaticamente** —
+  reenviar custa. Aparecem no CSV (`LOTE_EXPIRADO` / `API_ERROR`) e em `n_*` no
+  `lote.json`. Para reenviá-las de propósito, remova do `lote.json` a entrada da
+  partição **depois** de conferir que ela está `RECUPERADA`, e retome com
+  `--run-id`: as chaves sem veredito válido voltam a ser submetidas; as já
+  resolvidas continuam puladas pelo checkpoint.
+- *"O lote ... não existe mais no fornecedor".* O identificador está em disco e
+  o fornecedor não o conhece (retenção vencida). A execução para sem ressubmeter
+  (código de saída 3); a decisão de pagar de novo é sua, pelo mesmo caminho do
+  item anterior.
+- *Retomar com outro modo.* Retomar em `lote` uma rodada gravada em `sincrono`
+  (ou o contrário) é recusado: o modo de envio é uniforme na rodada.
 
 ---
 

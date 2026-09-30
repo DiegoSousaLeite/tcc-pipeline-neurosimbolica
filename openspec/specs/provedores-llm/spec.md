@@ -118,3 +118,81 @@ O sistema SHALL registrar, por chamada, os tokens de entrada e saída e o custo 
 #### Scenario: Tokens continuam sendo contados localmente
 - **WHEN** um caso é triado por um provedor local
 - **THEN** os tokens de entrada e saída informados pelo servidor são gravados no CSV, ainda que o custo seja zero
+
+### Requirement: Entrega em lote como forma alternativa
+A camada de provedores SHALL admitir, além da entrega síncrona existente, uma
+forma de **entrega em lote**, com duas operações: submeter um conjunto de
+prompts identificados e recuperar os resultados de um conjunto já submetido.
+
+A abstração síncrona (`avaliar(prompt) -> RespostaLLM`) NÃO SHALL mudar. Um
+provedor que só fale a forma síncrona continua válido, e a pipeline SHALL
+continuar funcionando sem nenhum provedor de lote implementado.
+
+A separação existe porque as duas formas têm ciclos de vida incompatíveis: a
+síncrona devolve resposta na mesma chamada, a em lote devolve um identificador e
+exige consulta posterior. Forçar as duas na mesma assinatura obrigaria a
+síncrona a carregar um estado que ela não tem, ou a em lote a bloquear
+esperando — que é justamente o que ela existe para não fazer.
+
+#### Scenario: Provedor só síncrono continua válido
+- **WHEN** um provedor implementa apenas a forma síncrona
+- **THEN** a pipeline o aceita e executa normalmente no modo de envio síncrono
+
+#### Scenario: Submissão devolve identificador, não veredito
+- **WHEN** um conjunto de prompts é submetido em lote
+- **THEN** a operação devolve um identificador de lote, sem bloquear à espera dos vereditos
+
+#### Scenario: Recuperação devolve vereditos mapeados por chave
+- **WHEN** os resultados de um lote submetido são recuperados
+- **THEN** cada veredito vem associado à chave com que foi submetido, e não à sua posição
+
+### Requirement: Provedor sem suporte a lote é recusado cedo
+O sistema SHALL recusar a execução quando o modo de envio em lote for pedido
+para um provedor que não o implementa, e SHALL fazê-lo **antes** de montar
+qualquer prompt ou consumir qualquer recurso.
+
+O provedor local (`ollama`) é o caso concreto: não existe API de lote para
+inferência local. Uma rodada que descobrisse isso no meio já teria gasto tempo
+de Fase 1 à toa, e o erro precisa nomear o provedor em vez de falhar em algum
+ponto interno.
+
+#### Scenario: Lote pedido para provedor local falha antes de começar
+- **WHEN** o modo de envio em lote é pedido para um provedor que não o implementa
+- **THEN** a execução para imediatamente com erro que nomeia o provedor, sem montar prompt nem chamar a Fase 1
+
+### Requirement: Entrega em lote pela OpenAI
+O provedor OpenAI SHALL implementar a entrega em lote pelo mesmo protocolo do
+Gemini, correlacionando cada resultado pelo `custom_id` e nunca pela posição, e
+SHALL registrar como `EXPIRADO`, sem custo, a requisição que o fornecedor
+devolver com `batch_expired`.
+
+A OpenAI declara que a ordem das linhas de saída pode não ser a da entrada; a
+correlação pela chave de checkpoint é o que impede um veredito na linha errada.
+
+#### Scenario: Resultado fora de ordem
+- **WHEN** o arquivo de saída traz as respostas em ordem diferente da submissão
+- **THEN** cada veredito é associado à chave com que foi submetido
+
+#### Scenario: Requisição expirada
+- **WHEN** o arquivo de erros traz uma requisição com código `batch_expired`
+- **THEN** ela é registrada como `EXPIRADO`, com custo zero, e não como `ERROR`
+
+#### Scenario: Mesma resposta nos dois modos
+- **WHEN** a mesma resposta bruta chega pelo síncrono e pelo lote da OpenAI
+- **THEN** as duas `RespostaLLM` são idênticas em veredito, tokens e custo
+
+### Requirement: Modelo de raciocínio roda sem raciocínio e com temperatura zero
+O provedor OpenAI SHALL enviar `reasoning_effort: "none"` aos modelos de
+raciocínio que aceitam esse valor, mantendo `temperature: 0`, e NÃO SHALL enviar
+o parâmetro a modelos que não o conhecem.
+
+Temperatura 0 e resposta direta são a condição de todos os braços da matriz; um
+raciocínio escondido entraria como variável do experimento sem ser a estudada.
+
+#### Scenario: Luna
+- **WHEN** o modelo é `gpt-6-luna`
+- **THEN** a requisição leva `reasoning_effort: "none"` e `temperature: 0`
+
+#### Scenario: Modelo sem raciocínio
+- **WHEN** o modelo é `gpt-4o-mini`
+- **THEN** a requisição não leva `reasoning_effort`

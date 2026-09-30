@@ -39,6 +39,7 @@ USO
 import argparse
 import collections
 import csv
+import functools
 import glob
 import hashlib
 import json
@@ -61,6 +62,7 @@ from src.config import (
     PROMPT_TYPE,
     RESULTS_DIR,
 )
+from src.envio_lote import Pendencia, executar_envio, resumo_para_manifesto
 from src.fase1_semgrep import (
     MOTIVO_NA,
     PROCEDENCIA_PROPRIA,
@@ -85,8 +87,13 @@ from src.fase2_middleware import (
     candidato_de_gabarito,
     extrair_e_hidratar_contexto,
 )
-from src.fase5_auditoria import CATEGORIAS_ERRO, inicializar_relatorio, registrar_resultado
-from src.fases3_4_llm import avaliar
+from src.fase5_auditoria import (
+    CATEGORIAS_ERRO,
+    STATUS_LOTE_EXPIRADO,
+    inicializar_relatorio,
+    registrar_resultado,
+)
+from src.fases3_4_llm import avaliar, montar
 from src.fonte import (
     ArquivoInexistente,
     FetchError,
@@ -96,16 +103,28 @@ from src.fonte import (
 )
 from src.prompts import BASELINE, ESPECIALISTA, TIPOS, versao_prompt
 from src.provedores import (
+    EXPIRADO,
     MODELO_GEMINI_PADRAO,
     MODELO_OLLAMA_PADRAO,
     MODELO_OPENAI_PADRAO,
+    LoteNaoSuportado,
     criar_provedor,
+    criar_provedor_lote,
+    exigir_suporte_lote,
     familia_do_modelo,
 )
+from src.provedores.lote import ErroLote, chave_lote
 from src.provedores.ollama import OllamaIndisponivel
 from src.provedores.precos import tabela_para_manifesto
 
 log = logging.getLogger("pipeline")
+
+# Eixo do MODO DE ENVIO: como as requisições trafegam, e nada além disso — os
+# mesmos modelos, prompts e população. `sincrono` é o padrão e é exatamente o
+# comportamento anterior ao eixo; `lote` usa a API de lote do fornecedor.
+MODO_SINCRONO = "sincrono"
+MODO_LOTE = "lote"
+MODOS_ENVIO = (MODO_SINCRONO, MODO_LOTE)
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 TP_PAIRS_OURO = os.path.join(BASE, "tp_pairs.json")
@@ -551,6 +570,27 @@ def carregar_processados(arquivos=None, *args_csvs):
     return processados
 
 
+def triplas_gravadas(arquivos):
+    """Chaves de lote de TODA linha já gravada, em qualquer status.
+
+    Diferente de `carregar_processados`, que só conta desfecho válido: aqui a
+    pergunta é "já existe linha?", e não "já está resolvido?". É o que impede a
+    linha duplicada quando uma partição de lote interrompida no meio da gravação
+    é recuperada de novo.
+    """
+    chaves = set()
+    for arq in arquivos:
+        try:
+            with open(arq, encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    if row.get("ID_Caso") and row.get("Modelo_LLM") and row.get("Tipo_Prompt"):
+                        chaves.add(chave_lote(row["ID_Caso"], row["Modelo_LLM"],
+                                              row["Tipo_Prompt"]))
+        except OSError:
+            log.debug("CSV ilegível, ignorado: %s", arq)
+    return chaves
+
+
 def definir_nome_relatorio_unico(caminho_padrao):
     if not os.path.exists(caminho_padrao):
         return caminho_padrao
@@ -642,6 +682,42 @@ def modo_da_rodada(dir_rodada: str):
         return None
 
 
+def modo_envio_da_rodada(dir_rodada: str):
+    """Modo de envio registrado no manifesto da rodada, ou None.
+
+    Manifesto anterior ao campo é de rodada síncrona — era o único modo que
+    existia —, por isso `MODO_SINCRONO` e não None quando o campo falta.
+    """
+    destino = os.path.join(dir_rodada, "manifesto.json")
+    if not os.path.exists(destino):
+        return None
+    try:
+        with open(destino, encoding="utf-8") as f:
+            return json.load(f).get("modo", {}).get("envio", MODO_SINCRONO)
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return None
+
+
+def rodadas_com_lote_em_aberto(results_dir=None) -> list:
+    """`run_id` das rodadas cujo `lote.json` tem partição ainda não recuperada.
+
+    Sem `--run-id`, cada execução ganha um `run_id` novo — e "rodar o mesmo
+    comando de novo" depois de uma interrupção submeteria outro lote, pagando
+    duas vezes. É o que esta lista impede (ver `main`).
+    """
+    abertas = []
+    for caminho in sorted(glob.glob(os.path.join(results_dir or RESULTS_DIR,
+                                                 "*", "lote.json"))):
+        try:
+            with open(caminho, encoding="utf-8") as f:
+                particoes = json.load(f).get("particoes", [])
+        except (OSError, json.JSONDecodeError, AttributeError):
+            continue
+        if any(p.get("estado") != "RECUPERADA" for p in particoes):
+            abertas.append(os.path.basename(os.path.dirname(caminho)))
+    return abertas
+
+
 def novo_run_id() -> str:
     """`<timestamp UTC>-<commit curto>`: ordenável e rastreável ao código."""
     agora = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -663,7 +739,8 @@ def regras_locais_do_manifesto():
 
 def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
                      inicio, fim, catalogo, sem_llm, cache_ativo, argv,
-                     sondagens=None, modo=MODO_FILTRO, entre_arquivos=False):
+                     sondagens=None, modo=MODO_FILTRO, entre_arquivos=False,
+                     modo_envio=MODO_SINCRONO):
     """Registra a configuração completa da rodada.
 
     É o que permite, meses depois, dizer de qual código, ruleset, catálogo e
@@ -726,8 +803,18 @@ def gravar_manifesto(dir_rodada, run_id, bracos, por_trilha, total_casos,
             # seriam indistinguíveis no disco, e a de triagem passaria por
             # resultado do sistema em operação.
             "montagem": modo,
+            # Modo de ENVIO, também uniforme na rodada. Em lote, o CSV registra
+            # o custo a preço de tabela — o mesmo cálculo do síncrono, para que
+            # as rodadas sigam comparáveis —, e o desconto de lote aparece só
+            # em `lotes[].custo_estimado_usd`.
+            "envio": modo_envio,
         },
     }
+    if modo_envio == MODO_LOTE:
+        # Fornecedor e identificador de cada lote: é pelo identificador que o
+        # lote é rastreável no painel do fornecedor. Rodada síncrona não ganha
+        # a chave, nem vazia.
+        manifesto["lotes"] = resumo_para_manifesto(dir_rodada)
     destino = os.path.join(dir_rodada, "manifesto.json")
     with open(destino, "w", encoding="utf-8", newline="\n") as f:
         json.dump(manifesto, f, ensure_ascii=False, indent=2)
@@ -889,8 +976,13 @@ def _categoria_de_erro(exc) -> str:
 
 def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
                    sem_llm=False, cache_simbolico=None, provedores=None,
-                   catalogo=None, modo=MODO_FILTRO):
+                   catalogo=None, modo=MODO_FILTRO, coletor=None):
     """Processa um caso em TODOS os braços da matriz.
+
+    Com `coletor` (modo de envio `lote`), o prompt de cada braço pendente é
+    acumulado nele como `Pendencia` em vez de enviado; tudo o que vem antes —
+    inclusive a regra de que `NAO_DETECTADO` no modo filtro não vira chamada —
+    é o mesmo caminho do síncrono.
 
     As Fases 1 e 2 rodam uma vez só, por fora do laço de braços: é isso que
     garante contexto byte-a-byte idêntico entre eles (validade interna da
@@ -1005,6 +1097,49 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
                        procedencia=candidatura.procedencia)
         return 0
 
+    def _gravar_resposta(braco, resposta, tempo):
+        """Ponto de gravação ÚNICO de um veredito, nos dois modos de envio."""
+        # O status simbólico é PRESERVADO: um caso injetado sai `NAO_DETECTADO`
+        # mesmo tendo recebido veredito. Sobrescrevê-lo apagaria a medição de
+        # cobertura do motor, que é resultado por si só (D2).
+        if resposta.veredito == "ERROR":
+            status = "API_ERROR"
+        elif resposta.veredito == EXPIRADO:
+            status = STATUS_LOTE_EXPIRADO
+        else:
+            status = status_simbolico
+        _registrar(braco, status, tempo,
+                   resposta=resposta.como_dict(),
+                   erro=(resposta.justificativa
+                         if status in ("API_ERROR", STATUS_LOTE_EXPIRADO) else None),
+                   resp_llm=resposta,
+                   motivo=simbolico.motivo,
+                   regras=simbolico.regras_nao_casadas,
+                   procedencia=candidatura.procedencia)
+
+    if coletor is not None:
+        # Modo de envio `lote`: a mesma Fase 3, sem a Fase 4. O prompt é o que
+        # `avaliar` montaria, e a gravação, quando o lote voltar, passa pelo
+        # mesmo `_gravar_resposta`. O tempo registrado é só o simbólico: a
+        # parede do lote não é atribuível a uma requisição.
+        for braco in pendentes:
+            try:
+                prompt = montar(contexto, caso["cwe"], caso["cwe_name"],
+                                caso["description"], tipo_prompt=braco.prompt,
+                                ficha=ficha)
+            except Exception as e:
+                log.info("    [ERRO INESPERADO] %s", str(e)[:120])
+                _registrar(braco, "ERRO_DESCONHECIDO", tempo_simbolico,
+                           erro=str(e))
+                continue
+            log.info("    -> Fase 3: %s acumulado no lote.", braco)
+            coletor.append(Pendencia(
+                chave=chave_lote(caso_id, braco.modelo, braco.prompt),
+                modelo=braco.modelo, prompt=prompt,
+                gravar=functools.partial(_gravar_resposta, braco,
+                                         tempo=tempo_simbolico)))
+        return 0
+
     chamadas = 0
     for braco in pendentes:
         t_braco = time.time()
@@ -1020,31 +1155,34 @@ def processar_caso(caso, csvs_por_braco, bracos, idx, total, processados,
                        tempo_simbolico + time.time() - t_braco, erro=str(e))
             continue
         chamadas += 1
-        # O status simbólico é PRESERVADO: um caso injetado sai `NAO_DETECTADO`
-        # mesmo tendo recebido veredito. Sobrescrevê-lo apagaria a medição de
-        # cobertura do motor, que é resultado por si só (D2).
-        status = ("API_ERROR" if resposta.veredito == "ERROR"
-                  else status_simbolico)
-        _registrar(braco, status, tempo_simbolico + time.time() - t_braco,
-                   resposta=resposta.como_dict(),
-                   erro=resposta.justificativa if status == "API_ERROR" else None,
-                   resp_llm=resposta,
-                   motivo=simbolico.motivo,
-                   regras=simbolico.regras_nao_casadas,
-                   procedencia=candidatura.procedencia)
+        _gravar_resposta(braco, resposta, tempo_simbolico + time.time() - t_braco)
     return chamadas
 
 
 def executar_matriz(casos, bracos, dir_rodada, sem_llm=False,
                     cache_simbolico=None, catalogo=None,
-                    incluir_anteriores=False, modo=MODO_FILTRO):
+                    incluir_anteriores=False, modo=MODO_FILTRO,
+                    modo_envio=MODO_SINCRONO, run_id=None, dormir=time.sleep):
     """Roda a população inteira em cada braço, gravando um CSV por braço.
 
     `modo` é o eixo de montagem do candidato, e é UNIFORME na rodada: braços de
     modos diferentes cobrem conjuntos de `ID_Caso` diferentes, e a comparação
     pareada entre braços — que é o que sustenta o McNemar — exige que todos vejam
     exatamente o mesmo conjunto.
+
+    `modo_envio` também é um só para a rodada inteira — é um parâmetro desta
+    função, e não do braço, justamente para que não haja como pedir braços em
+    modos diferentes. Em `lote`, a população é percorrida do mesmo jeito, mas os
+    prompts são acumulados e enviados de uma vez ao fim (`src/envio_lote.py`).
     """
+    if modo_envio not in MODOS_ENVIO:
+        raise ValueError(f"Modo de envio desconhecido: {modo_envio!r}")
+    lote = modo_envio == MODO_LOTE and not sem_llm
+    # Antes de qualquer caso: provedor sem lote é recusado aqui, sem Fase 1.
+    provedores_lote = ({m: criar_provedor_lote(m)
+                        for m in sorted({b.modelo for b in bracos})}
+                       if lote else {})
+
     catalogo = catalogo or catalogo_padrao()
     processados = carregar_processados(
         None, dir_rodada, incluir_anteriores)
@@ -1066,25 +1204,36 @@ def executar_matriz(casos, bracos, dir_rodada, sem_llm=False,
     # modelo: o intervalo mínimo entre chamadas é por provedor, e instanciar de
     # novo a cada braço zeraria o throttle e estouraria a cota.
     provedores = {}
-    if not sem_llm:
+    if not sem_llm and not lote:
         for modelo in sorted({b.modelo for b in bracos}):
             provedores[modelo] = criar_provedor(modelo)
 
     total = len(casos)
     inicio = time.time()
     chamadas = 0
+    coletor = [] if lote else None
 
     for idx, caso in enumerate(casos, 1):
         chamadas += processar_caso(
             caso, csvs_por_braco, bracos, idx, total, processados,
             sem_llm=sem_llm, cache_simbolico=cache_simbolico,
-            provedores=provedores, catalogo=catalogo, modo=modo)
+            provedores=provedores, catalogo=catalogo, modo=modo,
+            coletor=coletor)
 
         decorrido = time.time() - inicio
         medio = decorrido / idx
         log.info("    Sessão: %s | Previsão: %s",
                  timedelta(seconds=int(decorrido)),
                  timedelta(seconds=int((total - idx) * medio)))
+
+    if lote:
+        log.info("\n[+] Modo de envio em lote: %d requisição(ões) montada(s).",
+                 len(coletor))
+        chamadas = executar_envio(
+            coletor, provedores_lote, dir_rodada,
+            run_id or os.path.basename(os.path.normpath(dir_rodada)),
+            ja_gravadas=frozenset(triplas_gravadas(csvs_por_braco.values())),
+            dormir=dormir)
 
     log.info("\n[+] Concluído. Rodada: %s", dir_rodada)
     log.info("[+] Chamadas de LLM efetuadas: %d", chamadas)
@@ -1219,6 +1368,18 @@ def main():
                          f"gabarito; o negativo continua vindo só do Semgrep e "
                          f"o Status_Semgrep não muda. Multiplica as chamadas de "
                          f"LLM: dimensione a cota antes.")
+    ap.add_argument("--modo-envio", choices=MODOS_ENVIO, default=MODO_SINCRONO,
+                    metavar="MODO",
+                    help=f"Como as requisições ao LLM trafegam "
+                         f"({'|'.join(MODOS_ENVIO)}). Padrão: {MODO_SINCRONO} — "
+                         f"uma chamada por caso, como sempre foi. Em "
+                         f"'{MODO_LOTE}', os prompts são acumulados e enviados "
+                         f"pela API de lote do fornecedor (50%% de desconto, sem "
+                         f"limite de RPM); o comando acompanha até o fim, e "
+                         f"rodá-lo de novo com o mesmo --run-id retoma o lote "
+                         f"sem ressubmeter (results/<run_id>/lote.json). "
+                         f"Uniforme na rodada. Provedores com lote: gemini, "
+                         f"openai.")
     ap.add_argument("--catalogo", metavar="CAMINHO",
                     help="Catálogo de fichas a usar no especialista. Padrão: "
                          "data/catalogo_cwe.json (fichas por CWE, o das Rodadas "
@@ -1249,6 +1410,17 @@ def main():
         ap.error(f"--sem-llm não faz sentido com --modo-montagem "
                  f"{MODO_TRIAGEM}: o braço de triagem existe para submeter ao "
                  f"LLM os casos que o Semgrep não detectou.")
+    if args.sem_llm and args.modo_envio == MODO_LOTE:
+        ap.error(f"--sem-llm não faz sentido com --modo-envio {MODO_LOTE}: "
+                 f"sem LLM não há requisição a enviar.")
+    # Antes de montar qualquer prompt e antes da Fase 1: um provedor sem lote
+    # descoberto no meio da rodada teria gastado Semgrep à toa.
+    if args.modo_envio == MODO_LOTE:
+        try:
+            for modelo in sorted({b.modelo for b in definir_bracos(args)}):
+                exigir_suporte_lote(modelo)
+        except (LoteNaoSuportado, ValueError) as e:
+            ap.error(str(e))
     # Antes de qualquer trabalho: pedir o modo sem viabilidade verificada aborta
     # aqui, e não cai no CE em silêncio no meio da população.
     if args.entre_arquivos:
@@ -1335,6 +1507,12 @@ def main():
                      info["quantizacao"], (info["digest"] or "?")[:12],
                      info["num_ctx"], info["processador"] or "processador ?")
 
+    if args.modo_envio == MODO_LOTE and not args.run_id:
+        abertas = rodadas_com_lote_em_aberto()
+        if abertas:
+            ap.error(f"há lote submetido e ainda não recuperado em: "
+                     f"{', '.join(abertas)}. Uma rodada nova submeteria de novo, "
+                     f"pagando outra vez. Retome com --run-id {abertas[-1]}.")
     run_id = args.run_id or novo_run_id()
     dir_rodada = os.path.join(RESULTS_DIR, run_id)
     os.makedirs(dir_rodada, exist_ok=True)
@@ -1352,10 +1530,20 @@ def main():
                  f"'{modo_anterior}' e está sendo retomada com "
                  f"'{args.modo_montagem}'. O modo é uniforme na rodada: use "
                  f"--modo-montagem {modo_anterior} ou um --run-id novo.")
+    # O mesmo argumento para o modo de ENVIO, e mais forte: um braço síncrono
+    # contra um em lote poria o modo de envio como variável do experimento, com
+    # um desfecho (expiração) que só um dos lados tem.
+    envio_anterior = modo_envio_da_rodada(dir_rodada)
+    if envio_anterior is not None and envio_anterior != args.modo_envio:
+        ap.error(f"a rodada {run_id} foi gravada com modo de envio "
+                 f"'{envio_anterior}' e está sendo retomada com "
+                 f"'{args.modo_envio}'. O modo é uniforme na rodada: use "
+                 f"--modo-envio {envio_anterior} ou um --run-id novo.")
 
     if args.sem_llm:
         log.info("[+] Modo --sem-llm: só cobertura simbólica (nenhuma chamada de API).")
     log.info("[+] Modo de montagem: %s", args.modo_montagem)
+    log.info("[+] Modo de envio: %s", args.modo_envio)
     if args.modo_montagem == MODO_TRIAGEM:
         log.info("    [!] Positivos NAO_DETECTADO serão injetados a partir do "
                  "gabarito.")
@@ -1374,7 +1562,14 @@ def main():
         executar_matriz(casos, bracos, dir_rodada, sem_llm=args.sem_llm,
                         cache_simbolico=cache_simbolico, catalogo=catalogo,
                         incluir_anteriores=args.reaproveitar_anteriores,
-                        modo=args.modo_montagem)
+                        modo=args.modo_montagem, modo_envio=args.modo_envio,
+                        run_id=run_id)
+    except ErroLote as e:
+        # O registro do lote já está em disco: a mensagem basta, sem traceback.
+        log.error("[X] %s", e)
+        log.error("    Registro do lote: %s", os.path.relpath(
+            os.path.join(dir_rodada, "lote.json"), BASE))
+        sys.exit(3)
     finally:
         # O manifesto é gravado mesmo em rodada interrompida: sem ele os CSVs
         # parciais ficam sem procedência.
@@ -1382,7 +1577,8 @@ def main():
             dir_rodada, run_id, bracos, por_trilha, len(casos), inicio,
             datetime.now(timezone.utc), catalogo, args.sem_llm,
             cache_simbolico.ativo, " ".join(sys.argv), sondagens,
-            modo=args.modo_montagem, entre_arquivos=args.entre_arquivos)
+            modo=args.modo_montagem, entre_arquivos=args.entre_arquivos,
+            modo_envio=args.modo_envio)
         log.info("[+] Manifesto: %s", os.path.relpath(destino, BASE))
 
 

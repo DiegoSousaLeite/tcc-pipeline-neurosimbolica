@@ -22,6 +22,7 @@ USO
 import argparse
 import csv
 import glob
+import json
 import math
 import os
 from collections import defaultdict
@@ -95,6 +96,10 @@ class Braco:
         self.prompt = prompt
         self.origem = origem          # arquivo de onde veio
         self.linhas = []
+        # Fração descontada pelo fornecedor no modo de envio `lote`, lida do
+        # manifesto. None = rodada síncrona (ou sem manifesto): o que o CSV
+        # registra é o que foi cobrado.
+        self.desconto_lote = None
 
     @property
     def rotulo(self):
@@ -105,6 +110,12 @@ class Braco:
         return {linha.get("Hash_Catalogo", "") for linha in self.linhas} - {""}
 
     def custo_total(self):
+        """Soma de `Custo_USD`: o custo a preço de TABELA, nos dois modos.
+
+        Numa rodada em lote isso NÃO é o que o fornecedor cobrou — o CSV guarda
+        o preço de tabela para que rodadas em lote e síncronas sigam
+        comparáveis. O valor cobrado é `custo_faturado`.
+        """
         total = 0.0
         for linha in self.linhas:
             try:
@@ -112,6 +123,12 @@ class Braco:
             except ValueError:
                 pass
         return total
+
+    def custo_faturado(self):
+        """Custo com o desconto de lote aplicado; igual ao de tabela no síncrono."""
+        if self.desconto_lote is None:
+            return self.custo_total()
+        return self.custo_total() * (1 - self.desconto_lote)
 
     def tokens(self):
         def _soma(col):
@@ -130,11 +147,38 @@ def ler_linhas(caminho):
         return list(csv.DictReader(f))
 
 
+def descontos_de_lote(dir_rodada):
+    """`{modelo: desconto}` de uma rodada em modo de envio `lote`, ou `{}`.
+
+    Sai do `manifesto.json`, que registra o desconto de cada lote submetido.
+    Rodada síncrona, manifesto ausente ou anterior ao campo devolvem `{}`: o
+    custo do CSV já é o cobrado. Modelo com descontos divergentes entre lotes
+    fica de fora (sem desconto) — e `avisos` o denuncia —, porque aplicar um
+    deles a todos seria inventar número.
+    """
+    caminho = os.path.join(dir_rodada, "manifesto.json")
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            manifesto = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if (manifesto.get("modo") or {}).get("envio") != "lote":
+        return {}
+    por_modelo = defaultdict(set)
+    for lote in manifesto.get("lotes") or []:
+        if lote.get("modelo") and lote.get("desconto") is not None:
+            por_modelo[lote["modelo"]].add(float(lote["desconto"]))
+    return {m: d.pop() for m, d in por_modelo.items() if len(d) == 1}
+
+
 def carregar(alvo):
     """Devolve a lista de braços de `alvo`, que pode ser diretório ou CSV.
 
     Um diretório é uma rodada: cada CSV é um braço. Um CSV avulso é agrupado
     pelas colunas `Modelo_LLM`/`Tipo_Prompt`, que existem desde a Parte 1.
+
+    Se a rodada foi em modo de envio `lote`, cada braço recebe o desconto do
+    seu modelo, lido do manifesto — também para um CSV avulso de dentro dela.
     """
     arquivos = ([alvo] if os.path.isfile(alvo)
                 else sorted(glob.glob(os.path.join(alvo, "*.csv"))))
@@ -148,7 +192,15 @@ def carregar(alvo):
             if chave not in bracos:
                 bracos[chave] = Braco(chave[0], chave[1], arq)
             bracos[chave].linhas.append(linha)
+    descontos = descontos_de_lote(alvo if os.path.isdir(alvo)
+                                  else os.path.dirname(alvo) or ".")
+    for br in bracos.values():
+        br.desconto_lote = descontos.get(br.modelo)
     return [bracos[c] for c in sorted(bracos)]
+
+
+def rodada_em_lote(bracos):
+    return any(br.desconto_lote is not None for br in bracos)
 
 
 # ---------------------------------------------------------------------------
@@ -453,22 +505,35 @@ def _tabela(cabecalho, linhas):
 
 
 def tabela_bracos(bracos):
-    """Uma linha por braço, com as métricas de ACERTO do LLM."""
+    """Uma linha por braço, com as métricas de ACERTO do LLM.
+
+    Numa rodada em lote o custo sai em DUAS colunas — o de tabela (a soma do
+    CSV, comparável com rodadas síncronas) e o faturado (com o desconto do
+    fornecedor). Uma coluna só, ali, seria o dobro do que foi pago com o nome de
+    custo. Na rodada síncrona os dois coincidem e a tabela não muda.
+    """
+    lote = rodada_em_lote(bracos)
     cabecalho = ["Modelo", "Prompt", "n", "VP", "VN", "FP", "FN",
-                 "Precisao", "Recall", "F1", "MCC", "TRA", "TFN", "Custo USD"]
+                 "Precisao", "Recall", "F1", "MCC", "TRA", "TFN"]
+    cabecalho += (["Custo tabela USD", "Custo faturado USD"] if lote
+                  else ["Custo USD"])
+
+    def _custos(br):
+        if lote:
+            return [f"{br.custo_total():.4f}", f"{br.custo_faturado():.4f}"]
+        return [f"{br.custo_total():.4f}"]
+
     linhas = []
     for br in bracos:
         m = contar(br.linhas, "llm")
         if not m:
-            linhas.append([br.modelo, br.prompt, 0] + ["-"] * 10 +
-                          [f"{br.custo_total():.4f}"])
+            linhas.append([br.modelo, br.prompt, 0] + ["-"] * 10 + _custos(br))
             continue
         linhas.append([
             br.modelo, br.prompt, m["Total"], m["VP"], m["VN"], m["FP"], m["FN"],
             _fmt(m["Precisao"]), _fmt(m["Recall"]), _fmt(m["F1"]),
             _fmt(m["MCC"]), _fmt(m["TRA"]), _fmt(m["TFN"]),
-            f"{br.custo_total():.4f}",
-        ])
+        ] + _custos(br))
     return cabecalho, linhas
 
 
@@ -546,6 +611,22 @@ def exportar_latex(bracos, comparacoes, destino):
 def avisos(bracos):
     """Avisos que precisam sair ANTES dos números, não em nota de rodapé."""
     saida = []
+
+    if rodada_em_lote(bracos):
+        descontos = sorted({br.desconto_lote for br in bracos
+                            if br.desconto_lote is not None})
+        saida.append(
+            f"RODADA EM MODO DE ENVIO LOTE: a coluna Custo_USD dos CSVs está a "
+            f"preço de TABELA. O fornecedor cobrou com desconto de "
+            f"{', '.join(f'{d:.0%}' for d in descontos)} — use a coluna "
+            f"'Custo faturado USD' para o que foi pago, e a de tabela só para "
+            f"comparar com rodadas síncronas.")
+        sem_desconto = [br.rotulo for br in bracos if br.desconto_lote is None]
+        if sem_desconto:
+            saida.append(
+                f"DESCONTO DE LOTE DESCONHECIDO em {', '.join(sem_desconto)}: "
+                f"o manifesto não traz um desconto único para o modelo; o custo "
+                f"faturado desses braços está mostrado a preço de tabela.")
 
     hashes = set()
     for br in bracos:
