@@ -5,9 +5,7 @@
 Isolar a comunicação com os modelos de linguagem atrás de uma interface única, com implementações para Gemini, OpenAI e modelos locais servidos por Ollama.
 
 Existe porque o eixo "modelo" da matriz experimental só é variável independente se trocar de provedor não mudar mais nada: o código das fases 3/4 e da auditoria tem que permanecer igual. A camada também concentra três correções que afetam a validade dos resultados — a chave de API sai da URL e vai para header, a repetição passa a usar backoff exponencial com jitter respeitando `Retry-After`, e a resposta do modelo passa por validação de schema antes de ser aceita, para que uma falha de esteira nunca seja contada como veredito.
-
 ## Requirements
-
 ### Requirement: Abstração de provedor de LLM
 O sistema SHALL expor uma interface única de provedor que recebe um prompt e devolve veredito, justificativa, contagem de tokens, custo estimado e identificação do modelo, com implementações para Gemini, OpenAI e modelos locais servidos por Ollama.
 
@@ -184,10 +182,16 @@ correlação pela chave de checkpoint é o que impede um veredito na linha errad
 ### Requirement: Modelo de raciocínio roda sem raciocínio e com temperatura zero
 O provedor OpenAI SHALL enviar `reasoning_effort: "none"` aos modelos de
 raciocínio que aceitam esse valor, mantendo `temperature: 0`, e NÃO SHALL enviar
-o parâmetro a modelos que não o conhecem.
+o parâmetro a modelos que não o conhecem. Quando o modelo é pedido como variante
+`<modelo>@<esforço>`, com esforço em `low`, `medium` ou `high`, o provedor SHALL
+enviar à API o nome base com `reasoning_effort: "<esforço>"` e sem
+`temperature`, e SHALL recusar a variante em modelo que não aceita esforço
+configurável ou com esforço fora desse conjunto.
 
 Temperatura 0 e resposta direta são a condição de todos os braços da matriz; um
 raciocínio escondido entraria como variável do experimento sem ser a estudada.
+A variante existe para estudá-la de propósito, com o nome completo identificando
+o braço em todo registro.
 
 #### Scenario: Luna
 - **WHEN** o modelo é `gpt-6-luna`
@@ -196,3 +200,13 @@ raciocínio escondido entraria como variável do experimento sem ser a estudada.
 #### Scenario: Modelo sem raciocínio
 - **WHEN** o modelo é `gpt-4o-mini`
 - **THEN** a requisição não leva `reasoning_effort`
+
+#### Scenario: Luna com raciocínio
+- **WHEN** o modelo é `gpt-6-luna@low`
+- **THEN** a requisição leva `model: "gpt-6-luna"`, `reasoning_effort: "low"` e nenhum `temperature`
+- **AND** custo e teto de fila são os do `gpt-6-luna`
+
+#### Scenario: Variante inválida
+- **WHEN** o modelo é `gpt-4o-mini@low` ou `gpt-6-luna@turbo`
+- **THEN** o provedor é recusado antes de qualquer chamada
+
