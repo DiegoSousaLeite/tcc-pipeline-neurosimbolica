@@ -49,14 +49,25 @@ TABELA: dict[str, Preco] = {
 }
 
 
+# `modelo@variante` é o mesmo modelo com outra configuração de chamada (hoje,
+# o esforço de raciocínio: `gpt-6-luna@low`). O fornecedor cobra pelo modelo
+# base; os tokens de raciocínio já vêm somados aos de saída.
+SEPARADOR_VARIANTE = "@"
+
+
+def modelo_base(modelo: str) -> str:
+    """'gpt-6-luna@low' -> 'gpt-6-luna'; nome sem variante volta igual."""
+    return modelo.split(SEPARADOR_VARIANTE, 1)[0]
+
+
 def preco_do_modelo(modelo: str) -> Preco | None:
     """Preço exato, ou None se o modelo não estiver tabelado.
 
     Sem chute por prefixo: um modelo fora da tabela precisa aparecer como custo
     zero e ser notado, e não ser silenciosamente cobrado ao preço de um vizinho
-    de nome parecido.
+    de nome parecido. A única equivalência é a variante, que é o mesmo modelo.
     """
-    return TABELA.get(modelo)
+    return TABELA.get(modelo_base(modelo))
 
 
 def custo_usd(modelo: str, tokens_entrada: int, tokens_saida: int) -> float:
@@ -84,15 +95,16 @@ def tabela_para_manifesto(modelos, modelos_locais=()) -> dict:
     return {
         "versao_tabela": VERSAO_TABELA,
         "data_consulta": DATA_CONSULTA,
-        "data_consulta_por_modelo": {m: CONSULTA_POR_MODELO[m] for m in modelos
-                                     if m in CONSULTA_POR_MODELO},
+        "data_consulta_por_modelo": {
+            m: CONSULTA_POR_MODELO[modelo_base(m)] for m in modelos
+            if modelo_base(m) in CONSULTA_POR_MODELO},
         "fontes": FONTES,
         "precos": {
-            m: {"entrada_por_1m_usd": TABELA[m].entrada_por_1m,
-                "saida_por_1m_usd": TABELA[m].saida_por_1m}
-            for m in modelos if m in TABELA
+            m: {"entrada_por_1m_usd": preco_do_modelo(m).entrada_por_1m,
+                "saida_por_1m_usd": preco_do_modelo(m).saida_por_1m}
+            for m in modelos if preco_do_modelo(m) is not None
         },
         "modelos_sem_preco": [m for m in modelos
-                              if m not in TABELA and m not in locais],
+                              if preco_do_modelo(m) is None and m not in locais],
         "modelos_locais_sem_custo": [m for m in modelos if m in locais],
     }

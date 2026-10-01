@@ -129,6 +129,39 @@ def test_luna_tem_preco_tabelado_com_data_propria():
     assert m["data_consulta_por_modelo"] == {LUNA: "2026-09-30"}
 
 
+def test_variante_com_raciocinio_manda_o_nome_base_e_o_esforco():
+    """`gpt-6-luna@low`: a API recebe o modelo base, o esforço pedido e nenhuma
+    temperatura — com raciocínio ligado, a API recusa `temperature`."""
+    payload = ProvedorOpenAI(modelo=f"{LUNA}@low", api_key="k")._payload("p")
+    assert payload["model"] == LUNA
+    assert payload["reasoning_effort"] == "low"
+    assert "temperature" not in payload
+    assert payload["response_format"] == {"type": "json_object"}
+
+
+@pytest.mark.parametrize("modelo", [f"{LUNA}@turbo", "gpt-4o-mini@low", f"{LUNA}@"])
+def test_variante_invalida_e_recusada_antes_de_qualquer_chamada(modelo):
+    with pytest.raises(ValueError):
+        ProvedorOpenAI(modelo=modelo, api_key="k")
+
+
+def test_variante_custa_e_enfileira_como_o_modelo_base():
+    variante = f"{LUNA}@low"
+    assert custo_usd(variante, 1_000_000, 1_000_000) == pytest.approx(0.60)
+    m = tabela_para_manifesto([variante])
+    assert m["modelos_sem_preco"] == []
+    assert m["data_consulta_por_modelo"] == {variante: "2026-09-30"}
+    assert limites_do_modelo(variante) == limites_do_modelo(LUNA)
+
+
+def test_variante_em_lote_leva_o_mesmo_corpo_do_sincrono():
+    variante = f"{LUNA}@low"
+    p = criar_provedor_lote(variante, api_key="k")
+    corpo = json.loads(p.linha(f"c1|{variante}|baseline", "prompt"))["body"]
+    assert corpo == ProvedorOpenAI(modelo=variante, api_key="k")._payload("prompt")
+    assert corpo["model"] == LUNA
+
+
 def test_luna_sincrono_de_ponta_a_ponta():
     sessao = SessaoFalsa(resposta_openai(JSON_VP))
     r = ProvedorOpenAI(modelo=LUNA, api_key="k", sessao=sessao).avaliar("p")
