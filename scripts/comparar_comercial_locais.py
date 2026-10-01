@@ -62,6 +62,12 @@ TRIAGEM_DIRETO_RACIOCINIO = {
     "luna-low": f"{RP2}/rodada-comercial-luna-low-triagem-direto",
     **TRIAGEM_DIRETO,
 }
+# Mesmo Luna com `reasoning_effort: "high"`: só o especialista direto, onde o
+# `low` teve efeito (tarefa 2.5 de `luna-com-raciocinio`).
+TRIAGEM_DIRETO_RACIOCINIO_HIGH = {
+    "luna-high": f"{RP2}/rodada-comercial-luna-high-triagem-direto",
+    **TRIAGEM_DIRETO_RACIOCINIO,
+}
 PROMPTS = ("baseline", "especialista")
 PROMPTS_DIRETO = ("baseline_direto", "especialista_direto")
 
@@ -140,13 +146,14 @@ def bloco(nome, definicao, por_procedencia, prompts=PROMPTS,
                 tabela(bracos, comuns, proc)
         else:
             tabela(bracos, comuns)
-        # Cada foco contra os braços locais; o `luna-low` também contra as duas
-        # execuções do Luna sem raciocínio, que é a comparação que ele existe
-        # para fazer.
+        # Cada foco contra os braços locais; as variantes com raciocínio também
+        # contra as outras execuções do Luna, que é a comparação que elas
+        # existem para fazer.
         print(f"\n  McNemar (acerto), {' / '.join(focos)} × os demais:")
         for foco in focos:
             outros = [r for r in bracos if r not in focos
-                      and (foco == "luna-low" or not r.startswith("luna"))]
+                      and (foco in ("luna-low", "luna-high")
+                           or not r.startswith("luna"))]
             for outro in outros:
                 r = mcnemar_restrito(bracos[foco], bracos[outro], comuns)
                 print(f"    {foco} × {outro:<14} só {foco} {r['so_a_acerta']:>4} | "
@@ -174,6 +181,10 @@ def main():
     if os.path.isdir(FILTRO_RACIOCINIO["luna-low"]):
         bloco("BRAÇO DE FILTRO — Luna com raciocínio low × sem raciocínio × locais",
               FILTRO_RACIOCINIO, por_procedencia=False, focos=("luna-low",))
+    if os.path.isdir(TRIAGEM_DIRETO_RACIOCINIO_HIGH["luna-high"]):
+        bloco("BRAÇO DE TRIAGEM (direto) — Luna high × low × sem × locais",
+              TRIAGEM_DIRETO_RACIOCINIO_HIGH, por_procedencia=True,
+              prompts=("especialista_direto",), focos=("luna-high",))
     if os.path.isdir(TRIAGEM_DIRETO_RACIOCINIO["luna-low"]):
         bloco("BRAÇO DE TRIAGEM (direto) — Luna com raciocínio low × sem × locais",
               TRIAGEM_DIRETO_RACIOCINIO, por_procedencia=True,
