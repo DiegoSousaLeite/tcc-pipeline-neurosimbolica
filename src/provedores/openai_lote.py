@@ -66,6 +66,7 @@ from .lote import (
     resposta_expirada,
 )
 from .openai import BASE_URL, ProvedorOpenAI
+from .precos import modelo_base
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +105,8 @@ def limites_do_modelo(modelo: str) -> LimitesLote:
     """
     bruto = os.environ.get("OPENAI_LOTE_TOKENS_ENFILEIRADOS")
     tokens = (int(bruto) if bruto else
-              TOKENS_ENFILEIRADOS_TIER1.get(modelo, TOKENS_ENFILEIRADOS_PADRAO))
+              TOKENS_ENFILEIRADOS_TIER1.get(modelo_base(modelo),
+                                            TOKENS_ENFILEIRADOS_PADRAO))
     return LimitesLote(tokens_enfileirados=tokens, bytes_por_lote=BYTES_POR_LOTE,
                        requisicoes_por_lote=REQUISICOES_POR_LOTE)
 

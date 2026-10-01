@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass
 
 from .base import ProvedorHTTP
+from .precos import SEPARADOR_VARIANTE
 
 BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 INTERVALO_PADRAO_S = float(os.environ.get("OPENAI_MIN_INTERVALO", "0"))
@@ -29,6 +30,14 @@ INTERVALO_PADRAO_S = float(os.environ.get("OPENAI_MIN_INTERVALO", "0"))
 # e mandar o parâmetro a um modelo que não o conhece (o `gpt-4o-mini`) é erro.
 MODELOS_RACIOCINIO_NONE = frozenset({"gpt-6-luna", "gpt-6-sol"})
 
+# Raciocínio ligado é pedido pela variante do nome: `gpt-6-luna@low`. O nome
+# completo é o que vai para o CSV e o checkpoint, de modo que uma rodada com
+# raciocínio nunca se confunde com uma sem; à API vai o nome base. Com esforço
+# diferente de `none` a API recusa `temperature` (citação acima), e a chamada
+# sai na temperatura padrão do fornecedor — a rodada perde a temperatura 0, e
+# isso precisa ser declarado junto do resultado.
+ESFORCOS_RACIOCINIO = frozenset({"low", "medium", "high"})
+
 
 @dataclass
 class ProvedorOpenAI(ProvedorHTTP):
@@ -37,6 +46,16 @@ class ProvedorOpenAI(ProvedorHTTP):
 
     def __post_init__(self):
         super().__post_init__()
+        self.modelo_api, _, self.esforco = self.modelo.partition(SEPARADOR_VARIANTE)
+        if SEPARADOR_VARIANTE in self.modelo:
+            if self.esforco not in ESFORCOS_RACIOCINIO:
+                raise ValueError(
+                    f"Esforço de raciocínio inválido em {self.modelo!r}: use "
+                    f"{', '.join(sorted(ESFORCOS_RACIOCINIO))}.")
+            if self.modelo_api not in MODELOS_RACIOCINIO_NONE:
+                raise ValueError(
+                    f"{self.modelo_api} não é modelo de raciocínio com esforço "
+                    f"configurável; {self.modelo!r} não existe.")
         if self.api_key is None:
             self.api_key = os.environ.get("OPENAI_API_KEY")
         if self.intervalo_minimo_s is None:
@@ -51,15 +70,18 @@ class ProvedorOpenAI(ProvedorHTTP):
 
     def _payload(self, prompt: str) -> dict:
         payload = {
-            "model": self.modelo,
+            "model": self.modelo_api,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.0,
             # Equivale ao responseMimeType do Gemini: os dois braços de modelo
             # precisam receber a mesma exigência de formato, senão a diferença
             # entre eles inclui a dificuldade de acertar o JSON.
             "response_format": {"type": "json_object"},
         }
-        if self.modelo in MODELOS_RACIOCINIO_NONE:
+        if self.esforco:
+            payload["reasoning_effort"] = self.esforco
+            return payload
+        payload["temperature"] = 0.0
+        if self.modelo_api in MODELOS_RACIOCINIO_NONE:
             payload["reasoning_effort"] = "none"
         return payload
 
