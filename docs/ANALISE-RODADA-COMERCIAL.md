@@ -453,8 +453,8 @@ injetados 105 × 26 (p < 10⁻¹¹, a favor do `high`).
 - **Triagem: o raciocínio desloca o modelo para o alarme, e o especialista é o
   que converte isso em discriminação.** Com o especialista, J salta no `low` e
   estabiliza (+0,07 → +0,18 → +0,18). Com o baseline, J sobe devagar
-  (−0,03 → +0,01 → +0,07), sempre abaixo do especialista sem raciocínio, à custa
-  de alarmar em 44 % dos seguros. O `baseline_direto` `high` recupera a maior
+  (−0,03 → +0,01 → +0,07) e, no `high`, apenas empata com o especialista sem
+  raciocínio (+0,07), à custa de alarmar em 44 % dos seguros, contra 10 %. O `baseline_direto` `high` recupera a maior
   fração de injetados do experimento (51 %), mas é o braço que mais alarma.
 - **O especialista direto com `low` é o ponto eficiente**: a maior separação
   entre vulnerável e seguro (J +0,18) com o menor custo em alarme entre os
