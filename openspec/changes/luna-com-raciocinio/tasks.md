@@ -63,9 +63,15 @@
 
 ## 3. Análise
 
-- [ ] 3.1 Comparar com o Luna sem raciocínio (duas execuções) e com os locais,
+- [x] 3.1 Comparar com o Luna sem raciocínio (duas execuções) e com os locais,
       em seção própria de `docs/ANALISE-RODADA-COMERCIAL.md`; copiar os CSVs
       para `resultados_parte2/`. Verificar: a temperatura padrão (D3) e a
       execução única estão declaradas junto dos números.
-- [ ] 3.2 Monografia: só sob pedido dos autores (regra de
+- [x] 3.2 Monografia: só sob pedido dos autores (regra de
       `escrita-capitulo-resultados`).
+      **2026-10-01, a pedido dos autores.** `resultados.tex`: introdução das
+      rodadas; três parágrafos e a Tabela `tab:raciocinio` no fim de
+      `sec:modelos`; nova barra (33,1–39,3 %) em `fig:recall-comparado` e o
+      parágrafo que a introduz; item "Escopo de modelos"; "escala dos
+      modelos"; `subsec:supressao`; `subsec:consequencias`. Compila; tabela e
+      figura conferidas no PDF. **Não commitado.**

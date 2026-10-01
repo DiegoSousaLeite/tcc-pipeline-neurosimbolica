@@ -463,6 +463,14 @@ injetados 105 × 26 (p < 10⁻¹¹, a favor do `high`).
 - **O teto se mantém**: no braço de maior recuperação, metade dos casos que o
   analisador perde continua perdida, com 44 % de alarme nos seguros.
 
+**Sem pareamento** (todos os casos de cada execução; base da
+`fig:recall-comparado` e do texto do capítulo), injetados recuperados de 764:
+especialista_direto — sem 133 (17,41 %, nas duas execuções), `low` 253
+(33,12 %), `high` 300 (39,27 %); baseline_direto — sem 138 / 136 (18,06 /
+17,80 %), `low` 315 (41,23 %), `high` 395 (51,70 %). Pilha (22 vulneráveis),
+especialista_direto: sem 16 / 16 VP, 83 / 85 FP, MCC +0,310 / +0,306; `low` 12
+VP, 119 FP, +0,176; `high` 14 VP, 171 FP, +0,164.
+
 **Custo dos *tokens*.** A saída média do `high` variou muito por braço: 703–825
 no filtro, 704 no especialista direto e 1.264 no baseline direto (máximo
 11.222). O baseline direto custou 60 % acima da projeção.
