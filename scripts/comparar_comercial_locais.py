@@ -51,6 +51,13 @@ TRIAGEM_DIRETO = {
     "qwen (R5)": f"{RP2}/rodada-5-direto",
     "gemma (R6)": f"{RP2}/rodada-6-gemma",
 }
+# Change `luna-com-raciocinio`: o mesmo Luna com `reasoning_effort: "low"`,
+# uma execução. Bloco à parte para não mexer no pareamento dos blocos acima,
+# que são a fonte de números já citados.
+FILTRO_RACIOCINIO = {
+    "luna-low": f"{RP2}/rodada-comercial-luna-low-filtro",
+    **FILTRO,
+}
 PROMPTS = ("baseline", "especialista")
 PROMPTS_DIRETO = ("baseline_direto", "especialista_direto")
 
@@ -116,7 +123,8 @@ def mcnemar_restrito(a, b, comuns):
     return mcnemar(_Recorte(a), _Recorte(b))
 
 
-def bloco(nome, definicao, por_procedencia, prompts=PROMPTS):
+def bloco(nome, definicao, por_procedencia, prompts=PROMPTS,
+          focos=("luna-1", "luna-2")):
     print(f"\n{'=' * 78}\n{nome}\n{'=' * 78}")
     for prompt in prompts:
         bracos = bracos_do_bloco(definicao, prompt)
@@ -128,13 +136,17 @@ def bloco(nome, definicao, por_procedencia, prompts=PROMPTS):
                 tabela(bracos, comuns, proc)
         else:
             tabela(bracos, comuns)
-        locais = [r for r in bracos if not r.startswith("luna")]
-        print("\n  McNemar (acerto), Luna × local:")
-        for luna in ("luna-1", "luna-2"):
-            for local in locais:
-                r = mcnemar_restrito(bracos[luna], bracos[local], comuns)
-                print(f"    {luna} × {local:<14} só Luna {r['so_a_acerta']:>4} | "
-                      f"só local {r['so_b_acerta']:>4} | p = {r['p_valor']:.4g}")
+        # Cada foco contra os braços locais; o `luna-low` também contra as duas
+        # execuções do Luna sem raciocínio, que é a comparação que ele existe
+        # para fazer.
+        print(f"\n  McNemar (acerto), {' / '.join(focos)} × os demais:")
+        for foco in focos:
+            outros = [r for r in bracos if r not in focos
+                      and (foco == "luna-low" or not r.startswith("luna"))]
+            for outro in outros:
+                r = mcnemar_restrito(bracos[foco], bracos[outro], comuns)
+                print(f"    {foco} × {outro:<14} só {foco} {r['so_a_acerta']:>4} | "
+                      f"só outro {r['so_b_acerta']:>4} | p = {r['p_valor']:.4g}")
 
 
 def main():
@@ -145,6 +157,9 @@ def main():
     if all(os.path.isdir(d) for d in TRIAGEM_DIRETO.values()):
         bloco("BRAÇO DE TRIAGEM (enquadramento direto) — Luna × Rodadas 5 e 6",
               TRIAGEM_DIRETO, por_procedencia=True, prompts=PROMPTS_DIRETO)
+    if os.path.isdir(FILTRO_RACIOCINIO["luna-low"]):
+        bloco("BRAÇO DE FILTRO — Luna com raciocínio low × sem raciocínio × locais",
+              FILTRO_RACIOCINIO, por_procedencia=False, focos=("luna-low",))
 
 
 if __name__ == "__main__":

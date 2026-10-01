@@ -234,7 +234,60 @@ não a sua direção.
 - **Contaminação.** O Luna pode ter visto, no treino, os repositórios ou os
   *commits* de correção. Os locais também; não há como medir.
 
-## 8. Reprodução
+## 8. Luna com raciocínio (`gpt-6-luna@low`) — braço de filtro
+
+Change `luna-com-raciocinio`, 2026-10-01. Mesmo modelo, prompts, catálogo e
+população; muda o raciocínio (`reasoning_effort: "low"`) e, por exigência da
+API, a temperatura (padrão do fornecedor, e não 0). **Uma execução**
+(`rodada-comercial-luna-low-filtro`, commit `50e1196`, US$ 0,1825). A triagem
+com raciocínio não foi executada nesta etapa.
+
+Fonte: `scripts/comparar_comercial_locais.py`, bloco "Luna com raciocínio low".
+Base pareada: 820 (baseline) e 822 (especialista) casos, 19 vulneráveis.
+
+| prompt | braço | VP | FP | FN | VN | Recall | Precisão | MCC | TRA |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| baseline | **Luna low** | 11 | 237 | 8 | 564 | 57,89 % | 4,44 % | +0,093 | 69,76 % |
+| baseline | Luna sem raciocínio (1 / 2) | 9 / 9 | 240 / 242 | 10 / 10 | 561 / 559 | 47,37 % | 3,61 / 3,59 % | +0,057 / +0,056 | 69,63 / 69,39 % |
+| baseline | qwen (R3) | 8 | 115 | 11 | 686 | 42,11 % | 6,50 % | +0,117 | 85,00 % |
+| baseline | gemma (R7) | 5 | 127 | 14 | 674 | 26,32 % | 3,79 % | +0,043 | 83,90 % |
+| especialista | **Luna low** | 13 | 251 | 6 | 552 | 68,42 % | 4,92 % | +0,120 | 67,88 % |
+| especialista | Luna sem raciocínio (1 / 2) | 10 / 12 | 269 / 262 | 9 / 7 | 534 / 541 | 52,63 / 63,16 % | 3,58 / 4,38 % | +0,061 / +0,097 | 66,06 / 66,67 % |
+| especialista | qwen (R3) | 3 | 12 | 16 | 791 | 15,79 % | 20,00 % | +0,160 | 98,18 % |
+| especialista | gemma (7b) | 4 | 173 | 15 | 630 | 21,05 % | 2,26 % | −0,002 | 78,47 % |
+
+McNemar (acerto), Luna low × cada braço (só low / só o outro):
+
+| prompt | × Luna sem (1) | × Luna sem (2) | × qwen | × gemma |
+|---|---|---|---|---|
+| baseline | 58 × 53, p = 0,70 | 62 × 55, p = 0,58 | 87 × 206, p < 10⁻¹¹ | 84 × 188, p < 10⁻⁹ |
+| especialista | 90 × 69, p = 0,11 | 83 × 71, p = 0,38 | 14 × 243, p < 10⁻⁴⁵ | 117 × 186, p < 10⁻⁴ |
+
+Sem pareamento (833 alertas): baseline VP 12, FP 239, MCC +0,088; especialista
+VP 14, FP 251, MCC +0,113; baseline × especialista 64 × 54, p = 0,41. Saída
+média 228 / 268 tokens (sem raciocínio: 95 / 101).
+
+**Leitura.**
+
+- **O raciocínio não corrige o excesso de alarme.** A TRA fica em 68–70 %, a
+  mesma do Luna sem raciocínio, e os falsos alarmes em 237–251 (sem: 240–269).
+  Contra qwen e gemma, o Luna com raciocínio continua perdendo no acerto, com a
+  mesma folga.
+- **Ganha 1 a 3 vulneráveis** (11 e 13 de 19, contra 9 e 10–12), o que sobe o
+  MCC para +0,09 / +0,12 — mas sem significância contra nenhuma das duas
+  execuções sem raciocínio (menor p = 0,11), e sobre 19 casos.
+- **Ele embaralha muitos vereditos sem ganho líquido.** Entre o Luna com e sem
+  raciocínio, 111 (baseline) e 159 (especialista) casos mudam de veredito,
+  13,5 % e 19,3 % da base; entre as duas execuções sem raciocínio, mudaram 14 e
+  22 (1,7 % e 2,6 %). Os ganhos e as perdas quase se anulam.
+- **O especialista continua sem efeito no filtro** (64 × 54, p = 0,41).
+
+**Conclusão para o capítulo:** no braço de filtro, raciocínio de esforço baixo
+não muda o comportamento do Luna — o erro dominante continua sendo o excesso de
+alarme, e a ordenação entre os modelos não se altera. Ressalvas: uma execução;
+temperatura padrão junto com o raciocínio; esforço `low` apenas.
+
+## 9. Reprodução
 
 ```bash
 # execuções (lote; uma de cada vez; ~4–20 min cada)

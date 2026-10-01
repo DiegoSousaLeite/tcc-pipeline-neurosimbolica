@@ -9,10 +9,16 @@
 
 - [x] 2.1 Piloto de 20 casos por braço, em lote (D4). Verificar: 0 ERROR,
       tokens de saída medidos e projeção abaixo do teto de US$ 3,96, no design.
-- [ ] 2.2 Filtro: `--tudo --modo-montagem filtro --modelo gpt-6-luna@low
+- [x] 2.2 Filtro: `--tudo --modo-montagem filtro --modelo gpt-6-luna@low
       --prompt baseline --prompt especialista --modo-envio lote --run-id
       rodada-comercial-luna-low-filtro`. Verificar: partições `RECUPERADA` /
       `CONCLUIDO`, custo registrado aqui.
+      **2026-10-01.** Commit `50e1196`. Lotes `batch_6abed228a6ac8190aa4a3043290495ba`
+      (1.515) e `batch_6abed54401b481909f3ddba3a8cf1067` (151), ambos
+      `RECUPERADA` / `CONCLUIDO`, 0 ERROR / 0 EXPIRADO. Custo **US$ 0,1825**
+      (projeção ~0,19). Saída média 228 / 268 tokens (sem raciocínio: 95 / 101).
+      A triagem (2.3) **fica parada** até decisão dos autores, depois de verem
+      o filtro.
 - [ ] 2.3 Triagem direta: `--modo-montagem triagem --prompt baseline_direto
       --prompt especialista_direto`, `--run-id
       rodada-comercial-luna-low-triagem-direto`, depois de 2.2. Verificar: idem;
