@@ -31,6 +31,20 @@
       **Total da change: US$ 0,5824** (pilotos US$ 0,0099 + filtro 0,1825 +
       triagem 0,3900), 15 % do teto de US$ 3,96.
 
+- [x] 2.4 Piloto `high` (pedido dos autores, 2026-10-01): 20 casos, triagem
+      direta, só `especialista_direto`, em lote
+      (`results/piloto-luna-high-triagem-direto`). 0 ERROR, US$ 0,0043. Saída
+      média 615 tokens (low: 176; sem: 83), máximo 2.171. Nos mesmos 20 casos,
+      todos seguros: falsos alarmes 0–1 (sem), 4 (low), **8 (high)**.
+      Projeção da rodada (1.597 req.): ~US$ 0,39; pior caso ~US$ 0,96.
+- [x] 2.5 Rodada `high` na triagem direta, `especialista_direto`, uma
+      execução — só com autorização dos autores.
+      **2026-10-01** (autorizada; saldo informado US$ 3,56). Commit `9180a79`.
+      Lotes `batch_6abee1f022488190a8fef35ce179c373` (1.281) e
+      `batch_6abee32628488190be6da884e646d20e` (316), `RECUPERADA` /
+      `CONCLUIDO`, 0 ERROR / 0 EXPIRADO. Custo **US$ 0,3762**; saída média 704
+      tokens (máx. 5.676). **Total da change: US$ 0,9629.**
+
 ## 3. Análise
 
 - [ ] 3.1 Comparar com o Luna sem raciocínio (duas execuções) e com os locais,

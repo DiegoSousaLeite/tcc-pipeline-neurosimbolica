@@ -42,4 +42,6 @@ piloto: ~US$ 0,58; pior caso ~US$ 1,45.
 - **Não** rodar duas vezes cada braço nesta etapa (decisão dos autores, por
   saldo): uma diferença marginal não poderá ser separada da variação do modelo.
 - **Não** rodar a triagem no enquadramento de alerta.
-- **Não** testar `medium`/`high`.
+- ~~**Não** testar `medium`/`high`.~~ Revisto em 2026-10-01: os autores pediram
+  o piloto com `high` na triagem direta (`especialista_direto`), onde o `low`
+  teve efeito — ver `tasks.md` 2.4.

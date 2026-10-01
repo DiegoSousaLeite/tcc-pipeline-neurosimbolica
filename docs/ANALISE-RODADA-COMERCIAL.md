@@ -364,6 +364,43 @@ raciocínio; esforço `low` apenas; J compara alertas seguros com injetados
 vulneráveis, duas populações de origem diferente — a mesma composição que o
 capítulo trata com cuidado no braço de triagem.
 
+### 8.2 Esforço `high` — a curva de dose-resposta
+
+Uma execução, só `especialista_direto` (`rodada-comercial-luna-high-triagem-direto`,
+commit `9180a79`, US$ 0,3762; saída média 704 tokens, contra 213 no `low` e 83
+sem raciocínio). Fonte: `scripts/comparar_comercial_locais.py`, bloco "Luna
+high × low × sem × locais". Base pareada: 1.563.
+
+| esforço | pilha: VP / 21 | pilha: FP | pilha: MCC | injetados recuperados | alarme em seguros | J |
+|---|---:|---:|---:|---:|---:|---:|
+| sem raciocínio (1 / 2) | 15 / 15 | 82 / 85 | +0,299 / +0,294 | 17,1 / 17,3 % | 10,2 / 10,5 % | +0,069 / +0,067 |
+| `low` | 11 | 116 | +0,166 | 32,7 % | 14,4 % | **+0,184** |
+| `high` | 13 | 167 | +0,157 | **38,6 %** | 20,7 % | **+0,179** |
+
+McNemar (acerto) por procedência, `high` × `low`: pilha 16 × 65 (p < 10⁻⁷, a
+favor do `low`); injetados 66 × 23 (p < 10⁻⁵, a favor do `high`). `high` ×
+sem raciocínio: pilha 20 × 107 / 21 × 105 (a favor do sem); injetados 167 × 9
+/ 167 × 10 (a favor do `high`). `high` × qwen e × gemma: o `high` acerta mais
+nos injetados (260 × 6, 252 × 16) e menos na pilha (29 × 147, 75 × 132).
+
+**Leitura.**
+
+- **O ganho de discriminação vem do primeiro passo e para aí.** De `none` para
+  `low`, J sobe de +0,07 para +0,18. De `low` para `high`, J fica em +0,18: o
+  `high` recupera 6 pontos a mais de injetados (33 % → 39 %) pagando 6 pontos a
+  mais de alarme nos seguros (14 % → 21 %). É deslocamento ao longo da mesma
+  curva, não melhora dela.
+- **Na pilha de alertas, qualquer raciocínio piora.** O MCC cai de +0,30 (sem)
+  para +0,17 (`low`) e +0,16 (`high`); o `high` recupera 2 dos 4 vulneráveis que
+  o `low` perdera, ao custo de 51 falsos alarmes a mais.
+- **O teto continua de pé.** No ponto de maior recuperação, 61 % dos casos que
+  o analisador perde continuam perdidos.
+- **Custo.** O `high` gasta 3,3 vezes os tokens de saída do `low` para o mesmo
+  J; o `low` é o ponto eficiente.
+
+Ressalvas: as de §8.1 (uma execução, temperatura padrão, J entre populações de
+origem diferente), e só o *prompt* especialista direto.
+
 ## 9. Reprodução
 
 ```bash
