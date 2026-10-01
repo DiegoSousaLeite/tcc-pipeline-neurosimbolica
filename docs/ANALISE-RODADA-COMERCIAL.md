@@ -287,6 +287,83 @@ não muda o comportamento do Luna — o erro dominante continua sendo o excesso 
 alarme, e a ordenação entre os modelos não se altera. Ressalvas: uma execução;
 temperatura padrão junto com o raciocínio; esforço `low` apenas.
 
+### 8.1 Braço de triagem, enquadramento direto, com raciocínio
+
+Uma execução (`rodada-comercial-luna-low-triagem-direto`, commit `5f6e7a7`,
+US$ 0,3900). Fonte: `scripts/comparar_comercial_locais.py`, bloco "Luna com
+raciocínio low × sem × locais" da triagem, com McNemar por procedência.
+Base pareada: 1.589 (baseline_direto) e 1.563 (especialista_direto).
+
+| prompt | procedência | braço | VP | FP | FN | Recall | Precisão | MCC |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| baseline_direto | pilha | **Luna low** | 17 | 321 | 5 | 77,27 % | 5,03 % | +0,123 |
+| baseline_direto | pilha | Luna sem (1 / 2) | 14 / 13 | 164 / 166 | 8 / 9 | 63,6 / 59,1 % | 7,9 / 7,3 % | +0,170 / +0,151 |
+| baseline_direto | injetados | **Luna low** | 310 | — | 447 | **40,95 %** | — | — |
+| baseline_direto | injetados | Luna sem (1 / 2) | 136 / 133 | — | 621 / 624 | 18,0 / 17,6 % | — | — |
+| especialista_direto | pilha | **Luna low** | 11 | 116 | 10 | 52,38 % | 8,66 % | +0,166 |
+| especialista_direto | pilha | Luna sem (1 / 2) | 15 / 15 | 82 / 85 | 6 / 6 | 71,4 % | 15,5 / 15,0 % | +0,299 / +0,294 |
+| especialista_direto | injetados | **Luna low** | 241 | — | 495 | **32,74 %** | — | — |
+| especialista_direto | injetados | Luna sem (1 / 2) | 126 / 127 | — | 610 / 609 | 17,1 / 17,3 % | — | — |
+
+Locais na mesma base: §5 (qwen e gemma inalterados).
+
+McNemar (acerto) por procedência, Luna low × Luna sem (execução 1 / 2):
+
+| prompt | pilha (só low × só sem) | injetados (só low × só sem) |
+|---|---|---|
+| baseline_direto | 30 × 184 / 28 × 179, p < 10⁻²⁴ (sem) | 189 × 15 / 192 × 15, p < 10⁻³³ (low) |
+| especialista_direto | 18 × 56 / 20 × 55, p < 10⁻⁴ (sem) | 128 × 13 / 127 × 13, p < 10⁻²¹ (low) |
+
+Dentro do Luna low, `especialista_direto` × `baseline_direto` (rodada inteira):
+314 × 178, p < 0,0001, a favor do especialista — o mesmo sentido das duas
+execuções sem raciocínio.
+
+**Viés ou discriminação?** O raciocínio faz o Luna dizer "vulnerável" mais
+vezes nos dois *prompts*. Para separar deslocamento de limiar de ganho de
+discriminação, usa-se J = (acerto nos injetados) − (alarme nos alertas
+seguros da pilha), que não depende da taxa-base (contagens da tabela acima e
+de §5; seguros da pilha: 810 no baseline, 806 no especialista):
+
+| prompt | braço | alarme em seguros | acerto em injetados | J |
+|---|---|---:|---:|---:|
+| baseline_direto | Luna sem (1 / 2) | 20,2 / 20,5 % | 18,0 / 17,6 % | −0,023 / −0,029 |
+| baseline_direto | **Luna low** | 39,6 % | 41,0 % | +0,013 |
+| baseline_direto | gemma (R6) | 41,6 % | 23,6 % | −0,180 |
+| especialista_direto | Luna sem (1 / 2) | 10,2 / 10,5 % | 17,1 / 17,3 % | +0,069 / +0,067 |
+| especialista_direto | **Luna low** | 14,4 % | 32,7 % | **+0,184** |
+| especialista_direto | gemma (R6) | 13,0 % | 6,5 % | −0,065 |
+| especialista_direto | qwen (R5) | 4,8 % | 4,1 % | −0,008 |
+
+**Leitura.**
+
+- **Com o baseline direto, o ganho é só viés.** O Luna low dobra os alarmes nos
+  seguros (20 % → 40 %) e dobra os acertos nos injetados (18 % → 41 %); J fica
+  em torno de zero, como sem raciocínio. É o mesmo deslocamento do gemma, com
+  menos dano.
+- **Com o especialista direto, há ganho de discriminação.** Os acertos nos
+  injetados quase dobram (17 % → 33 %) e os alarmes nos seguros sobem bem menos
+  (10 % → 14 %); J passa de +0,07 a +0,18 — a maior separação entre vulnerável
+  e seguro de todo o experimento. A diferença entre execuções sem raciocínio é
+  de 0,002 em J; a mudança é cerca de 50 vezes maior.
+- **O preço está na pilha de alertas.** Com o especialista, o Luna low perde 4
+  dos 21 vulneráveis da pilha (15 → 11) e acrescenta 34 falsos alarmes (82 →
+  116); o MCC na pilha cai de +0,30 para +0,17, e a perda é significativa nas
+  duas comparações (p < 10⁻⁴). A melhora é nos casos que o Semgrep não
+  alertou, e não nos que ele alertou.
+- **O que não muda.** Mesmo no melhor braço, dois terços (67 %) dos casos que
+  o analisador perde continuam perdidos. A conclusão de `subsec:consequencias`
+  se mantém; a magnitude passa de ~17 % a ~33 %.
+- **Filtro × triagem.** No filtro (§8), o raciocínio não mudou nada de
+  relevante; na triagem, mudou muito. A diferença é coerente com o desenho: no
+  filtro o modelo vê a mensagem do alerta e responde a ela; na triagem julga o
+  código sem alerta, que é onde raciocinar sobre o código pode render.
+
+Ressalvas: uma execução (a variação entre execuções sem raciocínio é uma ordem
+de grandeza menor que as diferenças acima); temperatura padrão junto com o
+raciocínio; esforço `low` apenas; J compara alertas seguros com injetados
+vulneráveis, duas populações de origem diferente — a mesma composição que o
+capítulo trata com cuidado no braço de triagem.
+
 ## 9. Reprodução
 
 ```bash

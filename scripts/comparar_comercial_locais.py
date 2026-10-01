@@ -58,6 +58,10 @@ FILTRO_RACIOCINIO = {
     "luna-low": f"{RP2}/rodada-comercial-luna-low-filtro",
     **FILTRO,
 }
+TRIAGEM_DIRETO_RACIOCINIO = {
+    "luna-low": f"{RP2}/rodada-comercial-luna-low-triagem-direto",
+    **TRIAGEM_DIRETO,
+}
 PROMPTS = ("baseline", "especialista")
 PROMPTS_DIRETO = ("baseline_direto", "especialista_direto")
 
@@ -147,6 +151,16 @@ def bloco(nome, definicao, por_procedencia, prompts=PROMPTS,
                 r = mcnemar_restrito(bracos[foco], bracos[outro], comuns)
                 print(f"    {foco} × {outro:<14} só {foco} {r['so_a_acerta']:>4} | "
                       f"só outro {r['so_b_acerta']:>4} | p = {r['p_valor']:.4g}")
+                if not por_procedencia:
+                    continue
+                # O acerto agregado da triagem soma duas tarefas (pilha real e
+                # injetados); por procedência é a leitura que vale.
+                v = validos(bracos[foco])
+                for proc in ("alerta", "gabarito"):
+                    sub = [i for i in comuns if _procedencia(v[i]) == proc]
+                    r = mcnemar_restrito(bracos[foco], bracos[outro], sub)
+                    print(f"      {proc:<9} só {foco} {r['so_a_acerta']:>4} | "
+                          f"só outro {r['so_b_acerta']:>4} | p = {r['p_valor']:.4g}")
 
 
 def main():
@@ -160,6 +174,10 @@ def main():
     if os.path.isdir(FILTRO_RACIOCINIO["luna-low"]):
         bloco("BRAÇO DE FILTRO — Luna com raciocínio low × sem raciocínio × locais",
               FILTRO_RACIOCINIO, por_procedencia=False, focos=("luna-low",))
+    if os.path.isdir(TRIAGEM_DIRETO_RACIOCINIO["luna-low"]):
+        bloco("BRAÇO DE TRIAGEM (direto) — Luna com raciocínio low × sem × locais",
+              TRIAGEM_DIRETO_RACIOCINIO, por_procedencia=True,
+              prompts=PROMPTS_DIRETO, focos=("luna-low",))
 
 
 if __name__ == "__main__":

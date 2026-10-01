@@ -19,10 +19,17 @@
       (projeção ~0,19). Saída média 228 / 268 tokens (sem raciocínio: 95 / 101).
       A triagem (2.3) **fica parada** até decisão dos autores, depois de verem
       o filtro.
-- [ ] 2.3 Triagem direta: `--modo-montagem triagem --prompt baseline_direto
+- [x] 2.3 Triagem direta: `--modo-montagem triagem --prompt baseline_direto
       --prompt especialista_direto`, `--run-id
       rodada-comercial-luna-low-triagem-direto`, depois de 2.2. Verificar: idem;
       custo total abaixo de US$ 3,96.
+      **2026-10-01** (autorizada pelos autores depois de verem o filtro).
+      Commit `5f6e7a7`. Lotes `batch_6abed79b30d88190ad1e4025d579e969` (1.736),
+      `batch_6abedb30e954819087fae86a1de55bed` (1.315),
+      `batch_6abedd5b23388190a7b6560b4382a957` (143), todos `RECUPERADA` /
+      `CONCLUIDO`, 0 ERROR / 0 EXPIRADO. Custo **US$ 0,3900**.
+      **Total da change: US$ 0,5824** (pilotos US$ 0,0099 + filtro 0,1825 +
+      triagem 0,3900), 15 % do teto de US$ 3,96.
 
 ## 3. Análise
 
