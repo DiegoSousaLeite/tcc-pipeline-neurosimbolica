@@ -160,6 +160,20 @@ Folga de ~2,9× sobre o teto; mesmo com todas as respostas no maior tamanho
 observado (151 tokens), o plano fica abaixo de US$ 0,85. A maior execução (triagem, ~3,1 M tokens) cabe
 inteira na fila de 5 M do Tier 1 — um lote por execução.
 
+### D7 — Triagem também no enquadramento direto
+
+**Achado de 2026-09-30, ao comparar com os locais:** a triagem de 2.3 rodou com
+`baseline`/`especialista` (enquadramento de alerta), comparável só à Rodada 4.
+A `tab:modelos`, que a tarefa 3.1 completa, é do enquadramento **direto**
+(Rodadas 5 e 6), e a Rodada 5 mostrou que o enquadramento sozinho muda o
+resultado (recall dos injetados quadruplicou). Pôr o Luna de alerta naquela
+tabela compararia condições diferentes.
+
+**Decisão dos autores (2026-09-30):** rodar a triagem do Luna também com
+`baseline_direto`/`especialista_direto`, duas vezes (D5), ~US$ 0,47 a mais —
+total previsto ~US$ 1,18, dentro do teto de US$ 2 (D6). A triagem de alerta
+continua valendo como comparação com a Rodada 4.
+
 ## Risks / Trade-offs
 
 **[Orçamento nunca autorizado]** → os pontos da monografia ficam com a

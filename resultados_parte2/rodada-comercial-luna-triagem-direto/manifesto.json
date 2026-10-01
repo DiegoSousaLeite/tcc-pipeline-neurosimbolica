@@ -1,0 +1,170 @@
+{
+  "run_id": "rodada-comercial-luna-triagem-direto",
+  "commit": "d891a3b",
+  "comando": "run_pipeline.py --tudo --modo-montagem triagem --modelo gpt-6-luna --prompt baseline_direto --prompt especialista_direto --modo-envio lote --run-id rodada-comercial-luna-triagem-direto",
+  "inicio_utc": "2026-10-01T00:04:41.982542+00:00",
+  "fim_utc": "2026-10-01T00:19:20.691142+00:00",
+  "duracao_s": 878.71,
+  "semgrep": {
+    "versao": "1.167.0",
+    "ruleset": "p/default",
+    "rulesets": [
+      {
+        "config": "p/default",
+        "procedencia": "terceiros"
+      }
+    ],
+    "motor": {
+      "edicao": "ce",
+      "versao": "1.167.0",
+      "entre_arquivos": false,
+      "binario_pro_disponivel": true
+    },
+    "regras_locais": {}
+  },
+  "catalogo_cwe": {
+    "caminho": "data\\catalogo_cwe.json",
+    "sha256": "e5db7d4008428a0f31404645380ad28c7a95255185e4e0cfb6a37ebac56c2676",
+    "cwes_especificas": [
+      "CWE-1004",
+      "CWE-115",
+      "CWE-319",
+      "CWE-327",
+      "CWE-328",
+      "CWE-338",
+      "CWE-352",
+      "CWE-470",
+      "CWE-601",
+      "CWE-614",
+      "CWE-665",
+      "CWE-667",
+      "CWE-681",
+      "CWE-79",
+      "CWE-94"
+    ]
+  },
+  "prompts": {
+    "baseline": "baseline:597fcfa9",
+    "especialista": "especialista:d1145f8b",
+    "baseline_direto": "baseline_direto:1ac39caf",
+    "especialista_direto": "especialista_direto:f537598a",
+    "especialista_v2": "especialista_v2:941936c5",
+    "especialista_direto_v2": "especialista_direto_v2:87912616"
+  },
+  "bracos": [
+    {
+      "modelo": "gpt-6-luna",
+      "prompt": "baseline_direto",
+      "csv": "gpt-6-luna__baseline_direto.csv"
+    },
+    {
+      "modelo": "gpt-6-luna",
+      "prompt": "especialista_direto",
+      "csv": "gpt-6-luna__especialista_direto.csv"
+    }
+  ],
+  "precos": {
+    "versao_tabela": "2026-09-30",
+    "data_consulta": "2026-07-29",
+    "data_consulta_por_modelo": {
+      "gpt-6-luna": "2026-09-30"
+    },
+    "fontes": {
+      "gemini": "https://ai.google.dev/gemini-api/docs/pricing",
+      "openai": "https://platform.openai.com/docs/pricing"
+    },
+    "precos": {
+      "gpt-6-luna": {
+        "entrada_por_1m_usd": 0.1,
+        "saida_por_1m_usd": 0.5
+      }
+    },
+    "modelos_sem_preco": [],
+    "modelos_locais_sem_custo": []
+  },
+  "modelos_locais": {},
+  "populacao": {
+    "total": 2328,
+    "por_trilha": {
+      "FP": 791,
+      "TP_ouro": 32,
+      "TP_prata": 68,
+      "TP_dataset": 57,
+      "TP_alcancavel": 1380
+    }
+  },
+  "modo": {
+    "sem_llm": false,
+    "cache_simbolico_ativo": true,
+    "montagem": "triagem",
+    "envio": "lote"
+  },
+  "lotes": [
+    {
+      "indice": 0,
+      "fornecedor": "openai",
+      "modelo": "gpt-6-luna",
+      "rotulo": "rodada-comercial-luna-triagem-direto-p0-2151494d",
+      "id_lote": "batch_6abda3a51838819086160724d71ec18a",
+      "estado": "RECUPERADA",
+      "estado_fornecedor": "CONCLUIDO",
+      "n_requisicoes": 1736,
+      "tokens_estimados": 1799744,
+      "bytes": 6391550,
+      "submetido_utc": "2026-10-01T00:04:53.502578+00:00",
+      "recuperado_utc": "2026-10-01T00:11:02.305467+00:00",
+      "tokens_entrada": 1469444,
+      "tokens_saida": 144713,
+      "custo_tabela_usd": 0.2193009,
+      "desconto": 0.5,
+      "custo_estimado_usd": 0.10965045,
+      "n_error": 0,
+      "n_expirado": 0,
+      "n_orfas": 0
+    },
+    {
+      "indice": 1,
+      "fornecedor": "openai",
+      "modelo": "gpt-6-luna",
+      "rotulo": "rodada-comercial-luna-triagem-direto-p1-36ace35e",
+      "id_lote": "batch_6abda519eae88190a6712dde4d2e0e4c",
+      "estado": "RECUPERADA",
+      "estado_fornecedor": "CONCLUIDO",
+      "n_requisicoes": 1315,
+      "tokens_estimados": 1796398,
+      "bytes": 6315554,
+      "submetido_utc": "2026-10-01T00:11:05.990092+00:00",
+      "recuperado_utc": "2026-10-01T00:18:15.528489+00:00",
+      "tokens_entrada": 1460199,
+      "tokens_saida": 115845,
+      "custo_tabela_usd": 0.2039424,
+      "desconto": 0.5,
+      "custo_estimado_usd": 0.1019712,
+      "n_error": 0,
+      "n_expirado": 0,
+      "n_orfas": 0
+    },
+    {
+      "indice": 2,
+      "fornecedor": "openai",
+      "modelo": "gpt-6-luna",
+      "rotulo": "rodada-comercial-luna-triagem-direto-p2-6757b807",
+      "id_lote": "batch_6abda6c94b2481909e5db5a9f2e66551",
+      "estado": "RECUPERADA",
+      "estado_fornecedor": "CONCLUIDO",
+      "n_requisicoes": 143,
+      "tokens_estimados": 170102,
+      "bytes": 604740,
+      "submetido_utc": "2026-10-01T00:18:17.318291+00:00",
+      "recuperado_utc": "2026-10-01T00:19:20.679034+00:00",
+      "tokens_entrada": 141784,
+      "tokens_saida": 12658,
+      "custo_tabela_usd": 0.0205074,
+      "desconto": 0.5,
+      "custo_estimado_usd": 0.0102537,
+      "n_error": 0,
+      "n_expirado": 0,
+      "n_orfas": 0
+    }
+  ]
+}
