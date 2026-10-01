@@ -11,6 +11,9 @@ resultado:
   (`especialista`, catálogo por CWE).
 - **Triagem, enquadramento de alerta**: Luna contra o `qwen2.5-coder:7b` da
   Rodada 4 — a única rodada local de triagem com os mesmos prompts.
+- **Triagem, enquadramento direto** (`*_direto`): Luna contra o
+  `qwen2.5-coder:7b` da Rodada 5 e o `gemma2:9b` da Rodada 6 — a comparação de
+  `tab:modelos` (design D7 da change `rodada-comercial`).
 
 As métricas saem sobre os casos que TODOS os braços do bloco julgaram com
 veredito válido (comparação pareada), e na triagem separadas por procedência
@@ -42,7 +45,14 @@ TRIAGEM = {
     "luna-2": f"{RP2}/rodada-comercial-luna-triagem-2",
     "qwen (R4)": f"{RP2}/rodada-4-triagem",
 }
+TRIAGEM_DIRETO = {
+    "luna-1": f"{RP2}/rodada-comercial-luna-triagem-direto",
+    "luna-2": f"{RP2}/rodada-comercial-luna-triagem-direto-2",
+    "qwen (R5)": f"{RP2}/rodada-5-direto",
+    "gemma (R6)": f"{RP2}/rodada-6-gemma",
+}
 PROMPTS = ("baseline", "especialista")
+PROMPTS_DIRETO = ("baseline_direto", "especialista_direto")
 
 
 def _braco(diretorio, prompt):
@@ -106,9 +116,9 @@ def mcnemar_restrito(a, b, comuns):
     return mcnemar(_Recorte(a), _Recorte(b))
 
 
-def bloco(nome, definicao, por_procedencia):
+def bloco(nome, definicao, por_procedencia, prompts=PROMPTS):
     print(f"\n{'=' * 78}\n{nome}\n{'=' * 78}")
-    for prompt in PROMPTS:
+    for prompt in prompts:
         bracos = bracos_do_bloco(definicao, prompt)
         comuns = sorted(set.intersection(*(set(validos(b)) for b in bracos.values())))
         print(f"\n[{prompt}] casos pareados (veredito válido em todos): {len(comuns)}")
@@ -132,6 +142,9 @@ def main():
           por_procedencia=False)
     bloco("BRAÇO DE TRIAGEM (enquadramento de alerta) — Luna × Rodada 4", TRIAGEM,
           por_procedencia=True)
+    if all(os.path.isdir(d) for d in TRIAGEM_DIRETO.values()):
+        bloco("BRAÇO DE TRIAGEM (enquadramento direto) — Luna × Rodadas 5 e 6",
+              TRIAGEM_DIRETO, por_procedencia=True, prompts=PROMPTS_DIRETO)
 
 
 if __name__ == "__main__":

@@ -77,7 +77,9 @@
       | `rodada-comercial-luna-triagem` (1ª tentativa, recusada) | — | US$ 0,0000 |
       | `rodada-comercial-luna-triagem` | ~US$ 0,23 | US$ 0,2333 |
       | `rodada-comercial-luna-triagem-2` | ~US$ 0,23 | US$ 0,2333 |
-      | **total** | **~US$ 0,70** | **US$ 0,7066** (35 % do teto de US$ 2) |
+      | `rodada-comercial-luna-triagem-direto` (2.4, D7) | ~US$ 0,23 | US$ 0,2219 |
+      | `rodada-comercial-luna-triagem-direto-2` (2.4, D7) | ~US$ 0,23 | US$ 0,2220 |
+      | **total** | **~US$ 1,17** | **US$ 1,1505** (58 % do teto de US$ 2) |
 
       O observado é o custo calculado pela pipeline sobre o uso que o
       fornecedor reportou; a conferência contra a fatura é no painel de uso da
@@ -126,24 +128,64 @@
       por `Status_Semgrep` — os injetados vêm `NAO_DETECTADO`; no filtro o
       resultado de 2.1 não muda.)
 
+- [x] 2.4 Braço de triagem no **enquadramento direto**, duas vezes
+      (decisão dos autores de 2026-09-30, design D7; ~US$ 0,23 cada): `--modo-montagem
+      triagem --prompt baseline_direto --prompt especialista_direto`, `--run-id
+      rodada-comercial-luna-triagem-direto` e `…-direto-2`, sob
+      `OPENAI_LOTE_TOKENS_ENFILEIRADOS=2000000`. Verificar: mesma forma de 2.3;
+      concordância registrada; custo somado em 2.2 e total abaixo de US$ 2.
+      **2026-09-30.** Commit `d891a3b` nas duas; 3 partições cada, todas
+      `RECUPERADA` / `CONCLUIDO`, 3.194 requisições, 0 ERROR / 0 EXPIRADO.
+
+      | execução | lotes (openai), em sequência |
+      |---|---|
+      | `rodada-comercial-luna-triagem-direto` | `batch_6abda3a51838819086160724d71ec18a` (1.736), `batch_6abda519eae88190a6712dde4d2e0e4c` (1.315), `batch_6abda6c94b2481909e5db5a9f2e66551` (143) |
+      | `rodada-comercial-luna-triagem-direto-2` | `batch_6abda71e6d088190b5ad1afdf85a9a80` (1.736), `batch_6abda81983b88190b8733e6414ed18df` (1.315), `batch_6abda94edf5c81909d31f1d898b6cbff` (143) |
+
+      **Concordância** (1.597 pareados, 786 vulneráveis):
+
+      | braço | acordo | κ | trocas | em vulneráveis | McNemar exec. 1 × 2 |
+      |---|---:|---:|---:|---:|---|
+      | `baseline_direto` | 1.564/1.597 = 97,9 % | 0,935 | 33 | 9/786 | 19 × 14, p = 0,49 |
+      | `especialista_direto` | 1.577/1.597 = 98,8 % | 0,950 | 20 | 10/786 | 11 × 9, p = 0,82 |
+
+      McNemar `baseline_direto` × `especialista_direto` **reproduz**:
+      110 × 189 (p < 0,0001) e 105 × 187 (p < 0,0001), a favor do especialista.
+
 ## 3. Monografia — `editaveis/resultados.tex`
 
 Sob a regra de `escrita-capitulo-resultados`: nada é commitado sem pedido
 explícito dos autores.
 
-- [ ] 3.1 Acrescentar a linha do modelo comercial (`gpt-6-luna` — **não** "de
+- [x] 3.1 Acrescentar a linha do modelo comercial (`gpt-6-luna` — **não** "de
       fronteira", design D4) na Tabela `tab:modelos` de
       `editaveis/resultados.tex`. Verificar: a tabela traz o
       modelo comercial ao lado de `qwen2.5-coder:7b` e `gemma2:9b`, pela mesma
       leitura por procedência, e o marcador `RODADA COMERCIAL` do ponto sai.
-- [ ] 3.2 Reescrever o item "Escopo de modelos" da seção de limitações
+      **2026-09-30.** Duas linhas do `gpt-6-luna` (especialista direto e
+      baseline direto), pareadas com a reexecução das Rodadas 5 e 6 (os CSVs das
+      originais se perderam), com as duas execuções; legenda explica a base.
+      Comparação de mesmo enquadramento graças a 2.4 (D7).
+- [x] 3.2 Reescrever o item "Escopo de modelos" da seção de limitações
       (`sec:limitacoesresultados`) de `editaveis/resultados.tex`. Verificar: o
       texto delimita a conclusão aos modelos efetivamente executados (D2) e o
       marcador `RODADA COMERCIAL` do item sai.
-- [ ] 3.3 Atualizar `fig:recall-comparado` e o parágrafo marcado em
+      **2026-09-30.** "Três modelos, um comercial", econômico e sem
+      raciocínio; modelos de topo e raciocínio não medidos; variação entre
+      execuções do comercial declarada.
+- [x] 3.3 Atualizar `fig:recall-comparado` e o parágrafo marcado em
       `subsec:supressao` (reforçar ou ressalvar a supressão excessiva, conforme
       o modelo comercial a confirme ou não). Verificar: nenhum marcador
       `RODADA COMERCIAL` resta em `resultados.tex`.
-- [ ] 3.4 Registrar os números em `docs/ANALISE-RODADA-*.md` próprio antes de
+      **2026-09-30.** Série "LLM comercial sobre os não detectados" (17,4 %)
+      na figura; `subsec:supressao` **ressalvada** — o Luna não suprime, erra
+      para o alarme; o comum aos modelos é o deslocamento do limiar. Ajustados
+      também, por coerência: introdução do capítulo (rodadas), fim de
+      `sec:modelos` (resultado), parágrafo antes da figura, "escala dos
+      modelos" e `subsec:consequencias`. Nenhum marcador resta.
+- [x] 3.4 Registrar os números em `docs/ANALISE-RODADA-*.md` próprio antes de
       levá-los ao `.tex`. Verificar: todo número novo do capítulo tem fonte no
       documento de análise.
+      **2026-09-30.** `docs/ANALISE-RODADA-COMERCIAL.md`; fontes:
+      `scripts/comparar_comercial_locais.py` e
+      `scripts/concordancia_execucoes.py`.
