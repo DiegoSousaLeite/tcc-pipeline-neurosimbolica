@@ -23,6 +23,13 @@ Cada pasta tem um CSV por braço (`<modelo>__<prompt>.csv`) e o
 | 6 | `rodada-6-gemma` | gemma2:9b | triagem | baseline_direto, especialista_direto | por CWE | `docs/ANALISE-RODADA-6.md` |
 | 7 | `rodada-7-{filtro,triagem}-{qwen,gemma}` | qwen e gemma | filtro e triagem | especialista, v2 (+ baseline gemma/filtro) | **por regra** | `docs/ANALISE-RODADA-7.md` |
 | 7b | `rodada-7b-filtro-gemma-cwe` | gemma2:9b | filtro | especialista | por CWE | `docs/ANALISE-RODADA-7.md` §2.2 |
+| comercial | `rodada-comercial-luna-filtro`, `-filtro-2` | gpt-6-luna (lote) | filtro | baseline, especialista | por CWE | `docs/ANALISE-RODADA-COMERCIAL.md` |
+| comercial | `rodada-comercial-luna-triagem`, `-triagem-2` | gpt-6-luna (lote) | triagem | baseline, especialista | por CWE | `docs/ANALISE-RODADA-COMERCIAL.md` |
+
+As pastas da rodada comercial são **duas execuções idênticas** de cada braço
+(o Luna não é determinístico com temperatura 0; `openspec/changes/rodada-comercial`,
+design D5), e trazem também o `lote.json` com os identificadores dos lotes no
+fornecedor.
 
 ## Rodadas 4, 5 e 6: reexecuções, não testes novos
 
