@@ -148,6 +148,14 @@ saída média 96 tokens), a preço de lote (US$ 0,05 / 0,25 por 1 M):
 | triagem (cada uma) | 3.194 | ~3,09 M | ~US$ 0,23 |
 | **plano: filtro 2× + triagem 2×** | **9.720** | **~9,3 M** | **~US$ 0,70 ≈ R$ 3,60** |
 
+**Correção de 2026-09-30 (medida):** o teto de fila desta organização para o
+`gpt-6-luna` é **2.000.000 tokens**, e não os 5 M da página do modelo — o
+fornecedor recusou a primeira triagem (partição única, ~3,9 M estimados) com
+`token_limit_exceeded` ("Limit: 2,000,000 enqueued tokens"), sem custo. As
+execuções passam a rodar com `OPENAI_LOTE_TOKENS_ENFILEIRADOS=2000000`, e a
+triagem sai em mais de uma partição, submetidas em sequência. O filtro
+(~1,97 M estimados, partição única) coube por pouco. Nada muda no custo.
+
 Folga de ~2,9× sobre o teto; mesmo com todas as respostas no maior tamanho
 observado (151 tokens), o plano fica abaixo de US$ 0,85. A maior execução (triagem, ~3,1 M tokens) cabe
 inteira na fila de 5 M do Tier 1 — um lote por execução.
