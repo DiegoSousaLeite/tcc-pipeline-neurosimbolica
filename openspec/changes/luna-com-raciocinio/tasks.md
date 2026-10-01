@@ -45,6 +45,22 @@
       `CONCLUIDO`, 0 ERROR / 0 EXPIRADO. Custo **US$ 0,3762**; saída média 704
       tokens (máx. 5.676). **Total da change: US$ 0,9629.**
 
+- [x] 2.6 Completar a matriz do `high` (pedido dos autores, 2026-10-01, saldo
+      informado US$ 3,07; estimativa ~US$ 0,72, pior caso ~US$ 1,80):
+      filtro `high` com `baseline` + `especialista`
+      (`rodada-comercial-luna-high-filtro`) e, depois dele, triagem direta
+      `high` só com `baseline_direto`
+      (`rodada-comercial-luna-high-triagem-direto-baseline`). Verificar: lotes
+      `RECUPERADA` / `CONCLUIDO`, custo registrado, matriz `none`/`low`/`high`
+      × filtro/triagem × dois prompts completa.
+      **2026-10-01.** Commit `c3458bb` nas duas. Filtro: lotes
+      `batch_6abee7c1a40c819080eb478ac6d26983` (1.515) e
+      `batch_6abee934e25081908a517fcab3c18ede` (151), US$ 0,3974. Triagem
+      `baseline_direto`: `batch_6abee9bc2aa48190be012aa995d3a24b` (1.597),
+      US$ 0,5630 (saída média 1.264 tokens, máx. 11.222 — acima da projeção).
+      Todos `RECUPERADA` / `CONCLUIDO`, 0 ERROR / 0 EXPIRADO.
+      **Total da change: US$ 1,9233.**
+
 ## 3. Análise
 
 - [ ] 3.1 Comparar com o Luna sem raciocínio (duas execuções) e com os locais,

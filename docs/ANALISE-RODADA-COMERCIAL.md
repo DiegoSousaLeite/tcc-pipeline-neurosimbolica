@@ -401,6 +401,72 @@ nos injetados (260 × 6, 252 × 16) e menos na pilha (29 × 147, 75 × 132).
 Ressalvas: as de §8.1 (uma execução, temperatura padrão, J entre populações de
 origem diferente), e só o *prompt* especialista direto.
 
+### 8.3 Matriz completa: `none` / `low` / `high` × filtro / triagem × dois *prompts*
+
+Completada em 2026-10-01 (`luna-com-raciocinio` 2.6): filtro `high` com os dois
+*prompts* (`rodada-comercial-luna-high-filtro`, US$ 0,3974) e triagem `high`
+com `baseline_direto` (`rodada-comercial-luna-high-triagem-direto-baseline`,
+US$ 0,5630). Commit `c3458bb`. Fonte: blocos "Luna high × low × sem × locais"
+de `scripts/comparar_comercial_locais.py` (a triagem `high` junta as duas pastas,
+um *prompt* em cada). "Sem" = execução 1 / execução 2.
+
+**Filtro** (820 / 822 pareados, 19 vulneráveis):
+
+| prompt | esforço | VP | FP | Recall | MCC | TRA |
+|---|---|---:|---:|---:|---:|---:|
+| baseline | sem | 9 / 9 | 240 / 242 | 47,4 % | +0,057 / +0,056 | 69,6 / 69,4 % |
+| baseline | `low` | 11 | 237 | 57,9 % | +0,093 | 69,8 % |
+| baseline | `high` | 13 | 243 | 68,4 % | +0,124 | 68,8 % |
+| especialista | sem | 10 / 12 | 269 / 262 | 52,6 / 63,2 % | +0,061 / +0,097 | 66,1 / 66,7 % |
+| especialista | `low` | 13 | 251 | 68,4 % | +0,120 | 67,9 % |
+| especialista | `high` | 13 | 244 | 68,4 % | +0,123 | 68,7 % |
+| (qwen R3) | baseline / especialista | 8 / 3 | 115 / 12 | 42,1 / 15,8 % | +0,117 / +0,160 | 85,0 / 98,2 % |
+
+McNemar `high` × as outras execuções do Luna: nenhuma diferença significativa
+no baseline (menor p = 0,75); no especialista, só contra a execução 1 sem
+raciocínio (103 × 75, p = 0,043), e não contra a 2 (p = 0,17) nem contra o
+`low` (p = 0,51). `high` × qwen: o qwen acerta mais nos dois *prompts*
+(p < 10⁻¹²). Dentro do `high`, baseline × especialista: 45 × 42, p = 0,83.
+
+**Triagem direta** (1.589 / 1.563 pareados):
+
+| prompt | esforço | pilha: VP/22–21 | pilha: FP | pilha: MCC | injetados | alarme em seguros | J |
+|---|---|---:|---:|---:|---:|---:|---:|
+| baseline_direto | sem | 14 / 13 | 164 / 166 | +0,170 / +0,151 | 18,0 / 17,6 % | 20,2 / 20,5 % | −0,023 / −0,029 |
+| baseline_direto | `low` | 17 | 321 | +0,123 | 41,0 % | 39,6 % | +0,013 |
+| baseline_direto | `high` | 18 | 359 | +0,121 | **51,4 %** | 44,3 % | +0,071 |
+| especialista_direto | sem | 15 / 15 | 82 / 85 | **+0,299 / +0,294** | 17,1 / 17,3 % | 10,2 / 10,5 % | +0,069 / +0,067 |
+| especialista_direto | `low` | 11 | 116 | +0,166 | 32,7 % | 14,4 % | **+0,184** |
+| especialista_direto | `high` | 13 | 167 | +0,157 | 38,6 % | 20,7 % | **+0,179** |
+
+`baseline_direto` `high` × `low`: pilha 35 × 72 (p < 0,001, a favor do `low`);
+injetados 105 × 26 (p < 10⁻¹¹, a favor do `high`).
+
+**Leitura da matriz.**
+
+- **Filtro: o raciocínio não muda o sistema.** Em nenhum esforço e em nenhum
+  *prompt* a redução de alertas sai de 67–70 % ou os falsos alarmes de
+  ~240–270. O recall sobe de 9–12 para 11–13 de 19, sem significância
+  reproduzida, e a ordenação entre os modelos não se altera: o qwen continua o
+  melhor filtro. Com raciocínio, o especialista deixa de ter qualquer efeito
+  sobre o baseline (`high`: 45 × 42).
+- **Triagem: o raciocínio desloca o modelo para o alarme, e o especialista é o
+  que converte isso em discriminação.** Com o especialista, J salta no `low` e
+  estabiliza (+0,07 → +0,18 → +0,18). Com o baseline, J sobe devagar
+  (−0,03 → +0,01 → +0,07), sempre abaixo do especialista sem raciocínio, à custa
+  de alarmar em 44 % dos seguros. O `baseline_direto` `high` recupera a maior
+  fração de injetados do experimento (51 %), mas é o braço que mais alarma.
+- **O especialista direto com `low` é o ponto eficiente**: a maior separação
+  entre vulnerável e seguro (J +0,18) com o menor custo em alarme entre os
+  braços com raciocínio (14 %) e um terço dos tokens do `high`.
+- **A pilha de alertas piora com qualquer raciocínio**, nos dois *prompts*.
+- **O teto se mantém**: no braço de maior recuperação, metade dos casos que o
+  analisador perde continua perdida, com 44 % de alarme nos seguros.
+
+**Custo dos *tokens*.** A saída média do `high` variou muito por braço: 703–825
+no filtro, 704 no especialista direto e 1.264 no baseline direto (máximo
+11.222). O baseline direto custou 60 % acima da projeção.
+
 ## 9. Reprodução
 
 ```bash

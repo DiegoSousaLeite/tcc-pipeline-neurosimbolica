@@ -29,6 +29,8 @@ Cada pasta tem um CSV por braço (`<modelo>__<prompt>.csv`) e o
 | comercial, raciocínio | `rodada-comercial-luna-low-filtro` | gpt-6-luna@low (lote, `reasoning_effort: "low"`, temperatura padrão) | filtro | baseline, especialista | por CWE | `docs/ANALISE-RODADA-COMERCIAL.md` §8 |
 | comercial, raciocínio | `rodada-comercial-luna-low-triagem-direto` | gpt-6-luna@low (idem) | triagem | baseline_direto, especialista_direto | por CWE | `docs/ANALISE-RODADA-COMERCIAL.md` §8 |
 | comercial, raciocínio | `rodada-comercial-luna-high-triagem-direto` | gpt-6-luna@high (`reasoning_effort: "high"`, temperatura padrão) | triagem | especialista_direto | por CWE | `docs/ANALISE-RODADA-COMERCIAL.md` §8.2 |
+| comercial, raciocínio | `rodada-comercial-luna-high-triagem-direto-baseline` | gpt-6-luna@high (idem) | triagem | baseline_direto | por CWE | `docs/ANALISE-RODADA-COMERCIAL.md` §8.3 |
+| comercial, raciocínio | `rodada-comercial-luna-high-filtro` | gpt-6-luna@high (idem) | filtro | baseline, especialista | por CWE | `docs/ANALISE-RODADA-COMERCIAL.md` §8.3 |
 
 As pastas da rodada comercial são **duas execuções idênticas** de cada braço
 (o Luna não é determinístico com temperatura 0; `openspec/changes/rodada-comercial`,

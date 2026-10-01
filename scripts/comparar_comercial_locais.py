@@ -62,11 +62,19 @@ TRIAGEM_DIRETO_RACIOCINIO = {
     "luna-low": f"{RP2}/rodada-comercial-luna-low-triagem-direto",
     **TRIAGEM_DIRETO,
 }
-# Mesmo Luna com `reasoning_effort: "high"`: só o especialista direto, onde o
-# `low` teve efeito (tarefa 2.5 de `luna-com-raciocinio`).
+# Mesmo Luna com `reasoning_effort: "high"`. Na triagem, o especialista direto
+# rodou primeiro (tarefa 2.5) e o baseline direto depois, em pasta própria
+# (2.6): o valor é um diretório por prompt.
 TRIAGEM_DIRETO_RACIOCINIO_HIGH = {
-    "luna-high": f"{RP2}/rodada-comercial-luna-high-triagem-direto",
+    "luna-high": {
+        "especialista_direto": f"{RP2}/rodada-comercial-luna-high-triagem-direto",
+        "baseline_direto": f"{RP2}/rodada-comercial-luna-high-triagem-direto-baseline",
+    },
     **TRIAGEM_DIRETO_RACIOCINIO,
+}
+FILTRO_RACIOCINIO_HIGH = {
+    "luna-high": f"{RP2}/rodada-comercial-luna-high-filtro",
+    **FILTRO_RACIOCINIO,
 }
 PROMPTS = ("baseline", "especialista")
 PROMPTS_DIRETO = ("baseline_direto", "especialista_direto")
@@ -85,6 +93,8 @@ def bracos_do_bloco(bloco, prompt):
         if d is None:
             d = (f"{RP2}/rodada-7-filtro-gemma" if prompt == "baseline"
                  else f"{RP2}/rodada-7b-filtro-gemma-cwe")
+        elif isinstance(d, dict):
+            d = d[prompt]
         saida[rotulo] = _braco(d, prompt)
     return saida
 
@@ -181,10 +191,15 @@ def main():
     if os.path.isdir(FILTRO_RACIOCINIO["luna-low"]):
         bloco("BRAÇO DE FILTRO — Luna com raciocínio low × sem raciocínio × locais",
               FILTRO_RACIOCINIO, por_procedencia=False, focos=("luna-low",))
-    if os.path.isdir(TRIAGEM_DIRETO_RACIOCINIO_HIGH["luna-high"]):
+    high = TRIAGEM_DIRETO_RACIOCINIO_HIGH["luna-high"]
+    prompts_high = tuple(p for p in PROMPTS_DIRETO if os.path.isdir(high[p]))
+    if prompts_high:
         bloco("BRAÇO DE TRIAGEM (direto) — Luna high × low × sem × locais",
               TRIAGEM_DIRETO_RACIOCINIO_HIGH, por_procedencia=True,
-              prompts=("especialista_direto",), focos=("luna-high",))
+              prompts=prompts_high, focos=("luna-high",))
+    if os.path.isdir(FILTRO_RACIOCINIO_HIGH["luna-high"]):
+        bloco("BRAÇO DE FILTRO — Luna high × low × sem × locais",
+              FILTRO_RACIOCINIO_HIGH, por_procedencia=False, focos=("luna-high",))
     if os.path.isdir(TRIAGEM_DIRETO_RACIOCINIO["luna-low"]):
         bloco("BRAÇO DE TRIAGEM (direto) — Luna com raciocínio low × sem × locais",
               TRIAGEM_DIRETO_RACIOCINIO, por_procedencia=True,
