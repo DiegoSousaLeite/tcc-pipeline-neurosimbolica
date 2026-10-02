@@ -287,6 +287,15 @@ não muda o comportamento do Luna — o erro dominante continua sendo o excesso 
 alarme, e a ordenação entre os modelos não se altera. Ressalvas: uma execução;
 temperatura padrão junto com o raciocínio; esforço `low` apenas.
 
+**Custo faturado × calculado (extensão com raciocínio, conferido em
+2026-10-01).** Saldo da conta OpenAI informado pelos autores: US$ 3,96 antes
+dos pilotos e US$ 2,01 ao fim — **US$ 1,95 faturados**, contra **US$ 1,9233**
+somados dos `lotes[].custo_estimado_usd` dos manifestos (pilotos 0,0142;
+filtro `low` 0,1825; triagem `low` 0,3900; triagem `high` especialista 0,3762;
+filtro `high` 0,3974; triagem `high` baseline 0,5630). Diferença de US$ 0,03
+(1,4 %). Os saldos intermediários lidos no painel ficaram acima do esperado
+por atraso de faturamento dos lotes recentes, e convergiram no fim.
+
 ### 8.1 Braço de triagem, enquadramento direto, com raciocínio
 
 Uma execução (`rodada-comercial-luna-low-triagem-direto`, commit `5f6e7a7`,
