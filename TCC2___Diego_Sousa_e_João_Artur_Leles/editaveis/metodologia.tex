@@ -1,11 +1,15 @@
 \chapter{Metodologia}
 \label{cap:metodologia}
 
-Este capítulo detalha os procedimentos metodológicos adotados para a construção, execução e validação da arquitetura neuro-simbólica proposta. A metodologia foi desenhada para descrever o artefato tecnológico desenvolvido, um \textit{pipeline} automatizado de triagem, como também para estruturar o experimento controlado que visa avaliar a sua eficácia empírica. Dessa forma, o capítulo descreve o plano metodológico, a arquitetura do sistema, o ambiente de simulação integrado à base de dados, as métricas de avaliação e as limitações do estudo.
+Este capítulo detalha os procedimentos metodológicos adotados para a construção, execução e validação da arquitetura híbrida proposta. A metodologia foi desenhada para descrever o artefato tecnológico desenvolvido, um \textit{pipeline} automatizado de triagem, como também para estruturar o experimento controlado que visa avaliar a sua eficácia empírica. Dessa forma, o capítulo descreve o plano metodológico, a arquitetura do sistema, o ambiente de simulação integrado à base de dados, as métricas de avaliação e as limitações do estudo.
 
 \section{Plano Metodológico}
 
-A pesquisa adota uma abordagem empírica e quantitativa, estruturada sob a forma de um experimento controlado. O objetivo deste experimento é avaliar de forma sistemática como a injeção de contexto semântico em \textit{prompts} influencia a capacidade de LLMs na filtragem de falsos positivos gerados por ferramentas de SAST.
+A pesquisa adota uma abordagem empírica, estruturada sob a forma de um experimento controlado. O objetivo deste experimento é avaliar de forma sistemática como a injeção de contexto semântico em \textit{prompts} influencia a capacidade de LLMs na filtragem de falsos positivos gerados por ferramentas de SAST.
+
+Quanto à classificação \cite{prodanov2013}, a pesquisa é de natureza aplicada, pois busca gerar conhecimento para um problema prático, a fadiga de alertas causada por falsos positivos de SAST, e produz como artefato uma esteira de triagem. Quanto aos objetivos, é explicativa, pois investiga se e em que medida fatores controlados (tipo de \textit{prompt}, modelo e modo de execução) determinam o desempenho do LLM na triagem. Quanto à abordagem, é predominantemente quantitativa, com base em métricas extraídas de matrizes de classificação, complementada por uma análise qualitativa das justificativas do modelo. Quanto aos procedimentos, é uma pesquisa experimental, conduzida em ambiente de laboratório sobre uma base com gabarito, na forma de experimento controlado, com fatores manipulados e variáveis de resposta mensuradas \cite{wohlin2012}.
+
+Além disso, o estudo se configura como uma replicação diferenciada do \textit{ZeroFalse} \cite{iranmanesh2025zerofalseimprovingprecisionstatic}. Mantém-se a ideia central, empregar um LLM como etapa de triagem sobre os alertas de um SAST, e variam-se deliberadamente quatro elementos: a linguagem (de Java para Go); a base de validação (\textit{SastBench} e \textit{OSV.dev}, em vez do OWASP Benchmark e do \textit{OpenVuln}); o contexto entregue ao modelo (a função que contém o alerta, e não o rastro de fluxo de dados, que o relatório da edição aberta do Semgrep não fornece); e os modelos (locais e um comercial). Como os elementos são variados, e não repetidos, o estudo verifica se as conclusões do trabalho original se sustentam em outro ecossistema, sem pretender reproduzir os seus números.
 
 Para garantir a reprodutibilidade e o rigor científico da análise, o experimento foi delineado a partir do isolamento e da manipulação de variáveis específicas. Foram definidos como fatores experimentais desta pesquisa:
 
@@ -55,7 +59,7 @@ O processo metodológico completo é dividido nas seguintes etapas, que serão d
 \section{Arquitetura do \textit{Pipeline} Proposto}
 \label{sec:arquitetura}
 
-Para operacionalizar a integração neuro-simbólica em um cenário real de desenvolvimento, será desenvolvida uma arquitetura automatizada baseada em um \textit{pipeline} de quatro fases independentes e sequenciais. O artefato é projetado estruturalmente para operar de forma aderente aos paradigmas de Integração Contínua (CI/CD), possuindo a capacidade de ser disparado por eventos do ciclo de desenvolvimento (\textit{push} ou \textit{Pull Request}). O objetivo principal desta infraestrutura lógica é garantir que o modelo de linguagem receba evidências objetivas e contextos semânticos precisos, minimizando a ocorrência de alucinações durante a inferência.
+Para operacionalizar a abordagem híbrida simbólico-neural em um cenário real de desenvolvimento, será desenvolvida uma arquitetura automatizada baseada em um \textit{pipeline} de quatro fases independentes e sequenciais. O artefato é projetado estruturalmente para operar de forma aderente aos paradigmas de Integração Contínua (CI/CD), possuindo a capacidade de ser disparado por eventos do ciclo de desenvolvimento (\textit{push} ou \textit{Pull Request}). O objetivo principal desta infraestrutura lógica é garantir que o modelo de linguagem receba evidências objetivas e contextos semânticos precisos, minimizando a ocorrência de alucinações durante a inferência.
 
 A Figura~\ref{fig:arquitetura} sintetiza o fluxo da arquitetura em um cenário real de uso:
 disparada por um evento de Integração Contínua, a esteira percorre as quatro fases
@@ -64,7 +68,7 @@ integração do código.
 
 \begin{figure}[htpb]
     \centering
-    \caption{Arquitetura da pipeline neuro-simbólica em um cenário de Integração Contínua}
+    \caption{Arquitetura da pipeline híbrida simbólico-neural em um cenário de Integração Contínua}
     \label{fig:arquitetura}
     \begin{tikzpicture}[
         node distance=6mm,
@@ -108,7 +112,7 @@ A fase final da arquitetura executará a chamada ao modelo de linguagem definido
 
 \section{Projeto e Estruturação dos \textit{Prompts}}
 \label{sec:prompts}
-Considerando o objetivo de avaliar a eficácia da arquitetura neuro-simbólica na triagem de alertas de segurança, o experimento foi estruturado para isolar e medir o impacto do contexto semântico na tomada de decisão do modelo de linguagem. Para isso, a etapa de inferência neural empregará duas abordagens distintas de \textit{prompting} (um modelo de controle e um experimental). Ambas as abordagens herdam os fundamentos de \textit{prompt programming} descritos na fundamentação teórica, mas diferem na quantidade e na qualidade do contexto injetado.
+Considerando o objetivo de avaliar a eficácia da arquitetura híbrida na triagem de alertas de segurança, o experimento foi estruturado para isolar e medir o impacto do contexto semântico na tomada de decisão do modelo de linguagem. Para isso, a etapa de inferência neural empregará duas abordagens distintas de \textit{prompting} (um modelo de controle e um experimental). Ambas as abordagens herdam os fundamentos de \textit{prompt programming} descritos na fundamentação teórica, mas diferem na quantidade e na qualidade do contexto injetado.
 
 Para garantir o determinismo estrutural necessário em um \textit{pipeline} automatizado, ambas as requisições compartilham uma arquitetura base focada na extração de um raciocínio estruturado (\textit{Chain-of-Thought}). O modelo é forçado, via parâmetros de API (com temperatura zero, exceto nas execuções com raciocínio do modelo comercial) e instruções de sistema, a retornar exclusivamente um objeto JSON contendo dois campos: a justificativa técnica detalhada (\texttt{reasoning}) e o veredito final binário (\texttt{veredito}: ``VP'' ou ``FP''). Nesta etapa, o modelo é explicitamente instruído a atuar apenas como um classificador para a triagem do alerta, sendo vetada qualquer tentativa de reescrita ou sugestão de correção do código-fonte. A exigência do campo \texttt{reasoning} antes do veredito obriga o modelo a materializar a sua cadeia de raciocínio lógico antes de classificar a vulnerabilidade, reduzindo a estocasticidade da resposta.
 
@@ -130,7 +134,7 @@ enriquecimento que distinguem o \textit{prompt} especialista do controle.
         \node[layer, fill=black!6, below=2mm of bt] (b1) {\textit{System}: assistente genérico de segurança};
         \node[layer, fill=black!6, below=2mm of b1] (b2) {\textit{User}: trecho de código + alerta do Semgrep};
 
-        \node[title, right=12mm of bt] (et) {Especialista (Neuro-Simbólico)};
+        \node[title, right=12mm of bt] (et) {Especialista};
         \node[layer, fill=blue!8, below=2mm of et] (e1) {\textit{System}: arquiteto de segurança sênior em Go};
         \node[layer, fill=blue!8, below=2mm of e1] (e2) {\textit{User}: trecho de código + alerta do Semgrep};
         \node[layer, fill=blue!8, below=2mm of e2] (e3) {{}+ Ancoragem teórica da CWE};
@@ -141,12 +145,12 @@ enriquecimento que distinguem o \textit{prompt} especialista do controle.
 \end{figure}
 
 \subsection{O \textit{Prompt} de Controle (\textit{Baseline})}
-O \textit{prompt} de controle opera sob o paradigma \textit{Zero-Shot}, representando a abordagem mais ingênua de integração de um LLM a uma ferramenta de SAST. O seu objetivo é estabelecer a linha de base (\textit{baseline}) do desempenho do modelo ao analisar a linguagem Go, sem o benefício do direcionamento neuro-simbólico especializado.
+O \textit{prompt} de controle opera sob o paradigma \textit{Zero-Shot}, representando a abordagem mais ingênua de integração de um LLM a uma ferramenta de SAST. O seu objetivo é estabelecer a linha de base (\textit{baseline}) do desempenho do modelo ao analisar a linguagem Go, sem o benefício do direcionamento especializado.
 
 Nesta estrutura, o \textit{System Prompt} define o modelo genericamente como um assistente de segurança. O \textit{User Prompt} injeta apenas os dados brutos extraídos da Fase 1: o trecho de código apontado e a mensagem de alerta original do Semgrep. Não são fornecidas definições teóricas sobre a CWE, exemplos de resolução ou heurísticas específicas da linguagem. Avalia-se, assim, a capacidade latente e intrínseca do LLM em validar o código valendo-se unicamente do seu treinamento original.
 
-\subsection{O \textit{Prompt} Especialista (Neuro-Simbólico)}
-Em contraste com o controle, o \textit{prompt} especialista representa a aplicação integral da arquitetura neuro-simbólica proposta e da engenharia de contexto. Esta abordagem atua como uma âncora factual para a rede neural, substituindo a busca exploratória cega por uma verificação guiada por evidências. A sua estrutura é dividida em três camadas de enriquecimento cognitivo:
+\subsection{O \textit{Prompt} Especialista}
+Em contraste com o controle, o \textit{prompt} especialista representa a aplicação integral da arquitetura híbrida proposta e da engenharia de contexto. Esta abordagem atua como uma âncora factual para a rede neural, substituindo a busca exploratória cega por uma verificação guiada por evidências. A sua estrutura é dividida em três camadas de enriquecimento cognitivo:
 
 \begin{enumerate}
     \item \textbf{Ancoragem Teórica da CWE:} Injeção da definição formal e dos critérios de exploração da fraqueza reportada, garantindo que o modelo compreenda a natureza exata da ameaça (por exemplo, os requisitos para que uma falha CWE-1004 realmente ocorra no gerenciamento de \textit{cookies}).
@@ -178,7 +182,7 @@ O processo de integração ocorrerá por meio de um \textit{script} orquestrador
 
 \begin{enumerate}
     \item \textbf{Simulação de Evento (\textit{Checkout} Histórico):} O orquestrador clonará o repositório \textit{open-source} listado no SastBench e reverterá o código da aplicação para o \textit{hash} exato do \textit{commit} onde a vulnerabilidade (ou o falso positivo) foi catalogada. Esse procedimento simulará o instante em que um \textit{push} teria sido executado.
-    \item \textbf{Disparo Isolado do \textit{Pipeline}:} Com o ambiente estabilizado, o orquestrador acionará a Fase 1 da arquitetura, forçando o Semgrep a analisar o respectivo \textit{commit} e a iniciar a cadeia neuro-simbólica automatizada.
+    \item \textbf{Disparo Isolado do \textit{Pipeline}:} Com o ambiente estabilizado, o orquestrador acionará a Fase 1 da arquitetura, forçando o Semgrep a analisar o respectivo \textit{commit} e a iniciar a cadeia híbrida automatizada.
     \item \textbf{Análise de Ponto Cego Simbólico (\textit{Missed Alerts}):} Durante o experimento, é possível que o Semgrep conclua sua análise e não identifique nenhuma vulnerabilidade no arquivo, não emitindo qualquer alerta. Nesses casos, o orquestrador interceptará a ausência de dados antes da Fase 4. Essa dinâmica é crucial para o estudo, pois revelará os Falsos Negativos nativos da ferramenta de SAST, demonstrando cenários onde a própria análise estática falha em detectar vulnerabilidades reais validadas pelo SastBench.
     \item \textbf{Coleta de Dados e Auditoria Laboratorial:} Ao final do fluxo de cada alerta, o orquestrador agirá como um módulo de persistência científica. Ele capturará o veredito da IA (ou a falha de detecção do Semgrep) e emparelhará essa informação com o gabarito oficial contido no manifesto do SastBench.
     \item \textbf{Consolidação:} Ambas as classificações, juntamente com o tempo de execução e a justificativa técnica da IA, serão consolidadas estruturalmente em um relatório tabular (formato CSV). Será este arquivo que fornecerá a base determinística para a extração estatística de métricas de desempenho e da Matriz de Confusão apresentada nos resultados.
@@ -302,7 +306,7 @@ As duas formulações entregam a mesma informação: o especialista recebe a CWE
 
 \section{Análise de Dados e Métricas}
 \label{sec:metricas}
-Esta seção detalha o plano de análise de dados, etapa fundamental para responder às perguntas de pesquisa propostas. A análise visa mensurar quantitativamente e qualitativamente o impacto da injeção de contexto semântico e do uso da arquitetura neuro-simbólica na triagem de alertas gerados pelo Semgrep, especificamente para a linguagem Go.
+Esta seção detalha o plano de análise de dados, etapa fundamental para responder às perguntas de pesquisa propostas. A análise visa mensurar quantitativamente e qualitativamente o impacto da injeção de contexto semântico e do uso da arquitetura híbrida na triagem de alertas gerados pelo Semgrep, especificamente para a linguagem Go.
 
 \subsection{Definição do Espaço de Classificação}
 \label{subsec:classificacao}
@@ -460,7 +464,7 @@ $$\mathrm{MCC} = \frac{(\mathrm{VP} \times \mathrm{VN}) - (\mathrm{FP} \times \m
 \item \textbf{Teste de McNemar:} como os dois \textit{prompts} avaliam exatamente os mesmos casos, a diferença entre eles é testada pelo teste de McNemar, indicado para comparar dois classificadores sobre o mesmo conjunto de teste \cite{dietterich1998tests}. O teste considera apenas os casos em que os dois discordam e verifica se as discordâncias se distribuem de forma equilibrada. O resultado do teste é o p-valor: a chance de uma diferença do tamanho da observada surgir por acaso, se os dois \textit{prompts} fossem, na verdade, equivalentes. Quanto menor o p-valor, menos provável que a diferença seja fruto do acaso; adota-se o limiar usual de 0,05, abaixo do qual a diferença é considerada estatisticamente significativa.
 \end{itemize}
 
-\textbf{Q2: Em que proporção a arquitetura neuro-simbólica proposta consegue reduzir o volume de falsos positivos sem introduzir falsos negativos?}
+\textbf{Q2: Em que proporção a arquitetura híbrida proposta consegue reduzir o volume de falsos positivos sem introduzir falsos negativos?}
 \begin{itemize}
 \item \textbf{\textit{Recall} (Revocação):} Capacidade do modelo de encontrar vulnerabilidades reais, calculada por $\mathrm{Recall} = \frac{VP}{VP + FN}$.
 \item \textbf{Taxa de Falsos Negativos (TFN):} Métrica crítica para a segurança, indicando a proporção de vulnerabilidades reais que o LLM erroneamente classificou como seguras: $\mathrm{TFN} = \frac{\mathrm{FN}}{\mathrm{FN} + \mathrm{VP}}$. O objetivo empírico é maximizar o VN (Falsos Positivos filtrados) mantendo a TFN próxima a zero.
