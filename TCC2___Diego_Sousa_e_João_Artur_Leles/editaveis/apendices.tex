@@ -2,12 +2,20 @@
 
 %\partapendices
 
-\chapter{Primeiro Apêndice}
+\chapter{Repositório do Projeto}
+\label{ap:repositorio}
 
-Texto do primeiro apêndice.
+O código e os dados deste trabalho estão disponíveis no repositório \url{https://github.com/DiegoSousaLeite/tcc-pipeline-neurosimbolica}. As partes principais são as seguintes:
 
-\chapter{Segundo Apêndice}
+\begin{itemize}
+    \item \texttt{src/} e \texttt{run\_pipeline.py}: a esteira, das Fases 1 a 4, e o orquestrador do experimento (Seção~\ref{sec:simulacao});
+    \item \texttt{prompts/}: os \textit{templates} dos \textit{prompts} \textit{baseline} e especialista, nas duas formulações da pergunta (Seções~\ref{sec:prompts} e~\ref{subsec:enquadramento});
+    \item \texttt{data/}: a base de validação, o catálogo de fichas por CWE (\texttt{catalogo\_cwe.json}) e por regra do Semgrep (\texttt{catalogo\_cwe\_por\_regra.json}), e a divisão dos casos em grupos de desenvolvimento e de avaliação (\texttt{particao\_avaliacao.json});
+    \item \texttt{regras/go/}: as regras próprias da Seção~\ref{subsec:h4}, cada uma acompanhada de um arquivo Go de exemplo para teste;
+    \item \texttt{resultados\_parte2/}: os registros das execuções a partir da Rodada 4, incluindo a segunda execução das Rodadas 4 a 6 e a rodada comercial;
+    \item \texttt{cache/}: os arquivos de código analisados, na versão de cada caso.
+\end{itemize}
 
-Texto do segundo apêndice.
+A divisão dos casos citada na Seção~\ref{subsec:h4} foi registrada no \textit{commit} \texttt{cc87274}, de 17 de setembro de 2026, anterior ao da primeira regra própria.
 
 \end{apendicesenv}
