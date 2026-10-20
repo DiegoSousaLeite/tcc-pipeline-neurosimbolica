@@ -147,9 +147,9 @@ docs/                    # Documentação de detalhe (abaixo)
 > relatório recomenda omiti-las.
 
 O código da Parte 1 (fluxo CodeQL) não é mantido em cópia: vive no histórico do
-Git e se recupera por caminho antigo.
+Git e se recupera pelo commit anterior à limpeza que o removeu (`3c3a087`).
 
 ```bash
-git show HEAD:main.py               # orquestrador original (5 fases via CodeQL)
-git show HEAD:src/fase1_codeql.py   # Fase 1: clone + database create + analyze
+git show 3c3a087^:main.py               # orquestrador original (5 fases via CodeQL)
+git show 3c3a087^:src/fase1_codeql.py   # Fase 1: clone + database create + analyze
 ```
