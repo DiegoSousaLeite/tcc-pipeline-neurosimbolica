@@ -18,4 +18,66 @@ O código e os dados deste trabalho estão disponíveis no repositório \url{htt
 
 A divisão dos casos citada na Seção~\ref{subsec:h4} foi registrada no \textit{commit} \texttt{cc87274}, de 17 de setembro de 2026, anterior ao da primeira regra própria.
 
+\chapter{Categorias da CWE Citadas no Texto}
+\label{ap:cwes}
+
+Este apêndice reúne as categorias da \textit{Common Weakness Enumeration} (CWE) citadas ao longo do texto, com um nome em português e uma descrição curta de cada uma (Tabela~\ref{tab:cwes}). Os nomes oficiais, em inglês, e as descrições completas estão no catálogo mantido pela MITRE \cite{mitrecwe}.
+
+{\renewcommand{\arraystretch}{1.2}\setlength{\LTpost}{2pt}
+\begin{longtable}{|>{\footnotesize}l|>{\footnotesize\raggedright\arraybackslash}p{4.3cm}|>{\footnotesize\raggedright\arraybackslash}p{8.4cm}|}
+    \caption[Categorias da CWE citadas no texto]{Categorias da CWE citadas no texto, em ordem numérica}
+    \label{tab:cwes} \\
+        \hline
+        \textbf{CWE} & \textbf{Nome} & \textbf{O que é} \\
+        \hline
+    \endfirsthead
+        \hline
+        \textbf{CWE} & \textbf{Nome} & \textbf{O que é} \\
+        \hline
+    \endhead
+        \multicolumn{3}{r}{\footnotesize continua na próxima página} \\
+    \endfoot
+    \endlastfoot
+        CWE-22 & Travessia de caminho (\textit{path traversal}) & Um caminho de arquivo montado com dado externo permite acessar arquivos fora do diretório permitido. \\
+        \hline
+        CWE-78 & Injeção de comando do sistema operacional & Dado externo chega a um comando executado pelo sistema operacional sem ser neutralizado. \\
+        \hline
+        CWE-79 & \textit{Cross-site scripting} (XSS) & Dado externo é incluído numa página \textit{web} sem tratamento e pode executar código no navegador de quem a acessa. \\
+        \hline
+        CWE-89 & Injeção de SQL & Dado externo é inserido numa consulta SQL e altera o seu significado. \\
+        \hline
+        CWE-94 & Injeção de código & Dado externo é usado para gerar ou interpretar código que o programa executa, por exemplo num \textit{template}. \\
+        \hline
+        CWE-200 & Exposição de informação sensível & Informação sensível fica acessível a quem não deveria ter acesso a ela. \\
+        \hline
+        CWE-327 & Algoritmo criptográfico frágil ou arriscado & Uso de algoritmo ou configuração criptográfica considerados inseguros, como \textit{hash} fraco ou TLS que aceita versões antigas. \\
+        \hline
+        CWE-328 & \textit{Hash} fraco & Uso, para fins de segurança, de uma função de \textit{hash} sem a resistência necessária, como MD5 ou SHA-1. \\
+        \hline
+        CWE-345 & Verificação insuficiente da autenticidade dos dados & O programa aceita dados sem verificar adequadamente a sua origem ou a sua integridade. \\
+        \hline
+        CWE-352 & Falsificação de requisição entre sites (CSRF) & O servidor aceita requisições forjadas por outro site em nome do usuário, como uma conexão \textit{WebSocket} sem verificação de origem. \\
+        \hline
+        CWE-362 & Condição de corrida & Execuções concorrentes acessam um recurso compartilhado sem a sincronização adequada. \\
+        \hline
+        CWE-400 & Consumo descontrolado de recursos & O programa não limita o uso de memória, processamento ou conexões e pode ser levado à indisponibilidade. \\
+        \hline
+        CWE-601 & Redirecionamento aberto & O destino de um redirecionamento vem de dado externo e pode levar o usuário a um site malicioso. \\
+        \hline
+        CWE-614 & \textit{Cookie} sensível sem o atributo \texttt{Secure} & O \textit{cookie} de sessão pode ser enviado por uma conexão não cifrada. \\
+        \hline
+        CWE-665 & Inicialização inadequada & Um recurso é usado sem ter sido inicializado, ou é inicializado com valores inseguros. \\
+        \hline
+        CWE-667 & Bloqueio inadequado & Uma trava (\textit{lock}) é adquirida ou liberada de forma incorreta, o que pode causar corrida ou travamento. \\
+        \hline
+        CWE-918 & Falsificação de requisição pelo servidor (SSRF) & O servidor faz uma requisição a um endereço controlado pelo usuário, o que pode expor serviços internos. \\
+        \hline
+        CWE-1004 & \textit{Cookie} sensível sem o atributo \texttt{HttpOnly} & O \textit{cookie} fica acessível aos \textit{scripts} da página, o que facilita o seu roubo por XSS. \\
+        \hline
+        CWE-1284 & Validação inadequada de quantidade na entrada & Uma quantidade informada na entrada, como um tamanho ou um número de itens, não é validada. \\
+        \hline
+\end{longtable}
+}
+{\centering\footnotesize Fonte: adaptado de \citeonline{mitrecwe}.\par}
+
 \end{apendicesenv}

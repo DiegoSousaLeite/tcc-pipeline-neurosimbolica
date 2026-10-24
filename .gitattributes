@@ -1,0 +1,11 @@
+# Arquivos de texto sempre com LF no repositório e na cópia de trabalho,
+# inclusive quando editados no Windows.
+* text=auto eol=lf
+
+# Binários: sem conversão de quebra de linha.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.eps binary
+*.zip binary
