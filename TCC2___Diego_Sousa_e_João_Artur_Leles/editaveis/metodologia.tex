@@ -4,6 +4,7 @@
 Este capítulo detalha os procedimentos metodológicos adotados para a construção, execução e validação da arquitetura híbrida proposta. A metodologia foi desenhada para descrever o artefato tecnológico desenvolvido, um \textit{pipeline} automatizado de triagem, como também para estruturar o experimento controlado que visa avaliar a sua eficácia empírica. Dessa forma, o capítulo descreve o plano metodológico, a arquitetura do sistema, o ambiente de simulação integrado à base de dados, as métricas de avaliação e as limitações do estudo.
 
 \section{Plano Metodológico}
+\label{sec:plano}
 
 A pesquisa adota uma abordagem empírica, estruturada sob a forma de um experimento controlado. O objetivo deste experimento é avaliar de forma sistemática como a injeção de contexto semântico em \textit{prompts} influencia a capacidade de LLMs na filtragem de falsos positivos gerados por ferramentas de SAST.
 
@@ -21,7 +22,7 @@ Para garantir a reprodutibilidade e o rigor científico da análise, o experimen
        \item \textbf{Modelos locais, executados por meio do \textit{Ollama}.} O \texttt{qwen2.5-coder:7b}, em quantização \texttt{Q4\_K\_M}, é o modelo principal das execuções e responde pela maior parte dos vereditos produzidos. O \texttt{gemma2:9b} é executado como segundo ponto do eixo de modelo, para verificar se a variação de família e de escala altera as conclusões. A execução local é adotada por três razões: custo nulo, ausência de limite de requisições (o que viabiliza execuções sobre a população inteira) e determinismo, assegurado por temperatura zero e semente fixa, o que torna as execuções reproduzíveis na mesma configuração;
        \item \textbf{Modelo comercial, acessado por API.} O \texttt{gpt-6-luna} (OpenAI) repete os dois modos de execução sobre a mesma população, para verificar até onde as conclusões dos modelos locais se estendem. É um modelo econômico de geração recente, como o que uma equipe usaria para triar alertas a cada \textit{commit}, e o seu custo permitiu rodar a população inteira duas vezes. Não é quantizado e tem janela de contexto muito maior que a dos locais \cite{openaidocs2026}, o que evita a perda de amostras discutida na Seção~\ref{sec:limitacoes}. É executado em três configurações:
        \begin{itemize}
-           \item sem raciocínio e com temperatura zero, como os locais, duas vezes, porque o fornecedor não oferece semente fixa e é preciso medir quanto o próprio modelo varia;
+           \item sem raciocínio e com temperatura zero, como os locais, duas vezes, porque o fornecedor não oferece semente fixa e é preciso medir quanto o próprio modelo varia. A concordância entre as duas execuções é medida pela fração de casos com o mesmo veredito e pelo $\kappa$ de Cohen \cite{cohen_coefficient_1960}, que desconta a concordância que ocorreria por acaso e vale 1 quando ela é perfeita;
            \item com raciocínio em esforço baixo;
            \item com raciocínio em esforço alto.
        \end{itemize}
