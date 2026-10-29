@@ -1,6 +1,57 @@
 \chapter{Considerações Finais}
 \label{cap:consideracao}
 
-Diante do exposto, este Trabalho de Conclusão de Curso 1 fundamentou teoricamente, estruturou e validou a viabilidade da arquitetura híbrida simbólico-neural proposta. Ao longo desta etapa, foi delineada uma esteira automatizada de triagem de alertas de segurança e estabelecido um plano metodológico experimental para avaliar o impacto do enriquecimento semântico na filtragem de falsos positivos no ecossistema da linguagem Go. A prova de conceito desenvolvida demonstrou a viabilidade técnica do ecossistema de simulação e do \textit{middleware} de hidratação de contexto, demonstrando a execução do fluxo de ponta a ponta e evidenciando a relevância prática de separar a cobertura do motor simbólico do acerto da camada neural. 
+Este trabalho partiu de um problema prático, a fadiga causada pelo excesso de alertas falsos das ferramentas de análise estática, e investigou se seria possível aliviá-la em código Go com um modelo de linguagem colocado depois do analisador. Para isso, foi construída uma esteira que executa o Semgrep, recorta o código de cada alerta e o entrega a um modelo de linguagem, que decide se o alerta é verdadeiro ou falso. A esteira foi avaliada sobre 2.328 casos reais, com três modelos, dois \textit{prompts} e dois modos de execução, o de filtro, que reproduz o uso real, e o de triagem, que também entrega ao modelo os casos vulneráveis que o analisador não detectou (Capítulo~\ref{cap:resultados}).
 
-Para a continuidade da pesquisa no Trabalho de Conclusão de Curso 2, o foco central consistirá na execução do experimento em larga escala. As atividades subsequentes englobam a expansão da base de validação para a totalidade das amostras do \textit{dataset} SastBench e das CVEs catalogadas na OSV.dev, além da execução do desenho fatorial completo. Essa próxima fase contrastará os modelos de fronteira selecionados sob as abordagens de \textit{prompts} de controle (\textit{baseline}) e especialista, permitindo a extração das métricas estatísticas propostas --- como o Coeficiente de Correlação de Matthews (MCC) e a Taxa de Redução de Alertas (TRA) --- e a auditoria qualitativa das justificativas estruturadas da IA. Por fim, os desafios operacionais identificados no piloto, como a gestão de cotas de API, serão mitigados por meio de estratégias de processamento incremental em lotes, culminando na validação empírica da solução e na resposta definitiva às questões de pesquisa formuladas.
+\section{Respostas às Questões de Pesquisa}
+\label{sec:respostas}
+
+A questão geral perguntava como auxiliar o desenvolvedor a avaliar os resultados da análise estática reduzindo a fadiga de alertas. Como filtro, a arquitetura cumpre esse papel. Com o \texttt{qwen2.5-coder:7b} e o \textit{prompt} especialista, os alertas a revisar caíram de 827 para 15, e a taxa de redução ficou entre 98,2\% e 98,7\% em quatro rodadas, sobre populações e contextos diferentes (Seção~\ref{sec:geral}). Essa redução, porém, tem um custo, porque 16 dos 19 alertas verdadeiros foram descartados junto com o ruído.
+
+A Q1 perguntava pelo impacto do enriquecimento semântico na precisão do modelo. O impacto existe, mas depende do modelo. No modo de filtro, as fichas por CWE reduziram os alarmes falsos do \texttt{qwen2.5-coder:7b}, aumentaram os do \texttt{gemma2:9b} e não produziram diferença estável no modelo comercial. O experimento também mostrou que o \textit{baseline} não era um controle limpo, porque lia a fraqueza na mensagem do alerta. Esse viés favorece o \textit{baseline}, e por isso, nas rodadas em que o especialista venceu, a vantagem medida tende a ser menor que a real (Seção~\ref{sec:q1}).
+
+A Q2 perguntava se a arquitetura reduz os falsos positivos sem introduzir falsos negativos. Ela reduz os falsos positivos em grande proporção, mas introduz falsos negativos. No modo de filtro, os modelos locais descartaram mais da metade dos vulneráveis que receberam, e o comercial, de um terço a metade. No modo de triagem, diante dos casos que o analisador não detectou, os modelos locais reconheceram de 4,31\% a 7,41\%, e o comercial chegou a 38,6\% com o raciocínio ligado, ainda deixando a maior parte de fora (Seção~\ref{sec:q2}).
+
+A Q3 perguntava como o desempenho se comporta nas fraquezas específicas de Go, como as de concorrência, e a resposta é parcial. A acurácia por categoria refletiu mais a quantidade de alertas seguros de cada uma do que a capacidade do modelo. Quem de fato decidiu o desempenho por categoria foi o analisador, que detecta as fraquezas visíveis numa única linha de código, como a injeção de SQL, e quase nada das que dependem do caminho percorrido pelo dado. As fraquezas de concorrência não puderam ser medidas, porque nenhum dos 11 casos de condição de corrida foi detectado pelo Semgrep (Seção~\ref{sec:q3}).
+
+A Q4 perguntava como as regras de segurança colocadas no \textit{prompt} influenciam o raciocínio do modelo. Elas influenciam, mas nem sempre para melhor. Quando a heurística da ficha se aplicava ao caso, o modelo a seguia e acertava pelo motivo certo. Quando não se aplicava, ele tendia a copiar o exemplo da ficha ou a repetir a mensagem do alerta, e só 6 das 50 justificativas auditadas se apoiavam de fato no código (Seção~\ref{sec:q4}).
+
+\section{Os Dois Limites da Arquitetura}
+\label{sec:doislimites}
+
+Os resultados apontam dois limites, que agem em pontos diferentes da esteira. O primeiro está na detecção. O Semgrep emitiu alerta sobre só 2,4\% das vulnerabilidades, e quatro hipóteses para explicar esse número, da escolha das regras ao alcance da análise, foram testadas e rejeitadas (Seção~\ref{sec:eliminacao}). O que mais pesa é a forma como o gabarito foi construído. Como o rótulo é dado ao arquivo alterado pela correção, em 25,4\% dos casos de CWE-22 e 48,2\% dos de CWE-918 esse arquivo nem contém a operação perigosa.
+
+Esse limite afetou o próprio experimento. Como só 19 vulneráveis chegaram ao modelo no modo de filtro, e todas as entradas de Go da base OSV já tinham sido varridas, não havia como medir falsos negativos com confiança nesse modo. A resposta foi criar o modo de triagem, que entregou ao modelo os 797 vulneráveis, e investigar as causas da baixa detecção, investigação que acabou se tornando um dos resultados do trabalho.
+
+O segundo limite está no próprio modelo. Mesmo sobre os 19 vulneráveis que o Semgrep detectou, nenhuma configuração conseguiu manter a maioria deles sem manter também dezenas ou centenas de alarmes falsos. Trocar o \textit{prompt}, a pergunta ou o modelo só deslocou o modelo entre descartar quase tudo e alarmar quase tudo (Seção~\ref{subsec:supressao}), com uma única melhora modesta de discriminação, a do modelo comercial com raciocínio e o especialista.
+
+Por isso, melhorar a detecção não bastaria sozinho, já que mais vulnerabilidades detectadas chegariam aos mesmos modelos, e os locais descartaram mais da metade das 19 que receberam. Essa leitura, porém, repousa sobre poucos casos e sobre um rótulo que às vezes aponta para o arquivo errado, e deve ser tomada como indício (Seção~\ref{sec:limitacoesresultados}).
+
+A quantidade de contexto entregue ao modelo também não se mostrou decisiva. Quando o contexto foi reduzido ao código, sem os campos do alerta, a redução de ruído do especialista praticamente não mudou (98,31\%, contra 98,19\% com o contexto completo). O \textit{baseline}, que não recebe CWE nem ficha, já funciona como a versão de menor orientação, e boa parte dos seus acertos dependia da mensagem do alerta (Seção~\ref{subsec:q1controle}).
+
+\section{Contribuições}
+\label{sec:contribuicoes}
+
+Além das respostas às questões de pesquisa, o trabalho deixa quatro contribuições.
+
+\begin{itemize}
+    \item \textbf{A detecção medida sobre todos os casos vulneráveis:} como os casos foram rotulados antes da execução do analisador, e não a partir dos alertas, foi possível medir quantas vulnerabilidades o analisador deixa passar, número que conjuntos montados a partir dos alertas, como o do \textit{ZeroFalse}, não permitem obter (Seção~\ref{subsec:porquemelhor}).
+    \item \textbf{A imprecisão do rótulo por arquivo em Go:} a leitura de 226 casos mediu com que frequência o arquivo alterado pela correção não contém a operação perigosa, efeito conhecido na literatura e aqui quantificado para Go (Seção~\ref{subsec:sobra}).
+    \item \textbf{O peso da mensagem do alerta no veredito:} duas medidas independentes mostraram que o modelo se apoia na mensagem do Semgrep mais do que no código. Quando a mensagem foi retirada, o \textit{baseline} perdeu todos os seus acertos entre os vulneráveis, e a auditoria encontrou justificativas que repetem a mensagem como se ela tivesse sido lida no código. Quem avaliar modelos na triagem de alertas precisa tratar essa mensagem como variável do experimento (Seções~\ref{subsec:q1controle} e~\ref{subsec:q4resultado}).
+    \item \textbf{A esteira e os dados disponíveis:} o código, a base de validação, os \textit{prompts}, as fichas e os registros das execuções estão no repositório do projeto, o que permite reproduzir e estender o experimento (Apêndice~\ref{ap:repositorio}).
+\end{itemize}
+
+\section{Trabalhos Futuros}
+\label{sec:futuros}
+
+Os resultados indicam cinco direções para continuar a pesquisa.
+
+\begin{itemize}
+    \item \textbf{O modelo antes do analisador:} usar o modelo de linguagem para identificar, em cada projeto, as funções que recebem entrada externa, manipulam caminhos de arquivo ou sanitizam dados, e transformá-las em regras validadas para o Semgrep, como fazem o \textit{MEMHINT} e o \textit{IRIS} em outras linguagens \cite{huang2026memhint, li2025iris}. É a única posição em que o modelo poderia aumentar a detecção (Seção~\ref{subsec:consequencias}).
+    \item \textbf{Concorrência com análise dinâmica:} combinar a triagem por modelo com o detector de corrida da própria linguagem Go, que encontra condições de corrida executando o programa, para medir a classe de fraquezas que este trabalho não conseguiu medir.
+    \item \textbf{O \textit{gosec} autônomo:} o \textit{gosec} é um analisador de segurança próprio para Go, independente do Semgrep, e tem regras para as duas categorias que o Semgrep quase não detecta, a G304, para abertura de arquivo com caminho variável, e a G107, para requisição a uma URL variável. Essas regras não estão no conjunto de mesmo nome do Semgrep, e o \textit{gosec} não foi executado neste trabalho. Executá-lo mostraria se ele detecta esses casos e, sobretudo, se distingue a versão vulnerável da corrigida, que costumam ter a mesma forma (Seção~\ref{subsec:h3}).
+    \item \textbf{Rótulo mais preciso:} neste trabalho, o caso vulnerável é o arquivo alterado pela correção, e em parte dos casos a operação perigosa está em outro arquivo, o que conta como falha do analisador sem que ele tivesse como acertar. Rotular a função ou a linha em que a operação perigosa de fato está permitiria separar o que o analisador realmente deixa passar do que é erro do rótulo (Seção~\ref{subsec:sobra}).
+    \item \textbf{Modelos de topo de linha:} repetir a comparação com modelos de topo de linha, que não foram medidos aqui, para verificar se os dois limites persistem.
+\end{itemize}
+
+Em resumo, o modelo de linguagem reduziu o ruído daquilo que o analisador encontrou, mas não recuperou o que ele deixou passar. Para que a arquitetura híbrida vá além do papel de filtro, o caminho indicado por este trabalho é levar o modelo para antes do analisador e construir o gabarito com mais precisão.
