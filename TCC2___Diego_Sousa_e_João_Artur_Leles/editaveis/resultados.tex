@@ -1,18 +1,3 @@
-    % =============================================================================
-% RESULTADOS
-%
-% Fontes dos números: docs/ANALISE-RODADA-{1..6}.md, docs/SONDA-MOTORES.md,
-% docs/MAPA-TCC-O-QUE-REESCREVER.md e docs/auditoria-q4/ no repositório da
-% pipeline. O plano de redação está em docs/PLANO-ESCRITA-RESULTADOS.md.
-%
-% A rodada comercial (gpt-6-luna, 2026-09-30) foi incorporada em tab:modelos,
-% no fim de sec:modelos, em fig:recall-comparado, no item "Escopo de modelos"
-% das limitações e em subsec:supressao. Fonte: docs/ANALISE-RODADA-COMERCIAL.md.
-% A extensão com raciocínio (gpt-6-luna@low/@high, 2026-10-01) entrou no fim de
-% sec:modelos (tab:raciocinio), em fig:recall-comparado, nas limitações, em
-% subsec:supressao e em subsec:consequencias. Fonte: o mesmo documento, §8.
-% =============================================================================
-
 \chapter{Resultados}
 \label{cap:resultados}
 
@@ -59,7 +44,6 @@ Dois esclarecimentos valem para o capítulo inteiro. O primeiro é que, na séti
     \fontepesquisa
 \end{table}
 
-% =============================================================================
 \section{O Ponto de Partida: o que Chega ao Modelo}
 \label{sec:partida}
 
@@ -75,7 +59,6 @@ A Questão Q2 tem duas metades: pergunta se a arquitetura reduz o volume de fals
         rot/.style={anchor=east, font=\small\bfseries, align=right, text width=30mm},
         cnt/.style={font=\footnotesize, align=center}
     ]
-        % escala: 12 cm = 2.328 casos (1 caso = 0,0051546 cm)
         \node[rot] at (-0.3,0.3) {População};
         \fill[black!15] (0,0) rectangle (12,0.6);
         \node[cnt] at (6,0.3) {2.328 casos};
@@ -120,7 +103,6 @@ Por isso as execuções também usam o modo de triagem (Seção~\ref{subsec:modo
 
 Uma dúvida possível é se os casos vindos do gabarito, por virem de outra fonte, ficariam mais fáceis de acertar. Não ficaram: na Rodada 4, o modelo acertou menos de 1\% deles, por razões discutidas na Seção~\ref{subsec:q1enquadramento}, enquanto nos 19 casos detectados pelo Semgrep, que servem de comparação (Seção~\ref{subsec:modos}), acertou entre 0\% e 15,8\%, conforme o \textit{prompt}. Como são só 19 casos, essa comparação é um indício, e não uma prova.
 
-% =============================================================================
 \section{Questão Geral: Redução da Fadiga de Alertas}
 \label{sec:geral}
 
@@ -151,7 +133,6 @@ O valor mais relevante não é o de uma rodada, e sim a sua estabilidade. A TRA 
 
 A TRA, contudo, não pode ser lida sozinha. Ela é definida como a fração de alertas que o modelo descarta, de modo que um classificador que descartasse todos os alertas alcançaria o valor máximo. A TRA de 98,2\% vem acompanhada de uma taxa de falsos negativos de 84,2\% sobre os 19 casos vulneráveis, e esse par caracteriza uma estratégia de supressão agressiva, discutida na Seção~\ref{subsec:supressao}. A resposta à Questão Geral é, assim, que a arquitetura auxilia o desenvolvedor usando o modelo de linguagem como filtro depois do analisador: com o modelo principal e o \textit{prompt} especialista, os alertas a revisar caem de 827 para 15. Esse auxílio, porém, tem um custo, detalhado na Q2: 16 dos 19 alertas verdadeiros seriam descartados pelo modelo junto com o ruído e nem chegariam à revisão.
 
-% =============================================================================
 \section{Q1: Impacto do Enriquecimento Semântico na Precisão}
 \label{sec:q1}
 
@@ -216,7 +197,6 @@ A exceção é o modo de filtro do \texttt{gemma2:9b}, em que as fichas por regr
 
 Reunidas as quatro análises, a resposta à Q1 é que o enriquecimento semântico melhora a precisão do modelo, mas não de forma geral. No modo de filtro, ele reduz os falsos positivos com o \texttt{qwen2.5-coder:7b}, aumenta-os com o \texttt{gemma2:9b} e não produz diferença estável com o modelo comercial. Com o \texttt{qwen2.5-coder:7b}, esse efeito está subestimado nas Rodadas 1 a 3, porque o \textit{baseline} lia a fraqueza na mensagem do Semgrep (Seção~\ref{subsec:q1controle}). E a própria forma da pergunta altera o resultado, a ponto de o efeito no modo de triagem só poder ser medido com a pergunta direta. A forma de escrever as fichas também importa. As fichas por CWE tiveram menos alarmes falsos que as fichas por regra em três dos quatro cenários, e só perderam quando a ficha descrevia uma fraqueza diferente da apontada pelo alerta.
 
-% =============================================================================
 \section{Q2: Redução de Falsos Positivos sem Introduzir Falsos Negativos}
 \label{sec:q2}
 
@@ -309,7 +289,6 @@ Restringir o modelo ao que o analisador emite tem, assim, um custo real, mas peq
 
 Reunidas as três análises, a resposta à Q2 é que a arquitetura reduz os falsos positivos em grande proporção, mas introduz falsos negativos. Com o modelo principal, ela descarta de 85,6\% a 98,5\% dos alarmes falsos, conforme o \textit{prompt}. No modo de filtro, os modelos locais descartam mais da metade dos poucos vulneráveis que recebem, e o comercial, que descarta menos, perde de um terço a metade deles, à custa de muito mais alarmes falsos (Seção~\ref{sec:modelos}). No modo de triagem, diante dos casos que o analisador não detectou, os modelos locais recuperam de 4\% a 7\%, e o comercial, de 17\% a cerca de metade, conforme o \textit{prompt} e o raciocínio. Dar ao modelo acesso a esses casos, portanto, melhora pouco o sistema com os modelos locais, que raramente os reconhecem. Com o comercial, o ganho é maior, mas metade dos casos continua perdida, à custa de mais alarmes falsos.
 
-% =============================================================================
 \section{Q3: Desempenho por Categoria de CWE}
 \label{sec:q3}
 
@@ -403,7 +382,6 @@ A população tem, sim, casos vulneráveis de concorrência: 11 de CWE-362 (cond
 
 Reunidas as três análises, a resposta à Q3 é parcial. O desempenho do modelo por categoria não pôde ser medido de forma confiável: a acurácia por CWE reflete mais quantos alertas seguros cada categoria tem do que a capacidade do modelo, e nenhuma categoria tem mais de sete casos vulneráveis. Quem decide o desempenho por categoria é o analisador, antes do modelo: ele detecta as fraquezas visíveis no formato do código, como a injeção de SQL, e quase nada nas que dependem do caminho do dado, que são justamente as mais numerosas. As fraquezas de concorrência, por fim, não puderam ser medidas. Os casos existem, mas o analisador não detecta nenhum, e por isso, no sistema implantado, nenhum chegaria ao modelo, por mais capaz que ele fosse. Responder a essa parte da pergunta exigiria um analisador com análise de concorrência, ou um componente dinâmico, e não apenas outro \textit{prompt} ou outro modelo.
 
-% =============================================================================
 \section{Q4: O Raciocínio do Modelo}
 \label{sec:q4}
 
@@ -465,7 +443,6 @@ Também sobre o gabarito, a auditoria verificou os 12 alertas sobre código rotu
 
 A resposta à Q4 é, portanto, que as regras de segurança colocadas no \textit{prompt} influenciam o raciocínio do modelo, mas nem sempre para melhor. Quando a heurística da ficha se aplica ao caso, o modelo a segue e acerta pelo motivo certo, como nos usos não criptográficos de MD5 e \texttt{math/rand}. Quando a ficha descreve uma situação diferente da do código, o modelo tende a copiar o exemplo dela em vez de analisar o caso: num alerta sobre os argumentos de \texttt{exec.Command}, o especialista justificou o descarte com a frase do exemplo da ficha de CWE-94, escrita para \textit{templates}. E, com os dois \textit{prompts}, o modelo muitas vezes repete a mensagem do alerta como se a tivesse lido no código. Na amostra, esses comportamentos predominam: apenas 6 das 50 justificativas são fundadas, e mesmo entre os acertos do especialista metade vem com justificativa errada. Isso reforça o que as métricas já indicavam: boa parte da redução de ruído vem de uma tendência geral a descartar alertas, e não de uma análise do código caso a caso.
 
-% =============================================================================
 \section{Por que o Teto de Detecção Não Cede}
 \label{sec:eliminacao}
 
@@ -670,7 +647,6 @@ Na maioria dos casos, o dado chega por um campo de \textit{struct}, isto é, um 
 
 Reunidas as análises, a resposta à pergunta desta seção é que o teto de detecção não decorre principalmente da ferramenta escolhida nem da falta de regras. Trocar o conjunto de regras, ampliar o alcance da análise ou escrever regras próprias rendeu pouco ou nada (H1 a H4). O que mais limita a detecção é a forma como o gabarito foi construído: em 25,4\% dos casos de CWE-22 e 48,2\% dos de CWE-918, o arquivo rotulado nem contém a operação perigosa, e, quando a contém, ela aparece com frequência atrás de abstração ou depende de um dado vindo de outro ponto do programa. A baixa detecção do Semgrep não deve, por isso, ser lida apenas como fraqueza do analisador: parte dela é um limite da própria medição.
 
-% =============================================================================
 \section{Análise Comparativa dos Modelos}
 \label{sec:modelos}
 
@@ -794,7 +770,6 @@ Reunidas as análises, a resposta à pergunta desta seção é que trocar o mode
 
 O efeito do enriquecimento semântico também depende do modelo e do modo. No filtro, ele ajuda só o \texttt{qwen2.5-coder:7b}, e, na triagem, ajuda o modelo comercial nas duas execuções. Como filtro de alertas, o melhor dos três é o menor deles, o \texttt{qwen2.5-coder:7b}, especializado em código. Ele descarta mais ruído que o modelo comercial, com ou sem raciocínio, e discrimina melhor que o \texttt{gemma2:9b}. Um modelo maior ou mais capaz, portanto, não resolveu o problema central do trabalho. No filtro, piorou a redução de ruído. Na triagem, recuperou mais casos, mas, mesmo na melhor configuração, cerca de metade dos casos que o analisador perde continuou sem detecção.
 
-% =============================================================================
 \section{Limitações do Estudo}
 \label{sec:limitacoesresultados}
 
@@ -802,11 +777,11 @@ As limitações de desenho foram declaradas na Seção~\ref{sec:limitacoes}. Est
 
 \textbf{Tamanho da classe positiva no modo de filtro:} todas as afirmações sobre \textit{recall}, \textit{F1} e MCC do sistema implantável repousam em 19 casos vulneráveis, e cada um vale mais de cinco pontos de \textit{recall}. A amostra não poderia crescer, porque todas as entradas de Go da base OSV já foram varridas (Seção~\ref{sec:eliminacao}). O lado dos alarmes falsos, medido sobre 808 alertas, não sofre dessa limitação.
 
-\textbf{Granularidade do gabarito:} em 25,4\% dos casos de CWE-22 e 48,2\% dos de CWE-918, o arquivo rotulado não contém a operação perigosa, e a não detecção desses casos não diz nada sobre o analisador (Seção~\ref{subsec:sobra}). A auditoria da Q4 mostra o mesmo efeito do lado do modelo (Seção~\ref{subsec:q4resultado}).
+\textbf{Granularidade do rótulo:} em 25,4\% dos casos de CWE-22 e 48,2\% dos de CWE-918, o arquivo rotulado não contém a operação perigosa, e a não detecção desses casos não diz nada sobre o analisador (Seção~\ref{subsec:sobra}). A auditoria da Q4 mostra o mesmo efeito do lado do modelo (Seção~\ref{subsec:q4resultado}).
 
-\textbf{Classe negativa aproximada:} a base de origem rotula como falso positivo todo alerta que não tem a CWE da vulnerabilidade corrigida \cite{feiglin2026sastbench}, e parte desses alertas pode ser vulnerabilidade real de outra categoria. A auditoria da Q4 mostrou que parte dos alertas seguros mantidos pelo modelo não pode ser decidida só com o trecho entregue (Seção~\ref{subsec:q4resultado}). A TRA e a proporção de falsos positivos filtrados foram, assim, calculadas sobre um gabarito negativo que, em parte, não pode ser decidido olhando só uma função.
+\textbf{Classe negativa aproximada:} o SastBench rotula como falso positivo todo alerta que não tem a CWE da vulnerabilidade corrigida \cite{feiglin2026sastbench}, e parte desses alertas pode ser vulnerabilidade real de outra categoria. A auditoria da Q4 mostrou que parte dos alertas seguros mantidos pelo modelo não pode ser decidida só com o trecho entregue (Seção~\ref{subsec:q4resultado}). A TRA e a proporção de falsos positivos filtrados foram, assim, calculadas sobre um gabarito negativo que, em parte, não pode ser decidido olhando só uma função.
 
-\textbf{A CWE vem do gabarito:} o \textit{prompt} especialista recebe a CWE do gabarito. No modo de filtro, ela coincide com a CWE declarada pela regra do alerta. Nos injetados, não há alerta, e por isso os números do modo de triagem são otimistas (Seção~\ref{subsec:q2triagem}).
+\textbf{A CWE vem do gabarito:} o \textit{prompt} especialista recebe a CWE do gabarito. No modo de filtro, isso não dá vantagem ao modelo, porque o alerta só chega a ele quando a regra declara essa mesma CWE. Nos injetados, não há alerta, e por isso os números do modo de triagem são otimistas (Seção~\ref{subsec:q2triagem}).
 
 \textbf{Uma única linguagem:} a base tem só código Go, e os resultados não se estendem automaticamente a outras linguagens (Seção~\ref{sec:limitacoes}).
 
@@ -820,11 +795,10 @@ As limitações de desenho foram declaradas na Seção~\ref{sec:limitacoes}. Est
 
 \textbf{Escopo de modelos:} a conclusão sobre modelos comerciais repousa sobre um único modelo, de faixa econômica, e modelos de topo de linha não foram medidos. Entre os modelos locais e o comercial mudam ao mesmo tempo a família, o tamanho, a quantização e a forma de acesso. As execuções com raciocínio foram feitas uma vez cada e na temperatura padrão, o que mistura o efeito do raciocínio com o da temperatura. Além disso, o modelo comercial não oferece semente fixa e, por isso, pode responder de forma diferente a cada execução. No modo de filtro, a diferença entre os \textit{prompts} foi significativa numa execução e não na outra (Seção~\ref{subsec:modelocomercial}).
 
-\textbf{Fichas escritas por CWE:} as fichas são escritas por CWE, e não por regra do Semgrep, e em algumas categorias descrevem uma fraqueza diferente da apontada pelo alerta. A alternativa, com fichas por regra, foi testada na sétima rodada e teve mais alarmes falsos em três dos quatro cenários (Seção~\ref{subsec:q1fichas}).
+\textbf{Fichas escritas por CWE:} as fichas não descrevem a regra do Semgrep que emitiu o alerta, e em algumas categorias tratam de uma fraqueza diferente da apontada por ele. A alternativa, com fichas por regra, foi testada na sétima rodada e teve mais alarmes falsos em três dos quatro cenários (Seção~\ref{subsec:q1fichas}).
 
 \textbf{Reprodutibilidade entre execuções:} as Rodadas 4 a 6 foram executadas uma segunda vez, com a mesma configuração, para permitir a comparação caso a caso com as rodadas posteriores. Mesmo com semente fixa e temperatura zero, as duas execuções não deram exatamente os mesmos vereditos. As Rodadas 4 e 6 se repetiram, inclusive no teste de McNemar. A Rodada 5 repetiu a direção, mas não a significância, com o $p$ passando de 0,009 para 0,086 (Seção~\ref{subsec:q1enquadramento}). Por isso, quando um resultado tem $p$ perto do limite de 0,05 ou depende de poucos casos vulneráveis, este capítulo o trata como indício, e não como conclusão firme.
 
-% =============================================================================
 \section{Discussão}
 \label{sec:discussao}
 
@@ -880,15 +854,11 @@ O Semgrep (2,4\%) e os modelos locais (4,3\% a 7,4\%) ficam abaixo de todos os v
             clip=false,
             every axis plot/.append style={xbar, bar width=10pt, bar shift=0pt, draw=none},
         ]
-            % Este trabalho, em Go: trecho claro até o maior valor, escuro até o menor
             \addplot[fill=blue!25] coordinates {(7.41,2) (17.3,3) (38.6,4)};
             \addplot[fill=blue!60] coordinates {(2.38,1) (4.31,2) (17.1,3) (32.7,4)};
-            % Estudos sobre Java
             \addplot[fill=black!18] coordinates {(26.5,6)};
             \addplot[fill=black!45] coordinates {(22.5,5) (11.2,6) (38.8,7)};
-            % Separação entre os dois grupos
             \draw[dashed, black!40] (axis cs:0,4.5) -- (axis cs:55,4.5);
-            % Valores
             \node[font=\scriptsize, anchor=west] at (axis cs:3.2,1) {2,4\%};
             \node[font=\scriptsize, anchor=west] at (axis cs:8.2,2) {4,3--7,4\%};
             \node[font=\scriptsize, anchor=west] at (axis cs:18.1,3) {17,1--17,3\%};
@@ -932,7 +902,6 @@ Como mostrado na Seção~\ref{sec:geral}, a TRA sozinha engana, porque um classi
             label style={font=\footnotesize},
         ]
             \addplot[dashed, red!70, thick] coordinates {(0.80,1.0) (1.0,1.0) (1.0,0.40)};
-            % O quadrado vem antes, para que o ponto da Rodada 4 fique visível por cima
             \addplot[only marks, mark=square*, mark size=3pt, red!70] coordinates {(1.0,1.0)};
             \addplot[only marks, mark=*, mark size=2.5pt, blue!70] coordinates {
                 (0.8497,0.5789) (0.9819,0.8421) (0.9504,0.6842) (0.9976,1.0)};
